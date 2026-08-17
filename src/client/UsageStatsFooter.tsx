@@ -5,9 +5,9 @@
  * 宽列：上方一排带"Go 额度"标签的 OpenCode Go 订阅额度芯片（滚动 5 小时 /
  * 本周 / 本月用量百分比，≥80% 预警、≥100% 超支，hover 仅显示重置时间），
  * 下方是图标 + "今日" + 今日 tokens / 调用次数 + 三色比例条（缓存/输入/输出，
- * hover 显示各类别具体数值）。56px rail（折叠列）：圆形图标按钮，下方竖排
- * Go 额度芯片，今日数字与 Go 额度明细由 Tooltip 承载。点击打开模态窗详情
- * （{@link UsageStatsPanel}）。
+ * hover 显示各类别具体数值）。56px rail（折叠列）：圆形图标按钮上方仅显示
+ * 滚动 5 小时额度芯片，今日数字与 5 小时额度明细由 Tooltip 承载。点击打开
+ * 模态窗详情（{@link UsageStatsPanel}）。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -96,7 +96,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   }
 
   // 折叠 rail tooltip：顶部"今日："标题 + 6 行对齐（调用 / 总计 / 缓存 / 输入 / 输出 / 缓存命中率）
-  // + OpenCode Go 三档额度行。
+  // + OpenCode Go 额度行（折叠态只展示滚动 5 小时窗口）。
   const railLabel = (() => {
     if (!today || todayTokens === 0) return t('footer.railEmpty')
     const lines = [
@@ -109,11 +109,15 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
       ]),
     ]
-    if (goWindows.length > 0) {
-      lines.push(t('go.title') + '\n' + goWindows.map((w) => windowLine(w.win, w.full)).join('\n'))
+    const railGo = goWindows.filter((w) => w.key === 'rolling')
+    if (railGo.length > 0) {
+      lines.push(t('go.title') + '\n' + railGo.map((w) => windowLine(w.win, w.full)).join('\n'))
     }
     return lines.join('\n\n')
   })()
+
+  // 折叠态：只展示滚动 5 小时窗口的额度芯片（移在圆形按钮上方）。
+  const railRolling = goWindows.find((w) => w.key === 'rolling')
 
   // 展开（宽列）比例条 tooltip：4 行对齐（缓存 / 输入 / 输出 / 缓存命中率）
   const barLabel = (() => {
@@ -142,6 +146,10 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           <span className={css.goLabel}>{t('go.label')}</span>
           {goWindows.map(goChip)}
         </div>
+      )}
+      {/* rail 折叠态：圆形按钮上方仅显示滚动 5 小时额度芯片 */}
+      {!wide && railRolling !== undefined && (
+        <div className={css.goRailChip}>{goChip(railRolling)}</div>
       )}
       <Tooltip label={wide ? t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) }) : railLabel} side="right" delayMs={500} disabled={wide}>
         <button
@@ -195,12 +203,6 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           )}
         </button>
       </Tooltip>
-      {/* rail 折叠态：圆形按钮下方竖排 Go 额度芯片（宽度受限） */}
-      {!wide && goWindows.length > 0 && (
-        <div className={css.goRail}>
-          {goWindows.map(goChip)}
-        </div>
-      )}
     </div>
   )
 }

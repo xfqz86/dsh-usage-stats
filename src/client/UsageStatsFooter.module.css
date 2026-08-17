@@ -57,17 +57,15 @@
   white-space: nowrap;
 }
 
-/* rail 折叠态：Go 额度芯片在圆形按钮下方竖排（宽度受限，字号略小）。 */
-.goRail {
+/* rail 折叠态：仅显示滚动 5 小时额度芯片，位于圆形按钮上方。 */
+.goRailChip {
   flex: none;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
+  justify-content: center;
+  margin: 0 0 4px;
 }
 
-.rail .goRail .goChip {
+.rail .goRailChip .goChip {
   justify-content: center;
   width: 100%;
   height: 16px;
