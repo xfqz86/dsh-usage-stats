@@ -1,0 +1,4 @@
+# Mounts the usage-statistics card into the profile's plugin tree.
+- insert:
+    - id: usage-statistics
+      name: 'dsh-usage-statistics'

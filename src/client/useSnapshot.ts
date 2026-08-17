@@ -1,0 +1,107 @@
+/**
+ * 用量统计浏览器端（Client）的快照轮询。
+ *
+ * 服务端（Host）提供 POST /usage-stats/api/snapshot（回环围栏）。本 hook
+ * 维持一个 4s 轮询，底部角标与模态窗共用同一份数据。
+ */
+
+import { useEffect, useState } from 'react'
+
+/** 一组聚合计数（对应服务端 usageOf 的返回）。 */
+export interface UsageAgg {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  total: number
+}
+
+/** 服务端每日序列中的一个点。 */
+export interface SeriesPoint {
+  t: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  calls: number
+}
+
+/** 按模型/Provider 的拆分条目。 */
+export interface ModelStat {
+  provider: string
+  model: string
+  calls: number
+  usage: UsageAgg
+}
+
+/** 按会话的拆分条目。 */
+export interface SessionStat {
+  id: string
+  title: string
+  cwd: string
+  createdAt: number
+  lastActive: number
+  calls: number
+  usage: UsageAgg
+}
+
+/** 服务端 API 路由返回的快照体。 */
+export interface UsageSnapshot {
+  ok: true
+  scanning: boolean
+  scans: number
+  failed: number
+  rawSessions: number
+  harnessSessions: number
+  foldedEvents: number
+  dedupSkipped: number
+  lastError: string | null
+  scanError: string | null
+  lastScanAt: number
+  time: number
+  sessions: number
+  current: { id: string; calls: number; usage: UsageAgg } | null
+  all: { calls: number; usage: UsageAgg }
+  series: { all: SeriesPoint[]; current: SeriesPoint[] }
+  models: ModelStat[]
+  sessionsList: SessionStat[]
+}
+
+/** 每 `intervalMs` 轮询一次服务端快照；返回 [快照, 是否出错]。 */
+export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean] {
+  const [data, setData] = useState<UsageSnapshot | null>(null)
+  const [err, setErr] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    setErr(false)
+    const load = async () => {
+      let parsed: { ok?: boolean; value?: UsageSnapshot } = {}
+      try {
+        const response = await fetch('/usage-stats/api/snapshot', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionId: null }),
+        })
+        parsed = await response.json().catch(() => ({}))
+      } catch (e) {
+        parsed = {}
+      }
+      if (!live) return
+      if (parsed.ok === true && parsed.value) {
+        setData(parsed.value)
+        setErr(false)
+      } else {
+        setErr(true)
+        setData(null)
+      }
+    }
+    load()
+    const timerId = window.setInterval(load, intervalMs)
+    return () => { live = false; window.clearInterval(timerId) }
+  }, [intervalMs])
+
+  return [data, err]
+}

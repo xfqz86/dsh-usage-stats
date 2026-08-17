@@ -1,0 +1,75 @@
+/**
+ * 聚合口径与纯函数：Agg / SessionInfo 结构、折叠原子操作（newAgg / ink）、
+ * 事件守卫（usable / modelKeyOf）、本地日划分（localMidnight）。
+ *
+ * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测。
+ *
+ * 统计口径：assistant/message 事件且其 data.usage.inputTokens 为数字；
+ * total = input + output + cacheRead + cacheWrite（reasoning 单列，不计入 total）。
+ */
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { TokenUsage } from '@deepseek-ai/dsh-llm'
+
+/** 一组聚合计数。 */
+export interface Agg {
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  total: number
+  calls: number
+}
+
+/** 会话级状态：聚合 + 元数据 + 去重水位。 */
+export interface SessionInfo {
+  daily: Map<number, Agg>
+  allAgg: Agg
+  maxSeq: number
+  title: string
+  cwd: string
+  createdAt: number
+  lastActive: number
+}
+
+/** 新建空计数（所有字段归零）。 */
+export function newAgg(): Agg {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 }
+}
+
+/** 时间戳对应的本地零点（避免 UTC 漂移）。 */
+export function localMidnight(timeMs: number): number {
+  const d = new Date(timeMs)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+}
+
+/** 把一次用量折进聚合（调用次数 +1）。 */
+export function ink(agg: Agg, u: TokenUsage): void {
+  const input = u.inputTokens || 0
+  const output = u.outputTokens || 0
+  const cacheRead = u.cacheReadTokens || 0
+  const cacheWrite = u.cacheWriteTokens || 0
+  const reasoning = u.reasoningTokens || 0
+  agg.input += input
+  agg.output += output
+  agg.cacheRead += cacheRead
+  agg.cacheWrite += cacheWrite
+  agg.reasoning += reasoning
+  agg.total += input + output + cacheRead + cacheWrite
+  agg.calls += 1
+}
+
+/** 类型守卫：携带可折叠 usage 的 assistant/message 事件。 */
+export function usable(
+  event: SessionEvent,
+): event is SessionEvent<'assistant/message'> & { data: { usage: TokenUsage } } {
+  return event.type === 'assistant/message' && event.data.usage !== undefined
+}
+
+/** assistant/message 事件的模型身份：provider + model（\0 分隔），缺失记 unknown。 */
+export function modelKeyOf(event: SessionEvent<'assistant/message'>): string {
+  const source = event.data.message.source
+  const provider = typeof source.provider === 'string' && source.provider ? source.provider : 'unknown'
+  const model = typeof source.model === 'string' && source.model ? source.model : 'unknown'
+  return provider + '\u0000' + model
+}
