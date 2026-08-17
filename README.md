@@ -91,8 +91,9 @@ API 响应结构见 `src/client/useSnapshot.ts` 的 `UsageSnapshot` 类型：
   - **宽列**：上方一排带"Go 额度"标签的 **OpenCode Go 额度芯片**（滚动 5h /
     本周 / 本月用量百分比，≥80% 预警、≥100% 超支，hover 显示重置时间）；
     下方 `icon + 今日 + 今日 tokens + 调用数`，扫描/缺会话时给出状态角标；
-  - **56px rail 折叠**：纯圆形图标按钮上方显示**滚动 5 小时额度芯片**，
-    今日数字与 5 小时额度明细放 Tooltip；
+  - **56px rail 折叠**：纯圆形图标按钮上方显示**滚动 5 小时额度芯片**
+    （两行：短标签 + 百分比，居中；tooltip 含三档窗口完整明细 + 重置时间），
+    按钮 Tooltip 只放今日数字明细，不含 Go 额度；
   - 点击打开 **`Modal` 模态窗**（harness `@deepseek-ai/dsh-client-ui-primitives` 的
     `Modal` 组件：遮罩 + 居中卡片 + Escape/遮罩点击关闭 + `aria-modal`），
     宽 ≤640px、高 ≤78vh，内容区内部滚动。

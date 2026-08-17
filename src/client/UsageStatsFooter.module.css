@@ -57,7 +57,7 @@
   white-space: nowrap;
 }
 
-/* rail 折叠态：仅显示滚动 5 小时额度芯片，位于圆形按钮上方。 */
+/* rail 折叠态：滚动 5 小时额度芯片，位于圆形按钮上方。 */
 .goRailChip {
   flex: none;
   display: flex;
@@ -65,14 +65,34 @@
   margin: 0 0 4px;
 }
 
-.rail .goRailChip .goChip {
+/* 两行布局（短标签在上、百分比在下），整体水平居中，避免单行文字换行错位。 */
+.goRailChipBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   width: 100%;
-  height: 16px;
-  line-height: 16px;
-  padding: 0 2px;
+  min-height: 28px;
+  padding: 2px 0;
   border-radius: 8px;
-  font-size: 10px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+  cursor: default;
+}
+
+/* 上行：窗口短标签（如 5h） */
+.goRailChipLabel {
+  font-size: 9px;
+  line-height: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 下行：用量百分比（如 99%） */
+.goRailChipPct {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .goChip {

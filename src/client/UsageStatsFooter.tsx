@@ -5,9 +5,10 @@
  * 宽列：上方一排带"Go 额度"标签的 OpenCode Go 订阅额度芯片（滚动 5 小时 /
  * 本周 / 本月用量百分比，≥80% 预警、≥100% 超支，hover 仅显示重置时间），
  * 下方是图标 + "今日" + 今日 tokens / 调用次数 + 三色比例条（缓存/输入/输出，
- * hover 显示各类别具体数值）。56px rail（折叠列）：圆形图标按钮上方仅显示
- * 滚动 5 小时额度芯片，今日数字与 5 小时额度明细由 Tooltip 承载。点击打开
- * 模态窗详情（{@link UsageStatsPanel}）。
+ * hover 显示各类别具体数值）。56px rail（折叠列）：圆形图标按钮上方显示滚动
+ * 5 小时额度芯片（两行：短标签 + 百分比，居中），芯片 tooltip 给出三档窗口
+ * 完整明细（百分比 + 重置时间）；按钮 Tooltip 只放今日数字明细，不含 Go 额度。
+ * 点击打开模态窗详情（{@link UsageStatsPanel}）。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -82,7 +83,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const windowLine = (win: GoWindow | null, full: string): string =>
     win ? `${full}: ${clampPct(win)}%` + (resetsOf(win) ? ' · ' + resetsOf(win) : '') : ''
 
-  // 单个额度芯片（宽列横向 / rail 竖排共用）：短标签 + 百分比，按档位着色，
+  // 单个额度芯片（宽列 chips）：短标签 + 百分比，按档位着色，
   // hover 仅显示重置时间（无重置时间时兜底显示窗口全名）。
   const goChip = ({ key, short, full, win }: GoWindowEntry) => {
     const pct = clampPct(win)
@@ -95,29 +96,33 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     )
   }
 
-  // 折叠 rail tooltip：顶部"今日："标题 + 6 行对齐（调用 / 总计 / 缓存 / 输入 / 输出 / 缓存命中率）
-  // + OpenCode Go 额度行（折叠态只展示滚动 5 小时窗口）。
+  // 折叠 rail tooltip（用量图标）：仅"今日"明细（调用 / 总计 / 缓存 / 输入 / 输出 / 缓存命中率），
+  // 不含 Go 额度（Go 明细由上方额度芯片的 tooltip 承载）。
   const railLabel = (() => {
     if (!today || todayTokens === 0) return t('footer.railEmpty')
-    const lines = [
-      t('footer.railHeader') + '\n' + alignedRows([
-        [t('footer.railCalls'), fmtFull(todayCalls)],
-        [t('footer.railTotal'), fmtFull(todayTokens)],
-        [t('footer.cacheTip', { n: '' }).trim(), fmtFull(cacheTokens)],
-        [t('footer.inputTip', { n: '' }).trim(), fmtFull(inputTokens)],
-        [t('footer.outputTip', { n: '' }).trim(), fmtFull(outputTokens)],
-        [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
-      ]),
-    ]
-    const railGo = goWindows.filter((w) => w.key === 'rolling')
-    if (railGo.length > 0) {
-      lines.push(t('go.title') + '\n' + railGo.map((w) => windowLine(w.win, w.full)).join('\n'))
-    }
-    return lines.join('\n\n')
+    return t('footer.railHeader') + '\n' + alignedRows([
+      [t('footer.railCalls'), fmtFull(todayCalls)],
+      [t('footer.railTotal'), fmtFull(todayTokens)],
+      [t('footer.cacheTip', { n: '' }).trim(), fmtFull(cacheTokens)],
+      [t('footer.inputTip', { n: '' }).trim(), fmtFull(inputTokens)],
+      [t('footer.outputTip', { n: '' }).trim(), fmtFull(outputTokens)],
+      [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
+    ])
   })()
 
-  // 折叠态：只展示滚动 5 小时窗口的额度芯片（移在圆形按钮上方）。
+  // 折叠态芯片：只展示滚动 5 小时窗口（移在圆形按钮上方）。
   const railRolling = goWindows.find((w) => w.key === 'rolling')
+
+  // 折叠态 Go 芯片 tooltip：完整三档窗口明细（用量百分比 + 重置时间），
+  // 与宽列三档窗口同款内容，全部数据都在这里。
+  const railQuotaLabel =
+    goWindows.length === 0
+      ? ''
+      : t('go.title') + '\n' + goWindows.map((w) => windowLine(w.win, w.full)).join('\n')
+
+  // 折叠态芯片档位：正常态用底色，预警 / 超支沿用芯片警示色。
+  const railLevel = railRolling === undefined ? undefined : levelOf(clampPct(railRolling.win))
+  const railCls = railLevel === 'over' ? css.goChipOver : railLevel === 'warn' ? css.goChipWarn : ''
 
   // 展开（宽列）比例条 tooltip：4 行对齐（缓存 / 输入 / 输出 / 缓存命中率）
   const barLabel = (() => {
@@ -147,9 +152,16 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           {goWindows.map(goChip)}
         </div>
       )}
-      {/* rail 折叠态：圆形按钮上方仅显示滚动 5 小时额度芯片 */}
+      {/* rail 折叠态：圆形按钮上方仅显示滚动 5 小时额度芯片（两行：短标签 / 百分比，居中） */}
       {!wide && railRolling !== undefined && (
-        <div className={css.goRailChip}>{goChip(railRolling)}</div>
+        <div className={css.goRailChip}>
+          <Tooltip label={railQuotaLabel} side="top" delayMs={400}>
+            <span className={`${css.goRailChipBox} ${railCls}`}>
+              <span className={css.goRailChipLabel}>{railRolling.short}</span>
+              <span className={css.goRailChipPct}>{clampPct(railRolling.win)}%</span>
+            </span>
+          </Tooltip>
+        </div>
       )}
       <Tooltip label={wide ? t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) }) : railLabel} side="right" delayMs={500} disabled={wide}>
         <button
