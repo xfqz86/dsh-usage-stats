@@ -3,10 +3,11 @@
  * （设置按钮上方）的今日统计触发器。
  *
  * 宽列：图标 + "今日" + 今日 tokens / 调用次数 + 三色比例条
- * （缓存/输入/输出，hover 显示各类别具体数值），下方一排 OpenCode Go
- * 订阅额度芯片（滚动 5 小时 / 本周 / 本月用量百分比，≥80% 预警、≥100%
- * 超支，hover 显示重置时间）。56px rail（折叠列）：圆形图标按钮，今日数字
- * 与 Go 额度明细由 Tooltip 承载。点击打开模态窗详情（{@link UsageStatsPanel}）。
+ * （缓存/输入/输出，hover 显示各类别具体数值），下方一排带"Go 额度"
+ * 标签的 OpenCode Go 订阅额度芯片（滚动 5 小时 / 本周 / 本月用量百分比，
+ * ≥80% 预警、≥100% 超支，hover 仅显示重置时间）。56px rail（折叠列）：
+ * 圆形图标按钮，今日数字与 Go 额度明细由 Tooltip 承载。点击打开模态窗
+ * 详情（{@link UsageStatsPanel}）。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -169,12 +170,13 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       {/* OpenCode Go 额度芯片行（仅宽列；折叠时信息在 rail tooltip 里） */}
       {wide && goWindows.length > 0 && (
         <div className={css.goRow}>
+          <span className={css.goLabel}>{t('go.label')}</span>
           {goWindows.map((w) => {
             const pct = clampPct(w.win)
             const level = levelOf(pct)
             const cls = level === 'over' ? css.goChipOver : level === 'warn' ? css.goChipWarn : css.goChipOk
             return (
-              <Tooltip key={w.key} label={`${w.full}: ${pct}%` + (resetsOf(w.win) ? ' · ' + resetsOf(w.win) : '')} side="top" delayMs={400}>
+              <Tooltip key={w.key} label={resetsOf(w.win) || w.full} side="top" delayMs={400}>
                 <span className={`${css.goChip} ${cls}`}>{w.short} {pct}%</span>
               </Tooltip>
             )

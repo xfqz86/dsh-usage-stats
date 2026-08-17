@@ -49,6 +49,15 @@
   display: none;
 }
 
+/* 额度行前置标签：说明这一排芯片是 OpenCode Go 订阅额度。 */
+.goLabel {
+  flex: none;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
 .goChip {
   display: inline-flex;
   align-items: center;
