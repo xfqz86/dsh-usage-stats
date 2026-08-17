@@ -6,7 +6,7 @@
  * 与模态窗详情里。服务端缓存 5 分钟，本地 60s 轮询几乎不触达官方端点。
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 /** 单个额度窗口（用量百分比 + 重置时间）。 */
 export interface GoWindow {
@@ -23,9 +23,10 @@ export interface GoQuota {
   monthly: GoWindow | null
 }
 
-/** 每 `intervalMs` 轮询一次额度；未加载 / 请求失败时为 null。 */
-export function useGoQuota(intervalMs = 60000): [GoQuota | null] {
+/** 每 `intervalMs` 轮询一次额度；未加载 / 请求失败时为 null。返回 [数据, 手动刷新]。 */
+export function useGoQuota(intervalMs = 60000): [GoQuota | null, () => void] {
   const [data, setData] = useState<GoQuota | null>(null)
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -47,7 +48,10 @@ export function useGoQuota(intervalMs = 60000): [GoQuota | null] {
     load()
     const timerId = window.setInterval(load, intervalMs)
     return () => { live = false; window.clearInterval(timerId) }
-  }, [intervalMs])
+  }, [intervalMs, tick])
 
-  return [data]
+  /** 手动触发一次立即刷新。 */
+  const refresh = useCallback(() => setTick(v => v + 1), [])
+
+  return [data, refresh]
 }

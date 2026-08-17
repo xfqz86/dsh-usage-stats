@@ -20,10 +20,10 @@ dsh-usage-statistics/
 ├── src/client/                  ← 浏览器端（Client）bundle
 │   ├── index.ts                 ← 入口：注册 sidebar.footer.action
 │   ├── UsageStatsFooter.tsx     ← 侧边栏底部今日统计按钮 + Go 额度芯片行（wide / rail 双模式）
-│   ├── UsageStatsPanel.tsx      ← 模态窗详情（汇总/Go 额度/模型表/会话表/曲线+热力图）
+│   ├── UsageStatsPanel.tsx      ← 模态窗详情，Tab 化：概览/日期/会话/模型/设置
 │   ├── *.module.css             ← CSS Modules（与 harness 的 ui-sidebar 同款写法）
-│   ├── useSnapshot.ts           ← 4s 轮询 /usage-stats/api/snapshot
-│   ├── useGoQuota.ts            ← 60s 轮询 /usage-stats/api/go-quota
+│   ├── useSnapshot.ts           ← 4s 轮询 /usage-stats/api/snapshot（含手动刷新）
+│   ├── useGoQuota.ts            ← 60s 轮询 /usage-stats/api/go-quota（含手动刷新）
 │   ├── stats.ts                 ← 纯函数：格式化/分桶/曲线/热力图几何
 │   ├── locales.ts               ← zh/en 文案（LocaleNamespaceMap 类型安全）
 │   └── css-modules.d.ts         ← *.module.css 的类型声明（harness 同款）
@@ -96,14 +96,19 @@ API 响应结构见 `src/client/useSnapshot.ts` 的 `UsageSnapshot` 类型：
     按钮 Tooltip 只放今日数字明细，不含 Go 额度；
   - 点击打开 **`Modal` 模态窗**（harness `@deepseek-ai/dsh-client-ui-primitives` 的
     `Modal` 组件：遮罩 + 居中卡片 + Escape/遮罩点击关闭 + `aria-modal`），
-    宽 ≤640px、高 ≤78vh，内容区内部滚动。
-- **模态窗内容**：今日 tokens / 今日调用 / 总 tokens / 会话数 汇总网格、
-  **OpenCode Go 额度区**（三档窗口的进度条 + 百分比 + 重置时间）、
-  按模型/Provider 拆分表（输入/输出/缓存/总计 + 占比条）、按会话表
-  （标题/cwd/最近活跃，默认 8 条可展开）、每日趋势（7D / 2周 / 1月 / 全部）
-  的**曲线与热力图**切换（悬停 tooltip 显示当日明细）。
-- 每 4s 轮询快照、每 60s 轮询 Go 额度（服务端 5 分钟缓存，几乎不触达
-  opencode.ai 官方端点），数据在角标、芯片与模态窗间共享。
+    宽 ≤800px、高 ≤78vh，内容区内部滚动。内容按 **Tab 划分**（语义化
+    `role="tablist"`，图标 + 文字，与插件内 chip/seg 控件风格统一）：
+    - **概览**：今日 tokens / 今日调用 / 总 tokens / 会话数 汇总网格 +
+      **OpenCode Go 额度区**（三档进度条 + 百分比 + 重置时间）+ 扫描页脚；
+    - **日期**：每日趋势（7D / 2周 / 1月 / 全部）的**曲线与热力图**切换
+      （悬停 tooltip 显示当日明细）；
+    - **会话**：按会话表（标题/cwd/最近活跃，默认 8 条可展开）；
+    - **模型**：按模型/Provider 拆分表（输入/输出/缓存/总计 + 占比条）；
+    - **设置**：手动刷新入口（立即重拉快照与 Go 额度，不等下个轮询周期）+
+      偏好设置占位（后续参数扩展点）。
+  - 每 4s 轮询快照、每 60s 轮询 Go 额度（服务端 5 分钟缓存，几乎不触达
+    opencode.ai 官方端点），数据在角标、芯片与模态窗间共享；每次打开默认
+    落在概览，Tab 内视图状态（日期范围/曲线视图/会话展开）切换时保留。
 
 ## 安装（标准 cordis.patch 模式）
 
@@ -141,6 +146,7 @@ pnpm build              # lib/index.js + lib/client.js
 pnpm watch              # 增量构建
 npx tsc --noEmit        # 类型检查（TS5 + @types/node@22 + @types/react）
 node test/smoke.mjs     # 服务端冒烟测试（mock cordis 服务 + 真实会话日志）
+node test/client-bundle.mjs  # 浏览器端 bundle 冒烟（模拟 __ModuleLoader__ + document，验证 CSS 内联注入）
 ```
 
 ## License

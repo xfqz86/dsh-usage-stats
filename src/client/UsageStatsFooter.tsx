@@ -43,8 +43,8 @@ interface GoWindowEntry {
 
 export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const [open, setOpen] = useState(false)
-  const [data, err] = useSnapshot(4000)
-  const [go] = useGoQuota(60000)
+  const [data, err, refreshSnapshot] = useSnapshot(4000)
+  const [go, refreshQuota] = useGoQuota(60000)
   const rootRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const root = rootRef?.current
@@ -143,6 +143,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         err={err}
         go={go}
         onClose={() => setOpen(false)}
+        onRefresh={() => { refreshSnapshot(); refreshQuota() }}
         t={t}
       />
       {/* 宽列：Go 额度行在顶部，今日用量 badge 在其下方 */}

@@ -5,7 +5,7 @@
  * 维持一个 4s 轮询，底部角标与模态窗共用同一份数据。
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 /** 一组聚合计数（对应服务端 usageOf 的返回）。 */
 export interface UsageAgg {
@@ -69,10 +69,11 @@ export interface UsageSnapshot {
   sessionsList: SessionStat[]
 }
 
-/** 每 `intervalMs` 轮询一次服务端快照；返回 [快照, 是否出错]。 */
-export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean] {
+/** 每 `intervalMs` 轮询一次服务端快照；返回 [快照, 是否出错, 手动刷新]。 */
+export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean, () => void] {
   const [data, setData] = useState<UsageSnapshot | null>(null)
   const [err, setErr] = useState(false)
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -101,7 +102,10 @@ export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean] 
     load()
     const timerId = window.setInterval(load, intervalMs)
     return () => { live = false; window.clearInterval(timerId) }
-  }, [intervalMs])
+  }, [intervalMs, tick])
 
-  return [data, err]
+  /** 手动触发一次立即刷新（设置页"手动刷新"按钮用）。 */
+  const refresh = useCallback(() => setTick(v => v + 1), [])
+
+  return [data, err, refresh]
 }
