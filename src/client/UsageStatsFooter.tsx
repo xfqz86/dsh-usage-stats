@@ -2,12 +2,12 @@
  * 用量统计的侧边栏底部动作：渲染在 `sidebar.footer.action` 列表插槽
  * （设置按钮上方）的今日统计触发器。
  *
- * 宽列：图标 + "今日" + 今日 tokens / 调用次数 + 三色比例条
- * （缓存/输入/输出，hover 显示各类别具体数值），下方一排带"Go 额度"
- * 标签的 OpenCode Go 订阅额度芯片（滚动 5 小时 / 本周 / 本月用量百分比，
- * ≥80% 预警、≥100% 超支，hover 仅显示重置时间）。56px rail（折叠列）：
- * 圆形图标按钮，今日数字与 Go 额度明细由 Tooltip 承载。点击打开模态窗
- * 详情（{@link UsageStatsPanel}）。
+ * 宽列：上方一排带"Go 额度"标签的 OpenCode Go 订阅额度芯片（滚动 5 小时 /
+ * 本周 / 本月用量百分比，≥80% 预警、≥100% 超支，hover 仅显示重置时间），
+ * 下方是图标 + "今日" + 今日 tokens / 调用次数 + 三色比例条（缓存/输入/输出，
+ * hover 显示各类别具体数值）。56px rail（折叠列）：圆形图标按钮，下方竖排
+ * Go 额度芯片，今日数字与 Go 额度明细由 Tooltip 承载。点击打开模态窗详情
+ * （{@link UsageStatsPanel}）。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -30,6 +30,14 @@ function clampPct(win: GoWindow): number {
 /** 额度档位：≥100% 超支、≥80% 预警、其余正常。 */
 function levelOf(pct: number): 'over' | 'warn' | 'ok' {
   return pct >= 100 ? 'over' : pct >= 80 ? 'warn' : 'ok'
+}
+
+/** 单个额度窗口的展示条目（短/全名 + 窗口数据）。 */
+interface GoWindowEntry {
+  key: string
+  short: string
+  full: string
+  win: GoWindow
 }
 
 export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
@@ -61,18 +69,31 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     : null
 
   // ---- OpenCode Go 额度：三档窗口（滚动5小时 / 本周 / 本月）----
-  const goWindows: Array<{ key: string; short: string; full: string; win: GoWindow }> =
+  const goWindows: GoWindowEntry[] =
     go?.status === 'ok'
       ? [
         { key: 'rolling', short: t('go.short.rolling'), full: t('go.rolling'), win: go.rolling },
         { key: 'weekly', short: t('go.short.weekly'), full: t('go.weekly'), win: go.weekly },
         { key: 'monthly', short: t('go.short.monthly'), full: t('go.monthly'), win: go.monthly },
-      ].filter((w): w is { key: string; short: string; full: string; win: GoWindow } => w.win !== null)
+      ].filter((w): w is GoWindowEntry => w.win !== null)
       : []
   const resetsOf = (win: GoWindow): string =>
     win.resetsAt ? t('go.resetsAt', { time: new Date(win.resetsAt).toLocaleString() }) : ''
   const windowLine = (win: GoWindow | null, full: string): string =>
     win ? `${full}: ${clampPct(win)}%` + (resetsOf(win) ? ' · ' + resetsOf(win) : '') : ''
+
+  // 单个额度芯片（宽列横向 / rail 竖排共用）：短标签 + 百分比，按档位着色，
+  // hover 仅显示重置时间（无重置时间时兜底显示窗口全名）。
+  const goChip = ({ key, short, full, win }: GoWindowEntry) => {
+    const pct = clampPct(win)
+    const level = levelOf(pct)
+    const cls = level === 'over' ? css.goChipOver : level === 'warn' ? css.goChipWarn : css.goChipOk
+    return (
+      <Tooltip key={key} label={resetsOf(win) || full} side="top" delayMs={400}>
+        <span className={`${css.goChip} ${cls}`}>{short} {pct}%</span>
+      </Tooltip>
+    )
+  }
 
   // 折叠 rail tooltip：顶部"今日："标题 + 6 行对齐（调用 / 总计 / 缓存 / 输入 / 输出 / 缓存命中率）
   // + OpenCode Go 三档额度行。
@@ -115,6 +136,13 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         onClose={() => setOpen(false)}
         t={t}
       />
+      {/* 宽列：Go 额度行在顶部，今日用量 badge 在其下方 */}
+      {wide && goWindows.length > 0 && (
+        <div className={css.goRow}>
+          <span className={css.goLabel}>{t('go.label')}</span>
+          {goWindows.map(goChip)}
+        </div>
+      )}
       <Tooltip label={wide ? t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) }) : railLabel} side="right" delayMs={500} disabled={wide}>
         <button
           type="button"
@@ -167,20 +195,10 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           )}
         </button>
       </Tooltip>
-      {/* OpenCode Go 额度芯片行（仅宽列；折叠时信息在 rail tooltip 里） */}
-      {wide && goWindows.length > 0 && (
-        <div className={css.goRow}>
-          <span className={css.goLabel}>{t('go.label')}</span>
-          {goWindows.map((w) => {
-            const pct = clampPct(w.win)
-            const level = levelOf(pct)
-            const cls = level === 'over' ? css.goChipOver : level === 'warn' ? css.goChipWarn : css.goChipOk
-            return (
-              <Tooltip key={w.key} label={resetsOf(w.win) || w.full} side="top" delayMs={400}>
-                <span className={`${css.goChip} ${cls}`}>{w.short} {pct}%</span>
-              </Tooltip>
-            )
-          })}
+      {/* rail 折叠态：圆形按钮下方竖排 Go 额度芯片（宽度受限） */}
+      {!wide && goWindows.length > 0 && (
+        <div className={css.goRail}>
+          {goWindows.map(goChip)}
         </div>
       )}
     </div>

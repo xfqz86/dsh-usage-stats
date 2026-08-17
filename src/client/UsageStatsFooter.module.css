@@ -10,10 +10,9 @@
   margin: 8px 0 0;
 }
 
-/* rail（56px 折叠列）：36px 圆形图标按钮。 */
+/* rail（56px 折叠列）：36px 圆形图标按钮，高度随竖排 Go 芯片自适应。 */
 .rail {
   width: 36px;
-  height: 36px;
   margin: 0;
 }
 
@@ -32,7 +31,7 @@
   display: none;
 }
 
-/* ---- OpenCode Go 额度芯片行（仅宽列）---- */
+/* ---- OpenCode Go 额度芯片行（宽列，位于今日用量 badge 上方）---- */
 .goRow {
   flex: none;
   display: flex;
@@ -40,7 +39,7 @@
   gap: 6px;
   width: 100%;
   height: 20px;
-  margin-top: 2px;
+  margin: 0 0 2px;
   padding: 0 8px 0 6px;
   box-sizing: border-box;
 }
@@ -56,6 +55,26 @@
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
+}
+
+/* rail 折叠态：Go 额度芯片在圆形按钮下方竖排（宽度受限，字号略小）。 */
+.goRail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.rail .goRail .goChip {
+  justify-content: center;
+  width: 100%;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 2px;
+  border-radius: 8px;
+  font-size: 10px;
 }
 
 .goChip {
