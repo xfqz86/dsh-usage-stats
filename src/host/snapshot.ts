@@ -1,9 +1,11 @@
 /**
- * 快照构建：把 UsageStore 折叠结果整理成 /usage-stats/api/snapshot 的
- * 响应 value（纯函数，不触碰 HTTP / ctx）。
+ * 快照构建：把聚合缓存（UsageStore）+ 账本会话元数据整理成
+ * /usage-stats/api/snapshot 的响应 value（纯函数，不触碰 HTTP / ctx）。
  */
 import type { Agg } from './agg.ts'
 import type { UsageStore } from './store.ts'
+import type { Ledger } from './ledger.ts'
+import { metaOf } from './store.ts'
 
 /** 按日序列点（快照 series 元素）。 */
 export interface SeriesPoint {
@@ -42,17 +44,18 @@ export function usageOf(agg: Agg) {
 export const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 }
 
 /** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。 */
-export function snapshot(store: UsageStore, sessionId: string | null): unknown {
+export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | null): unknown {
   let sessionsWithUsage = 0
   const sessionsList: Array<Record<string, unknown>> = []
   for (const [id, info] of store.sessions) {
     if (info.allAgg.calls > 0) sessionsWithUsage += 1
+    const meta = metaOf(ledger, id)
     sessionsList.push({
       id,
-      title: info.title,
-      cwd: info.cwd,
-      createdAt: info.createdAt,
-      lastActive: info.lastActive,
+      title: meta.title,
+      cwd: meta.cwd,
+      createdAt: meta.createdAt,
+      lastActive: Math.max(meta.lastActive, info.lastActive),
       calls: info.allAgg.calls,
       usage: usageOf(info.allAgg),
     })

@@ -1,11 +1,24 @@
 /**
- * 用量统计服务端（Host）的独立冒烟测试。
+ * 用量统计服务端（Host）的独立冒烟测试（账本模式）。
+ *
  * 以 mock 的 cordis 服务挂载 apply()，喂入真实会话事件（从
  * session.jsonl.zstd 提取），再调用注册的 /usage-stats/api/snapshot
- * 路由并打印快照。
+ * 路由并打印快照。DSH_HOME 指向临时目录，验证：
+ *   - 首启初始化：账本事件流与会话元数据落盘（storages/dsh-usage-statistics/）；
+ *   - 快照从聚合缓存读出（不依赖持久化会话日志）；
+ *   - 实时重放事件经 seq 水位去重，不重复计数；
+ *   - rebuild API 清空账本并重扫；
+ *   - 回环围栏与 go-quota 路由。
  */
-import { readFileSync } from 'node:fs'
-import { apply } from '../lib/index.js'
+import { mkdtempSync, readdirSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+// 隔离 DSH_HOME：账本写入临时目录，避免污染真实 ~/.dsh。
+const tmpHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-'))
+process.env.DSH_HOME = tmpHome
+
+const { apply } = await import('../lib/index.js')
 
 const events = readFileSync('/tmp/session-events.jsonl', 'utf8')
   .split('\n').filter(Boolean).map((l) => JSON.parse(l))
@@ -39,7 +52,6 @@ const timer = { interval() {} }
 
 const listeners = {}
 const ctx = {
-  // 与 harness 的 declare module 合并一致：服务直接挂在 Context 属性上。
   webServer,
   sessionQuery,
   sessionPersistence,
@@ -53,11 +65,27 @@ const ctx = {
 
 apply(ctx)
 
-// 等待初始扫描完成
-await new Promise((r) => setTimeout(r, 1500))
+// 等待初始扫描完成 + 会话元数据防抖落盘（2s）
+await new Promise((r) => setTimeout(r, 3000))
 
 if (!route) { console.error('FAIL: route not registered'); process.exit(1) }
 console.log('route:', route.kind, route.path)
+
+// 账本落盘验证：事件流分片 + 会话元数据文件存在
+const ledgerDir = join(tmpHome, 'storages', 'dsh-usage-statistics')
+const eventsDir = join(ledgerDir, 'events')
+const metaFile = join(ledgerDir, 'session-meta.json')
+if (!existsSync(eventsDir) || !existsSync(metaFile)) {
+  console.error('FAIL: 账本目录未生成', ledgerDir)
+  process.exit(1)
+}
+const shards = readdirSync(eventsDir).filter((n) => n.endsWith('.jsonl'))
+if (shards.length === 0) {
+  console.error('FAIL: 事件流分片为空')
+  process.exit(1)
+}
+const shardTotal = shards.reduce((sum, n) => sum + readFileSync(join(eventsDir, n), 'utf8').split('\n').filter(Boolean).length, 0)
+console.log('ledger events:', shardTotal, '| shards:', shards.join(', '))
 
 function callRoute(body, url = '/usage-stats/api/snapshot') {
   return new Promise((resolve, reject) => {
@@ -85,9 +113,13 @@ function callRoute(body, url = '/usage-stats/api/snapshot') {
   })
 }
 
-const out = await callRoute({ sessionId: null })
-console.log('HTTP status:', out.status)
-const snap = JSON.parse(out.payload).value
+async function snapshotBody(body = { sessionId: null }) {
+  const out = await callRoute(body)
+  if (out.status !== 200) throw new Error(`快照 HTTP ${out.status}: ${out.payload}`)
+  return JSON.parse(out.payload).value
+}
+
+const snap = await snapshotBody()
 console.log(JSON.stringify({
   scanning: snap.scanning,
   sessions: snap.sessions,
@@ -103,20 +135,34 @@ console.log(JSON.stringify({
 // 实时去重测试：经 session/event 重放同样的事件，总数不应翻倍
 for (const ev of events.slice(0, 20)) listeners['session/event']({ id: SESSION_ID }, ev)
 await new Promise((r) => setTimeout(r, 100))
-const out2 = await callRoute({ sessionId: SESSION_ID })
-const snap2 = JSON.parse(out2.payload).value
+const snap2 = await snapshotBody({ sessionId: SESSION_ID })
 console.log('after live replay (should equal before):', JSON.stringify({ calls: snap2.all.calls, current: snap2.current }))
 if (snap2.all.calls !== snap.all.calls) {
   console.error('FAIL: live replay double-counted!')
   process.exit(1)
 }
+
+// rebuild API：清空账本 → 重扫 → 事件流重建
+const rebuildOut = await callRoute({}, '/usage-stats/api/rebuild')
+const rebuildBody = JSON.parse(rebuildOut.payload)
+console.log('rebuild ok:', rebuildBody.ok === true)
+if (rebuildBody.ok !== true) {
+  console.error('FAIL: rebuild failed')
+  process.exit(1)
+}
+const snap3 = await snapshotBody()
+console.log('after rebuild:', JSON.stringify({ foldedEvents: snap3.foldedEvents, calls: snap3.all.calls }))
+if (snap3.all.calls !== snap.all.calls) {
+  console.error('FAIL: rebuild 后统计不一致')
+  process.exit(1)
+}
+
 // 回环围栏测试
 const out3 = await callRoute({ sessionId: null })
-const snap3 = JSON.parse(out3.payload)
-console.log('loopback ok:', snap3.ok === true)
+const snap3raw = JSON.parse(out3.payload)
+console.log('loopback ok:', snap3raw.ok === true)
 
-// OpenCode Go 额度路由：queryGoQuota 永不抛错（结构化状态），本地无 key/断网
-// 也会返回 ok 包装（status 为 no-key/error）；这里只断言路径与状态枚举。
+// OpenCode Go 额度路由：queryGoQuota 永不抛错（结构化状态）
 const goOut = await callRoute({}, '/usage-stats/api/go-quota')
 const goBody = JSON.parse(goOut.payload)
 console.log('go-quota ok:', goBody.ok === true, '| status:', goBody.value?.status, '| rolling:', goBody.value?.rolling?.percent ?? null)
@@ -124,4 +170,7 @@ if (goBody.ok !== true || !['ok', 'no-key', 'error'].includes(goBody.value?.stat
   console.error('FAIL: unexpected go-quota response')
   process.exit(1)
 }
+
+// 清理临时 DSH_HOME
+rmSync(tmpHome, { recursive: true, force: true })
 console.log('SMOKE TEST PASSED')

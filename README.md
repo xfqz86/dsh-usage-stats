@@ -9,11 +9,12 @@ DSH (DeepSeek Harness) 的 Web 持久化插件：把 **token 用量** 按 **模�
 ```
 dsh-usage-statistics/
 ├── src/host/                    ← 服务端（Host，Node ESM）
-│   ├── index.ts                 ← 入口：装配 store/监听/扫描/路由
+│   ├── index.ts                 ← 入口：账本装配/监听/初始化/对账/路由
 │   ├── agg.ts                   ← 聚合口径与纯函数（Agg / ink / usable / modelKeyOf）
 │   ├── logs.ts                  ← 会话日志的目录发现与 NDJSON 解析（解码走 persistence）
-│   ├── store.ts                 ← UsageStore 内存聚合与折叠助手
-│   ├── scan.ts                  ← 扫描编排（persistence.readRaw 优先 + harness 兜底 + 并行 worker）
+│   ├── ledger.ts                ← 原始事件流账本（按天分片 JSONL + 会话元数据表 + 版本）
+│   ├── store.ts                 ← UsageStore 聚合缓存与折叠助手（账本事件的派生统计）
+│   ├── scan.ts                  ← 账本导入/重建（persistence.readRaw 优先 + harness 兜底）
 │   ├── snapshot.ts              ← 快照 value 构建（汇总/模型/会话/按日序列）
 │   ├── goquota.ts               ← OpenCode Go 额度查询（滚动5h/周/月 + TTL 缓存）
 │   └── http.ts                  ← JSON API 的 HTTP 辅助与回环围栏
@@ -63,23 +64,34 @@ dsh-usage-statistics/
 
 ## 服务端（lib/index.js，Node cordis 插件）
 
-1. 挂载后异步扫描全部会话日志，折叠用量：**按会话 + 按本地日 + 按模型/provider**。
-2. **RAW 优先**：后端声明 `supportsRawArtifacts` 时，用
-   `ctx.sessionPersistence.readRaw(id)` 直接拿解码后的原始 JSONL 文本折叠
-   `assistant/message` 的 usage —— 解码是 harness 后端内的纯 JS zstd
-   （`node:zlib`），**无 CLI 依赖**（曾用 `zstd` CLI，环境里可能没有安装，
-   且 spawn 开销大）。会话 id 全集 = 磁盘目录遍历（`logs.ts`）∪ harness 清单。
-3. **harness 兜底**：后端不支持原始工件 / `readRaw` 失败（例如仍在写入的
-   尾部帧）时，回退到 `sessionQuery.readSession` / `sessionPersistence.readFrom(id, 0)`。
-4. **实时增量**：`ctx.on('session/event')` 边扫边收，per-session `maxSeq`
-   水位去重。
-5. **自愈重扫**：每 60s 一次，防重入锁保证扫描不重叠。
-6. **JSON API**：`POST /usage-stats/api/snapshot`，请求 `{ sessionId? }`，
-   响应 `{ ok, value }`；`POST /usage-stats/api/go-quota` 返回 OpenCode Go
-   订阅额度（滚动 5 小时 / 本周 / 本月用量百分比 + 重置时间，服务端 5 分钟
-   TTL 缓存，key 自动发现：环境变量 `OPENCODE_GO_API_KEY` / `OPENCODE_API_KEY`
-   → opencode CLI 登录态 `auth.json`）。只读聚合，**回环 Host 围栏**
-   （防 DNS 重绑定/跨站探测）。
+**账本模式**：插件以「原始事件流账本 + 派生聚合缓存」统计用量，取代旧的
+「周期性全量扫描内存聚合」模式。账本 = 唯一事实来源，聚合 = 只读派生缓存。
+
+- **账本布局**（`$DSH_HOME/storages/dsh-usage-statistics/`）：
+  - `events/YYYY-MM-DD.jsonl` —— 原始事件流，按天分片追加写，**全量保留**
+    （不剪枝）。每行一条 `assistant/message` 的 usage 事件
+    （`{t, sessionId, provider, model, seq, input, output, cacheRead, cacheWrite, reasoning}`），
+    seq 供去重/审计；
+  - `session-meta.json` —— 会话元数据表（title/cwd/createdAt/lastActive），
+    临时文件 + 原子重命名 + 2s 防抖落盘。
+- **安装时初始化**：首次挂载且事件流为空时，扫描全部会话日志写入账本
+  （RAW 优先 `persistence.readRaw` —— 后端纯 JS zstd 解码，无 CLI 依赖；
+  失败走 harness 兜底 `sessionQuery.readSession` / `persistence.readFrom`；
+  4 路 worker 并行），并抄录会话元数据。
+- **重启恢复**：账本已有事件时直接 `rebuildFromEvents` 从事件流重建聚合，
+  **不再重扫日志**（日志删除/不可读也能恢复统计）。
+- **实时增量**：`ctx.on('session/event')` 逐条写账本 + 折聚合，与扫描共用
+  `foldRecord` 路径，per-session `maxSeq` 水位去重（防双记）。
+- **60s 对账**：按事件流分片水位增量折叠新增行（补崩溃丢失的增量），
+  取代旧版周期性全量重扫。
+- **重建账本**：`POST /usage-stats/api/rebuild` 清空事件流与元数据、复位
+  聚合、重扫日志重算（设置页有入口）；账本版本不兼容时自动重建。
+- **JSON API**：`POST /usage-stats/api/snapshot`，请求 `{ sessionId? }`，
+  响应 `{ ok, value }`；`POST /usage-stats/api/go-quota` 返回 OpenCode Go
+  订阅额度（滚动 5 小时 / 本周 / 本月用量百分比 + 重置时间，服务端 5 分钟
+  TTL 缓存，key 自动发现：环境变量 `OPENCODE_GO_API_KEY` / `OPENCODE_API_KEY`
+  → opencode CLI 登录态 `auth.json`）。只读聚合，**回环 Host 围栏**
+  （防 DNS 重绑定/跨站探测）。
 
 API 响应结构见 `src/client/useSnapshot.ts` 的 `UsageSnapshot` 类型：
 `all`（总量）、`series.all`（按日序列）、`models[]`（模型拆分）、
@@ -147,7 +159,7 @@ pnpm install            # 安装 devDependencies（@deepseek-ai/* 类型来自 n
 pnpm build              # lib/index.js + lib/client.js
 pnpm watch              # 增量构建
 npx tsc --noEmit        # 类型检查（TS5 + @types/node@22 + @types/react）
-node test/smoke.mjs     # 服务端冒烟测试（mock cordis 服务 + 真实会话日志）
+node test/smoke.mjs   # 服务端冒烟（内部使用临时 DSH_HOME，验证账本落盘/去重/rebuild）
 node test/client-bundle.mjs  # 浏览器端 bundle 冒烟（模拟 __ModuleLoader__ + document，验证 CSS 内联注入）
 ```
 

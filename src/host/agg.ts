@@ -21,14 +21,11 @@ export interface Agg {
   calls: number
 }
 
-/** 会话级状态：聚合 + 元数据 + 去重水位。 */
+/** 会话级状态：聚合 + 去重水位（title/cwd/createdAt 在账本 meta）。 */
 export interface SessionInfo {
   daily: Map<number, Agg>
   allAgg: Agg
   maxSeq: number
-  title: string
-  cwd: string
-  createdAt: number
   lastActive: number
 }
 

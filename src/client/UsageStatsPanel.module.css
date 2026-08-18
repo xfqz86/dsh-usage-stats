@@ -188,6 +188,15 @@
   border-color: var(--dsw-alias-state-success-primary);
 }
 
+.refreshBtnBusy {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.refreshBtn:disabled {
+  cursor: not-allowed;
+}
+
 .body {
   flex: 1;
   min-height: 0;
