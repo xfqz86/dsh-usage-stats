@@ -172,27 +172,70 @@ export function curveOf(buckets: SeriesPoint[], W = 300, H = 140): CurveGeometry
   return { line, area, W, H, hits }
 }
 
-export interface HeatCell {
+/** 热力图单个格子的数据（Codex 风格 26 周网格的一格）。 */
+export interface HeatGridCell {
+  /** 当天 0 点时间戳。 */
   t: number
+  /** 当天 total tokens（与曲线一致：input+output+cacheRead+cacheWrite）。 */
   v: number
+  /** 当天调用次数。 */
   calls: number
+  /** 强度档 0..4：0 = 无用量（底色+边框），1..4 按窗口最大值占比。 */
   lvl: number
+  /** 是否今天（外框高亮）。 */
+  today: boolean
+  /** yyyy-mm-dd 标签（tooltip 用）。 */
   label: string
 }
 
-/** 热力图格子（每行 ≤7 列），强度 0..7 按最大值占比。 */
-export function heatOf(buckets: SeriesPoint[]): { cols: number; cells: HeatCell[] } {
-  if (!buckets.length) return { cols: 7, cells: [] }
-  const cols = Math.min(7, buckets.length)
-  const cells = buckets.map((x) => {
-    const v = dayTotal(x)
-    return { t: x.t, v, calls: x.calls || 0, lvl: 0, label: fullDayLabel(x.t) }
-  })
+/** Codex 风格 26 周热力图：列 = 周（周一..周日，自上而下），列优先。 */
+export interface HeatGrid {
+  /** 周数（列数）。 */
+  cols: number
+  /** 列优先的格子序列：每周 7 格（周一..周日），从最老的一周排到本周。 */
+  cells: HeatGridCell[]
+  /** 每列（周）的月份标签：0..11 月索引；与上一列同月时为 null（不显示）。 */
+  months: Array<number | null>
+}
+
+/** 由日序列构建 Codex 风格 26 周热力图（列 = 周，行 = 周一..周日）。 */
+export function heatGridOf(series: SeriesPoint[], weeks = 26): HeatGrid {
+  const byDate = new Map<string, SeriesPoint>()
+  for (const p of series) if (p && p.t != null) byDate.set(fullDayLabel(p.t), p)
+
+  const today = startOfDay(Date.now())
+  const end = new Date(today)
+  // 对齐到本周周日（getDay(): 周日=0 … 周六=6，(d+6)%7 → 周一=0…周日=6）。
+  end.setDate(end.getDate() + (6 - ((end.getDay() + 6) % 7)))
+
+  const cells: HeatGridCell[] = []
+  const months: Array<number | null> = []
+  let lastMonth = -1
+  for (let w = weeks - 1; w >= 0; w -= 1) {
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(end)
+      d.setDate(d.getDate() - (w * 7 + (6 - i)))
+      const label = fullDayLabel(d.getTime())
+      const day = byDate.get(label)
+      const v = day ? dayTotal(day) : 0
+      cells.push({
+        t: d.getTime(), v, calls: day?.calls ?? 0, lvl: 0,
+        today: label === fullDayLabel(today), label,
+      })
+    }
+    const m = new Date(end)
+    m.setDate(m.getDate() - (w * 7 + 6)) // 该周周一（列首）
+    months.push(m.getMonth() !== lastMonth ? m.getMonth() : null)
+    lastMonth = m.getMonth()
+  }
+
+  // 强度 4 档：按窗口内最大值占比（与 dsh-cost-meter 的 cm-ug-cell l1..l4 同口径）。
   let max = 1
-  cells.forEach((c) => { if (c.v > max) max = c.v })
-  cells.forEach((c) => {
-    const f = c.v / max
-    c.lvl = f <= 0 ? 0 : Math.min(7, Math.max(1, Math.ceil(f * 7)))
-  })
-  return { cols, cells }
+  for (const c of cells) if (c.v > max) max = c.v
+  for (const c of cells) {
+    if (c.v <= 0) continue
+    const ratio = c.v / max
+    c.lvl = ratio < 0.25 ? 1 : ratio < 0.5 ? 2 : ratio < 0.75 ? 3 : 4
+  }
+  return { cols: weeks, cells, months }
 }

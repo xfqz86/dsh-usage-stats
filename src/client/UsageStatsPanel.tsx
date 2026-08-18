@@ -24,6 +24,7 @@ import {
   IconRightUpOutline16,
   IconSettingsOutline16,
   Modal,
+  Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
@@ -32,7 +33,8 @@ import type { ModelStat, SessionStat, UsageSnapshot } from './useSnapshot.ts'
 import type { GoQuota, GoWindow } from './useGoQuota.ts'
 import type { UsageStatsKey } from './locales.ts'
 import {
-  buildSet, curveOf, dayTotal, fmt, fmtFull, fullDayLabel, heatOf, pctOf, shortId, todayOf, usageTotal,
+  buildSet, curveOf, dayTotal, fmt, fmtFull, fullDayLabel, heatGridOf, pctOf, shortId, todayOf, usageTotal,
+  type HeatGridCell,
 } from './stats.ts'
 
 export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-statistics'> {
@@ -71,8 +73,14 @@ const RANGE_KEYS = [
 ] as const
 type RangeKey = typeof RANGE_KEYS[number][0]
 
-/** 热力图强度 0..7 对应的 scoped 类名。 */
-const HEAT_LEVELS = [css.h0, css.h1, css.h2, css.h3, css.h4, css.h5, css.h6, css.h7]
+/** 月份文案键：每列（周）首月变化时显示。 */
+const MONTH_KEYS = [
+  'month.1', 'month.2', 'month.3', 'month.4', 'month.5', 'month.6',
+  'month.7', 'month.8', 'month.9', 'month.10', 'month.11', 'month.12',
+] as const
+
+/** 热力图强度 1..4 对应的 scoped 类名（0 = 无用量底色）。 */
+const HEAT_LEVELS = [null, css.hl1, css.hl2, css.hl3, css.hl4] as const
 
 /** 渲染一个统计格（数值 + 标签）。 */
 function StatCell({ value, label }: { value: string; label: ReactNode }) {
@@ -101,7 +109,71 @@ function goLevel(pct: number): 'over' | 'warn' | 'ok' {
   return pct >= 100 ? 'over' : pct >= 80 ? 'warn' : 'ok'
 }
 
-/** 概览 Tab：汇总网格 + Go 额度 + 扫描页脚。 */
+/** 概览 Tab 的热力图：Codex 风格 26 周网格（列 = 周，行 = 周一..周日），
+ *  参考 dsh-cost-meter 的 cm-ug-grid（4 档强度 + 月份标签 + 今日高亮）。 */
+function UsageHeatmap({
+  series, t,
+}: {
+  series: UsageSnapshot['series']['all']
+  t: UsageStatsPanelProps['t']
+}) {
+  const grid = useMemo(() => heatGridOf(series, 26), [series])
+  // 按天索引序列，供 tooltip 取每日明细（缓存 = cacheRead + cacheWrite）。
+  const byDay = useMemo(() => new Map(series.map(s => [s.t, s])), [series])
+  const totalTokens = useMemo(() => grid.cells.reduce((s, c) => s + c.v, 0), [grid])
+  const totalCalls = useMemo(() => grid.cells.reduce((s, c) => s + c.calls, 0), [grid])
+  const hasUsage = totalTokens > 0
+
+  const cellClass = (c: HeatGridCell): string => {
+    const lvl = HEAT_LEVELS[c.lvl] ?? ''
+    const cls = `${css.hcell}${lvl ? ' ' + lvl : ''}`
+    return c.today ? `${cls} ${css.hcellToday}` : cls
+  }
+
+  /** 单格 tooltip 文案：日期 + 明细（与曲线 tooltip 同口径）。 */
+  const cellTip = (c: HeatGridCell): string => {
+    const day = byDay.get(c.t)
+    return t('heat.tip', {
+      date: c.label,
+      tokens: fmtFull(c.v),
+      input: fmtFull(day?.input ?? 0),
+      cache: fmtFull((day?.cacheRead ?? 0) + (day?.cacheWrite ?? 0)),
+      output: fmtFull(day?.output ?? 0),
+      calls: fmtFull(c.calls),
+    })
+  }
+
+  return (
+    <div className={css.section}>
+      <div className={css.sectionHead}>
+        <span className={css.sectionLabel}>{t('heat.title')}</span>
+      </div>
+      <span className={css.heatTotal}>
+        {t('heat.total', { tokens: fmtFull(totalTokens), calls: fmtFull(totalCalls) })}
+      </span>
+      {hasUsage ? (
+        <>
+          <div className={css.heatGrid} style={{ gridTemplateColumns: `repeat(${grid.cols},1fr)` }}>
+            {grid.cells.map((c, i) => (
+              <Tooltip key={i} label={cellTip(c)} side="top" delayMs={150}>
+                <div className={cellClass(c)} />
+              </Tooltip>
+            ))}
+          </div>
+          <div className={css.heatMonths} style={{ gridTemplateColumns: `repeat(${grid.cols},1fr)` }}>
+            {grid.months.map((m, i) => (
+              <span key={i} className={css.heatMonth}>{m === null ? '' : t(MONTH_KEYS[m])}</span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className={css.empty}>{t('state.noUsage')}</div>
+      )}
+    </div>
+  )
+}
+
+/** 概览 Tab：汇总网格 + Go 额度 + 26 周热力图 + 扫描页脚。 */
 function OverviewTab({
   value, go, t,
 }: {
@@ -121,6 +193,9 @@ function OverviewTab({
         <StatCell value={fmtFull(usageTotal(all.usage))} label={t('panel.summary.totalTokens')} />
         <StatCell value={fmtFull(value.sessions)} label={t('panel.summary.sessions')} />
       </div>
+
+      {/* 26 周热力图（Codex 风格，参考 dsh-cost-meter） */}
+      <UsageHeatmap series={value.series.all} t={t} />
 
       {/* OpenCode Go 订阅额度 */}
       {go !== null && go.status === 'ok' && (
@@ -177,7 +252,7 @@ function OverviewTab({
   )
 }
 
-/** 日期 Tab：每日趋势（曲线 / 热力图 + 时间范围）。 */
+/** 日期 Tab：每日趋势（曲线 + 时间范围），悬停 tooltip 显示当日明细。 */
 function DatesTab({
   series, t,
 }: {
@@ -185,7 +260,6 @@ function DatesTab({
   t: UsageStatsPanelProps['t']
 }) {
   const [range, setRange] = useState<RangeKey>('7d')
-  const [viz, setViz] = useState<'curve' | 'heat'>('curve')
   const [tip, setTip] = useState<{ x: number; y: number; label: string; total: number; calls: number } | null>(null)
   const [tipPos, setTipPos] = useState<{ left: number; top: number } | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
@@ -193,7 +267,6 @@ function DatesTab({
 
   const buckets = useMemo(() => buildSet(series, range), [range, series])
   const curve = useMemo(() => curveOf(buckets, 300, 130), [buckets])
-  const heat = useMemo(() => heatOf(buckets), [buckets])
 
   // 把 tooltip 约束在图表区域内。
   useEffect(() => {
@@ -235,30 +308,15 @@ function DatesTab({
           ))}
         </span>
       </div>
-      <div className={css.sectionHead}>
-        <span className={css.seg}>
-          <button
-            type="button"
-            className={viz === 'curve' ? css.segOn : ''}
-            onClick={() => setViz('curve')}
-          >{t('viz.curve')}</button>
-          <button
-            type="button"
-            className={viz === 'heat' ? css.segOn : ''}
-            onClick={() => setViz('heat')}
-          >{t('viz.heat')}</button>
-        </span>
-      </div>
       <div
         className={css.chart}
         ref={chartRef}
         onMouseLeave={() => setTip(null)}
       >
-        {(!curve && viz === 'curve') || (heat.cells.length === 0 && viz === 'heat')
+        {!curve
           ? <div className={css.empty}>{t('state.noUsage')}</div>
-          : viz === 'curve' && curve
-            ? (
-              <svg className={css.svg} viewBox={`0 0 ${curve.W} ${curve.H}`}>
+          : (
+            <svg className={css.svg} viewBox={`0 0 ${curve.W} ${curve.H}`}>
                 {[0.25, 0.5, 0.75].map(f => (
                   <line key={'g' + f} x1={0} x2={curve.W} y1={curve.H * f} y2={curve.H * f} className={css.gridline} />
                 ))}
@@ -293,22 +351,7 @@ function DatesTab({
                   ))
                 })()}
               </svg>
-            )
-            : (
-              <div className={css.heat} style={{ gridTemplateColumns: `repeat(${heat.cols},1fr)` }}>
-                {heat.cells.map((c, i) => (
-                  <div
-                    key={i}
-                    className={`${css.hcell} ${HEAT_LEVELS[c.lvl]}`}
-                    onMouseEnter={(e: React.MouseEvent) => {
-                      e.stopPropagation()
-                      const p = tipFromEvent(e)
-                      setTip({ x: p.x, y: p.y, label: c.label, total: c.v, calls: c.calls })
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+          )}
         {tip && (
           <div
             ref={tipRef}
