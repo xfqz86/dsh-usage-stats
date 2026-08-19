@@ -1,12 +1,13 @@
 /**
  * 会话扫描编排（账本导入）：把磁盘原始日志 ∪ harness 会话清单的会话 id
- * 全集逐会话读取，经 foldRecord 写入账本并折叠聚合缓存。RAW 优先
+ * 全集逐会话读取，经 foldRecord 写入账本（自管理 sqlite 的 events /
+ * session_meta 表）并折叠聚合缓存。RAW 优先
  * （persistence.readRaw 直接返回后端解码后的原始 JSONL 文本 —— 纯 JS zstd
  * 解码，无 CLI 依赖），后端不支持原始工件时走 harness 兜底
  * （sessionQuery.readSession / persistence.readFrom）；4 路 worker 并行。
  *
  * 语义：只在账本需要初始化（首启无事件）或显式重建时运行；平时数据来自
- * 实时 session/event 监听 + 60s 对账（账本增量折叠），不再周期性全量重扫。
+ * 实时 session/event 监听（每次写入同步落盘，无需周期性对账）。
  * 扫描报告（rawSessions / harnessSessions / failed）记录最近一次导入结果。
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -16,6 +17,7 @@ import type { UsageStore } from './store.ts'
 import { foldLedgerEvent, foldRecord } from './store.ts'
 import type { Ledger } from './ledger.ts'
 import { newAgg } from './agg.ts'
+import { errorMessage } from '../utils.ts'
 
 /** 复位聚合缓存（重建账本前调用）：清空会话/模型/全量/日桶与去重水位与计数。 */
 export function resetStore(store: UsageStore): void {
@@ -31,10 +33,6 @@ export function resetStore(store: UsageStore): void {
   store.lastError = null
   store.scanError = null
 }
-
-/** 错误对象转消息字符串。 */
-const msgOf = (e: unknown): string =>
-  (e && typeof e === 'object' && (e as { message?: unknown }).message) ? String((e as { message: unknown }).message) : String(e)
 
 /** 会话 id 截断展示（前 12 字符）。 */
 const shortOf = (id: string): string =>
@@ -77,7 +75,7 @@ export async function scanOnce(
           }
         }
       } catch (e) {
-        store.scanError = 'listSessions: ' + msgOf(e)
+        store.scanError = 'listSessions: ' + errorMessage(e)
       }
     }
     if (persist) {
@@ -90,7 +88,7 @@ export async function scanOnce(
           if (headers.length > 0) store.scanError = null
         }
       } catch (e) {
-        store.scanError = 'persistence.list: ' + msgOf(e)
+        store.scanError = 'persistence.list: ' + errorMessage(e)
       }
     }
     const idList: string[] = [...ids]
@@ -110,7 +108,7 @@ export async function scanOnce(
               const raw = await persist.readRaw(id as SessionId)
               if (raw && typeof raw.content === 'string') rawContent = raw.content
             } catch (e) {
-              store.lastError = 'raw ' + shortOf(id) + ': ' + msgOf(e)
+              store.lastError = 'raw ' + shortOf(id) + ': ' + errorMessage(e)
             }
           }
           if (rawContent !== null) {
@@ -125,7 +123,7 @@ export async function scanOnce(
               const snap = await query.readSession(id as SessionId)
               events = snap && Array.isArray(snap.events) ? snap.events : null
             } catch (e) {
-              store.lastError = 'readSession ' + shortOf(id) + ': ' + msgOf(e)
+              store.lastError = 'readSession ' + shortOf(id) + ': ' + errorMessage(e)
               events = null
             }
           }
@@ -134,7 +132,7 @@ export async function scanOnce(
               const r = await persist.readFrom(id as SessionId, 0)
               events = r && Array.isArray(r.events) ? r.events : []
             } catch (e) {
-              store.lastError = 'readFrom ' + shortOf(id) + ': ' + msgOf(e)
+              store.lastError = 'readFrom ' + shortOf(id) + ': ' + errorMessage(e)
               events = null
             }
           }
@@ -146,7 +144,7 @@ export async function scanOnce(
             store.failed += 1
           }
         } catch (e) {
-          store.lastError = 'session ' + shortOf(id) + ': ' + msgOf(e)
+          store.lastError = 'session ' + shortOf(id) + ': ' + errorMessage(e)
           store.failed += 1
         }
       }
@@ -155,7 +153,7 @@ export async function scanOnce(
     const n = Math.max(1, Math.min(4, idList.length || 1))
     const workers: Promise<void>[] = []
     for (let k = 0; k < n; k += 1) workers.push(worker())
-    await Promise.all(workers.map((w) => w.catch((e) => { store.lastError = 'worker: ' + msgOf(e); store.failed += 1 })))
+    await Promise.all(workers.map((w) => w.catch((e) => { store.lastError = 'worker: ' + errorMessage(e); store.failed += 1 })))
   } finally {
     // 整轮无失败会话则清除历史错误标记（自愈：日志可读性恢复后自动消失）。
     if (store.failed === 0) { store.lastError = null; store.scanError = null }
@@ -165,7 +163,8 @@ export async function scanOnce(
 }
 
 /** 从账本事件流重建聚合缓存（启动加载账本已有事件时用；元数据已在 ledger）。
-   *  清空现有聚合后按事件流全量重折，水位随 readAll 建立。 */
+ *  清空现有聚合后按事件流全量重折；maxSeq 水位在 foldLedgerEvent 内重建，
+ *  实时路径随后可对历史事件去重。 */
 export function rebuildFromEvents(store: UsageStore, ledger: Ledger): void {
   store.sessions.clear()
   store.models.clear()
@@ -173,17 +172,5 @@ export function rebuildFromEvents(store: UsageStore, ledger: Ledger): void {
   store.allDaily.clear()
   store.foldedEvents = 0
   store.dedupSkipped = 0
-  for (const ev of ledger.readAll()) foldLedgerEvent(store, ev)
-}
-
-/** 增量对账：把账本新增行折叠进现有聚合（60s 定时用；不重建、不清空）。
-   *  返回新折叠事件数。崩溃丢内存增量后重启走 rebuildFromEvents 全量重建。 */
-export function reconcileNewEvents(store: UsageStore, ledger: Ledger): number {
-  let folded = 0
-  for (const name of ledger.shards()) {
-    for (const ev of ledger.readShardSince(name)) {
-      if (foldLedgerEvent(store, ev)) folded += 1
-    }
-  }
-  return folded
+  for (const ev of ledger.allEvents()) foldLedgerEvent(store, ev)
 }

@@ -1,18 +1,22 @@
 /**
- * 用量统计的服务端（Host）插件入口：账本模式装配。
+ * 用量统计的服务端（Host）插件入口：账本模式装配（自管理 sqlite 介质）。
  *
  * 数据流（账本为唯一事实来源，聚合为派生缓存）：
- *   - 首启/重建：扫描会话日志 → 写入事件流账本（ledger）→ 折叠聚合缓存；
+ *   - 打开自管理 sqlite 账本（ledger.ts，`$DSH_HOME/storages/
+ *     dsh-usage-statistics/ledger.sqlite`）→ events / session_meta 两表；
+ *   - 首启/重建：扫描会话日志 → 经 foldRecord 写入账本（同步落盘）并折
+ *     叠聚合缓存；
  *   - 实时：session/event 监听逐条入账本 + 折叠（seq 水位去重，与扫描共享
  *     foldRecord 路径，保证账本内事件唯一）；
- *   - 60s 对账：把账本新增行增量折叠（进程崩溃丢内存增量后自愈），
- *     取代旧版的周期性全量重扫；
+ *   - 每次写入即写即持久（sqlite 自动提交），进程崩溃后重启从介质恢复，
+ *     不需要周期性对账；
  *   - 快照 API 从聚合缓存 + 账本 meta 读取。
- * 账本版本不兼容时自动清空重建（账本结构升级的安全网）。
+ * 账本 schema 版本不兼容时自动清库重建（下次启动全量重扫）。
  *
- * 职责编排：agg.ts（口径）/ store.ts（聚合折叠）/ ledger.ts（账本存储）/
- * scan.ts（日志导入与重建）/ snapshot.ts（快照构建）/ goquota.ts（Go 额度）/
- * http.ts（HTTP 辅助与回环围栏）。
+ * 职责编排：utils.ts（跨端共用纯函数与协议类型）/ agg.ts（口径）/
+ * store.ts（聚合折叠）/ ledger.ts（自管理 sqlite 账本）/ scan.ts（日志导入
+ * 与重建）/ snapshot.ts（快照构建）/ goquota.ts（Go 额度）/ http.ts（HTTP
+ * 辅助与回环围栏）。
  *
  * 类型全部来自 harness 包（cordis Context 已合并注入服务表面）；运行时
  * 只 import node 内置模块 + 本地模块。
@@ -25,12 +29,11 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type {} from '@deepseek-ai/dsh-session-title'
-import type {} from '@deepseek-ai/cordis-plugin-timer'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { createStore, foldRecord } from './store.ts'
-import { scanOnce, rebuildFromEvents, reconcileNewEvents, resetStore } from './scan.ts'
-import { Ledger, LEDGER_VERSION } from './ledger.ts'
+import { scanOnce, rebuildFromEvents, resetStore } from './scan.ts'
+import { Ledger } from './ledger.ts'
 import { snapshot } from './snapshot.ts'
 import { queryGoQuota } from './goquota.ts'
 import { readJsonBody, writeJson, writeOk, writeError, isLoopbackHost } from './http.ts'
@@ -38,27 +41,15 @@ import { readJsonBody, writeJson, writeOk, writeError, isLoopbackHost } from './
 export const name = 'dsh-usage-statistics'
 
 /** 挂载前必需的服务（cordis fiber inject）。 */
-export const inject = ['webServer', 'sessionQuery', 'sessionPersistence', 'timer']
+export const inject = ['webServer', 'sessionQuery', 'sessionPersistence']
 
 /** 对外类型再导出（聚合结构定义在 agg.ts）。 */
 export type { Agg, SessionInfo } from './agg.ts'
 
-/** 实时监听与扫描共享的折叠入口：把会话事件记入账本并折叠聚合。 */
-function handleLiveEvent(store: ReturnType<typeof createStore>, ledger: Ledger, session: Session, event: SessionEvent): void {
-  const id = session && typeof session.id === 'string' ? session.id : undefined
-  if (!id) return
-  foldRecord(store, ledger, id, event)
-}
-
-/** 打开/创建账本：版本不兼容或损坏时自动重建（清空 + 重新导入）。 */
+/** 打开/创建账本：版本不兼容或损坏时自动清库重建（保存/连接由 Ledger 负责）。 */
 function openLedger(): Ledger {
   const ledger = new Ledger()
-  const version = ledger.open()
-  if (version !== 0 && version !== LEDGER_VERSION) {
-    console.warn(`[usage-statistics] 账本版本 ${String(version)} 不受支持，自动重建`)
-    ledger.clear()
-    ledger.open()
-  }
+  ledger.open()
   return ledger
 }
 
@@ -68,7 +59,14 @@ export function apply(ctx: Context): void {
 
   // ---- 先挂实时监听（初始扫描期间不漏事件）----
   ctx.on('session/event', (session: Session, event: SessionEvent) => {
-    handleLiveEvent(store, ledger, session, event)
+    const id = session && typeof session.id === 'string' ? session.id : undefined
+    if (!id) return
+    try {
+      foldRecord(store, ledger, id, event)
+    } catch (e) {
+      // 写账本失败记日志，不打断事件循环；账本/内存保持上次成功点。
+      console.error('[usage-statistics] 实时事件入账失败', e)
+    }
   })
 
   // ---- 初始化：账本无事件 → 扫描历史会话日志导入；有事件 → 直接重建聚合 ----
@@ -83,19 +81,7 @@ export function apply(ctx: Context): void {
     // 首启场景：全量扫描日志写入账本并折叠聚合。
     await scanOnce(ctx, store, ledger, { initial: true })
   }
-  bootstrap().catch((e) => console.error('[usage-statistics] 初始化失败', e))
-
-  // ---- 周期性对账（60s）：把账本新增行增量折叠，替代旧版全量重扫 ----
-  const timer = ctx.timer
-  if (timer && typeof timer.interval === 'function') {
-    timer.interval(() => {
-      try {
-        reconcileNewEvents(store, ledger)
-      } catch (e) {
-        console.error('[usage-statistics] 对账失败', e)
-      }
-    }, 60000)
-  }
+  void bootstrap().catch((e) => console.error('[usage-statistics] 初始化失败', e))
 
   // ---- JSON API 路由：POST /usage-stats/api/* ----
   const webServer = ctx.webServer
@@ -130,7 +116,7 @@ export function apply(ctx: Context): void {
             return
           }
           if (method === 'rebuild') {
-            // 重建账本：清空事件流与 meta → 复位聚合缓存与水位 → 重新扫描日志导入。
+            // 重建账本：清空 sqlite 事件与 meta → 复位聚合缓存 → 重新扫描日志导入。
             ledger.clear()
             resetStore(store)
             await scanOnce(ctx, store, ledger, { initial: true })

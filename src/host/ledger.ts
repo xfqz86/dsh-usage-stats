@@ -1,44 +1,39 @@
 /**
- * 原始事件流账本（Ledger）：用量事件的唯一事实来源。
+ * 原始事件流账本（Ledger）：用量事件的唯一事实来源 —— 自管理 SQLite。
  *
- * 存储布局（$DSH_HOME/storages/dsh-usage-statistics/）：
- *   events/YYYY-MM-DD.jsonl —— 按天分片的原始事件流（追加写，全量保留）。
- *     每行一条 usage 事件（LedgerEvent），带 seq 供去重/审计。
- *   session-meta.json       —— 会话元数据表（title/cwd/createdAt/lastActive），
- *     初始化扫描时从会话日志抄录、实时 session/title 事件更新；临时文件 +
- *     原子重命名 + 2s 防抖落盘。
+ * 不依赖 harness 的 storage 家族：直接用 node:sqlite 的同步 API
+ * （DatabaseSync，Node ≥22 内置；运行时仅打印一条 experimental 警告）。
+ * 数据落在 `$DSH_HOME/storages/dsh-usage-statistics/ledger.sqlite`：
  *
- * 账本与聚合缓存的边界：账本只负责「存」（追加、读取、元数据、版本），
- * 不负责统计；聚合（按天/模型/会话）由 store.ts 的 UsageStore 作为派生缓存
- * 维护（启动全量重建 + 实时增量 + 60s 对账补齐）。version 不兼容时上层
- * 视为空账本并自动重建。
+ *   - `events` 表：一行一条用量事件，PRIMARY KEY (session_id, seq, t) 天然
+ *     幂等（同一条事件重复写入收敛，重开账本时每行只折一次；seq=-1 的未知
+ *     序事件再按毫秒时间戳区分）。结构化列，无旧版按天分片 + 行水位。
+ *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/
+ *     lastActive（初始化扫描抄录、实时 session/title 事件更新）。
+ *   - `PRAGMA user_version` = LEDGER_VERSION：结构不兼容时清空重建
+ *     （事件表为空后下次启动全量重扫 —— 账本结构升级的安全网）。
  *
- * 纯 Node 实现：只 import node:fs / node:path，不触碰 ctx。
+ * 所有读写同步：append / setMeta 即写即持久（自动提交），崩溃后重启从
+ * sqlite 恢复，无需周期性对账；会话元数据在内存缓存一份供快照读取。
  */
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { DSH_HOME } from './logs.ts'
 import { modelKeyOf } from './agg.ts'
+import { splitModelKey } from '../utils.ts'
 
-/** 账本版本：结构不兼容时上层自动重建（见 index.ts）。 */
+/** 账本 schema 版本（PRAGMA user_version）：结构不兼容时自动清库重建。 */
 export const LEDGER_VERSION = 1
-/** 归属目录名（storages 下）。 */
+/** 归属目录名（storages 下，与插件同名）。 */
 export const LEDGER_DIR_NAME = 'dsh-usage-statistics'
-/** 事件流子目录。 */
-export const EVENTS_DIR_NAME = 'events'
-/** 会话元数据文件名。 */
-export const META_FILE_NAME = 'session-meta.json'
+/** 账本 sqlite 文件名。 */
+export const DB_FILE_NAME = 'ledger.sqlite'
 
-/** 账本根目录（默认 $DSH_HOME/storages/dsh-usage-statistics，可在测试注入）。 */
-export function ledgerRoot(): string {
-  return join(DSH_HOME, 'storages', LEDGER_DIR_NAME)
-}
-export function eventsRoot(root = ledgerRoot()): string {
-  return join(root, EVENTS_DIR_NAME)
-}
-export function metaPath(root = ledgerRoot()): string {
-  return join(root, META_FILE_NAME)
+/** 账本数据库文件绝对路径（默认 $DSH_HOME/storages/dsh-usage-statistics/）。 */
+export function ledgerDatabasePath(): string {
+  return join(DSH_HOME, 'storages', LEDGER_DIR_NAME, DB_FILE_NAME)
 }
 
 /** 一条账本事件：一次模型调用的用量（t 为毫秒时间戳）。 */
@@ -63,22 +58,44 @@ export interface SessionMeta {
   lastActive: number
 }
 
-/** 会话元数据表文件形状。 */
-interface MetaFileShape {
-  version: number
-  sessions: Record<string, SessionMeta>
+/** events 表 DDL（列名 snake_case，读回时映射回 camelCase）。 */
+const EVENT_TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS events (
+  session_id  TEXT    NOT NULL,
+  seq         INTEGER NOT NULL,
+  t           INTEGER NOT NULL,
+  provider    TEXT    NOT NULL,
+  model       TEXT    NOT NULL,
+  input       INTEGER NOT NULL DEFAULT 0,
+  output      INTEGER NOT NULL DEFAULT 0,
+  cache_read  INTEGER NOT NULL DEFAULT 0,
+  cache_write INTEGER NOT NULL DEFAULT 0,
+  reasoning   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (session_id, seq, t)
+)`
+
+/** session_meta 表 DDL。 */
+const META_TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS session_meta (
+  session_id  TEXT    PRIMARY KEY,
+  title       TEXT    NOT NULL DEFAULT '',
+  cwd         TEXT    NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL DEFAULT 0,
+  last_active INTEGER NOT NULL DEFAULT 0
+)`
+
+/** 预编译语句集（open 时在迁移完成后统一准备，复用避免重复解析）。 */
+interface LedgerStatements {
+  hasEvent: ReturnType<DatabaseSync['prepare']>
+  insertEvent: ReturnType<DatabaseSync['prepare']>
+  allEvents: ReturnType<DatabaseSync['prepare']>
+  upsertMeta: ReturnType<DatabaseSync['prepare']>
+  allMeta: ReturnType<DatabaseSync['prepare']>
 }
 
 /** 新建空会话元数据（字段可增量补齐）。 */
 export function emptySessionMeta(): SessionMeta {
   return { title: '', cwd: '', createdAt: 0, lastActive: 0 }
-}
-
-/** 时间戳 → 按天分片文件名（YYYY-MM-DD.jsonl）。 */
-export function shardNameOf(t: number): string {
-  const d = new Date(t)
-  const pad = (v: number): string => String(v).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.jsonl`
 }
 
 /** 会话事件 → 账本事件（无 usage 时返回 null）。 */
@@ -91,13 +108,12 @@ export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/
     const n = Number(v)
     return Number.isFinite(n) && n > 0 ? n : 0
   }
-  const key = modelKeyOf(event)
-  const sep = key.indexOf('\u0000')
+  const { provider, model } = splitModelKey(modelKeyOf(event))
   return {
     t: Number(event.time) || Date.now(),
     sessionId,
-    provider: sep === -1 ? 'unknown' : key.slice(0, sep),
-    model: sep === -1 ? 'unknown' : key.slice(sep + 1),
+    provider,
+    model,
     seq: typeof event.seq === 'number' ? event.seq : -1,
     input: num(u.inputTokens),
     output: num(u.outputTokens),
@@ -107,201 +123,139 @@ export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/
   }
 }
 
-/** 解析一行 NDJSON：坏行返回 null（不中断读取）。 */
-export function parseEventLine(line: string): LedgerEvent | null {
-  const trimmed = line.trim()
-  if (!trimmed) return null
-  try {
-    const parsed = JSON.parse(trimmed) as LedgerEvent
-    if (parsed !== null && typeof parsed === 'object' && typeof parsed.t === 'number' && typeof parsed.sessionId === 'string') {
-      return parsed
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-/** 原子写 JSON（临时文件 + rename）。 */
-export function writeJsonAtomic(path: string, data: unknown): void {
-  mkdirSync(dirname(path), { recursive: true })
-  const tmp = `${path}.tmp`
-  writeFileSync(tmp, JSON.stringify(data), 'utf8')
-  renameSync(tmp, path)
-}
-
 /**
- * 事件流账本实例：持有会话元数据表内存副本 + 写防抖，事件流按天分片追加。
- * 所有方法同步（appendFileSync / readFileSync），量级为单条事件/小文件，
- * 不阻塞事件循环可忽略。
+ * 自管理 SQLite 账本：events / session_meta 两表；读走内存缓存 + 按需
+ * SELECT，写同步即持久（自动提交）。测试注入 DSH_HOME 即可隔离介质。
  */
 export class Ledger {
-  /** 账本根目录。 */
-  readonly root: string
-  /** 会话元数据内存副本（权威=文件，写防抖）。 */
-  readonly meta: Map<string, SessionMeta>
-  /** 事件流已处理行数水位（分片名 → 行数），供 60s 对账增量消费。 */
-  readonly watermarks: Map<string, number>
-  private metaDirty = false
-  private metaTimer: ReturnType<typeof setTimeout> | null = null
+  private db!: DatabaseSync
+  private stmts!: LedgerStatements
+  private readonly metaCache = new Map<string, SessionMeta>()
   private closed = false
 
-  constructor(root = ledgerRoot()) {
-    this.root = root
-    this.meta = new Map()
-    this.watermarks = new Map()
-  }
+  constructor(private readonly path: string = ledgerDatabasePath()) {}
 
-  /** 打开账本：读会话元数据表；不存在按空账本启动。返回版本号（0=空账本）。 */
-  open(): number {
-    mkdirSync(eventsRoot(this.root), { recursive: true })
-    try {
-      const parsed = JSON.parse(readFileSync(metaPath(this.root), 'utf8')) as MetaFileShape
-      if (parsed !== null && typeof parsed === 'object' && typeof parsed.sessions === 'object' && parsed.sessions !== null) {
-        for (const [id, meta] of Object.entries(parsed.sessions)) {
-          if (meta !== null && typeof meta === 'object') {
-            this.meta.set(id, {
-              title: typeof meta.title === 'string' ? meta.title : '',
-              cwd: typeof meta.cwd === 'string' ? meta.cwd : '',
-              createdAt: Number(meta.createdAt) || 0,
-              lastActive: Number(meta.lastActive) || 0,
-            })
-          }
-        }
-        return typeof parsed.version === 'number' ? parsed.version : 0
-      }
-    } catch (error) {
-      const code = (error as { code?: string })?.code
-      if (code !== 'ENOENT') console.warn(`[usage-statistics] 会话元数据读取失败，按空表启动: ${String((error as Error)?.message ?? error)}`)
-      return 0
+  /** 打开账本：建目录/建表/迁移（user_version 不匹配则清库）+ 载入 meta 缓存。 */
+  open(): void {
+    mkdirSync(dirname(this.path), { recursive: true })
+    this.db = new DatabaseSync(this.path)
+    this.db.exec(EVENT_TABLE_DDL)
+    this.db.exec(META_TABLE_DDL)
+    const row = this.db.prepare('PRAGMA user_version').get() as { user_version?: unknown }
+    const version = typeof row?.user_version === 'number' ? row.user_version : 0
+    if (version !== LEDGER_VERSION) {
+      // 首次使用（version 0）或结构不兼容：清空重建，事件表为空 → 下次
+      // 启动走全量重扫（账本结构升级的安全网，与旧版语义一致）。
+      console.warn(`[usage-statistics] 账本 schema 版本 ${String(version)} 与 ${String(LEDGER_VERSION)} 不一致，重建空账本`)
+      this.db.exec('DROP TABLE IF EXISTS events')
+      this.db.exec('DROP TABLE IF EXISTS session_meta')
+      this.db.exec(EVENT_TABLE_DDL)
+      this.db.exec(META_TABLE_DDL)
+      this.db.exec(`PRAGMA user_version = ${LEDGER_VERSION}`)
     }
-    return 0
+    const hasEvent = this.db.prepare('SELECT 1 AS x FROM events LIMIT 1')
+    const insertEvent = this.db.prepare(
+      `INSERT INTO events (session_id, seq, t, provider, model, input, output, cache_read, cache_write, reasoning)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(session_id, seq, t) DO UPDATE SET
+         provider = excluded.provider, model = excluded.model,
+         input = excluded.input, output = excluded.output,
+         cache_read = excluded.cache_read, cache_write = excluded.cache_write,
+         reasoning = excluded.reasoning`,
+    )
+    const allEvents = this.db.prepare(
+      'SELECT session_id, seq, t, provider, model, input, output, cache_read, cache_write, reasoning FROM events',
+    )
+    const upsertMeta = this.db.prepare(
+      `INSERT INTO session_meta (session_id, title, cwd, created_at, last_active)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET
+         title = excluded.title, cwd = excluded.cwd,
+         created_at = excluded.created_at, last_active = excluded.last_active`,
+    )
+    const allMeta = this.db.prepare('SELECT session_id, title, cwd, created_at, last_active FROM session_meta')
+    this.stmts = { hasEvent, insertEvent, allEvents, upsertMeta, allMeta }
+    for (const row of allMeta.all() as Array<Record<string, unknown>>) {
+      const id = String(row.session_id)
+      this.metaCache.set(id, {
+        title: String(row.title ?? ''),
+        cwd: String(row.cwd ?? ''),
+        createdAt: Number(row.created_at) || 0,
+        lastActive: Number(row.last_active) || 0,
+      })
+    }
   }
 
-  /** 事件流是否已有内容（决定首启初始化 vs 直接加载）。 */
+  /** 事件流是否已有内容（决定首启扫描 / 直接重建）。 */
   hasEvents(): boolean {
-    try {
-      const entries = readdirSync(eventsRoot(this.root))
-      return entries.some((name) => name.endsWith('.jsonl'))
-    } catch {
-      return false
-    }
+    this.assertOpen()
+    return this.stmts.hasEvent.get() !== undefined
   }
 
-  /** 追加一条事件到当天分片（同步落盘；全量保留，不做剪枝）。
-   *  同时推进该分片水位（= 已追加行数），对账 readShardSince 据此跳过已折叠行。 */
+  /** 追加一条事件（幂等：同 session+seq+毫秒 收敛为 upsert）。 */
   append(ev: LedgerEvent): void {
-    if (this.closed) return
-    const shard = shardNameOf(ev.t)
-    const dir = eventsRoot(this.root)
-    mkdirSync(dir, { recursive: true })
-    appendFileSync(join(dir, shard), JSON.stringify(ev) + '\n', 'utf8')
-    this.watermarks.set(shard, (this.watermarks.get(shard) ?? 0) + 1)
+    this.assertOpen()
+    this.stmts.insertEvent.run(
+      ev.sessionId, ev.seq, ev.t,
+      ev.provider, ev.model,
+      ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning,
+    )
   }
 
-  /** 清空事件流与元数据（重建账本用；保留目录）。 */
-  clear(): void {
-    const dir = eventsRoot(this.root)
-    try {
-      for (const name of readdirSync(dir)) {
-        if (name.endsWith('.jsonl')) rmSync(join(dir, name), { force: true })
-      }
-    } catch {
-      // 目录不存在即空。
-    }
-    this.meta.clear()
-    this.watermarks.clear()
-    this.markMetaDirty()
-  }
-
-  /** 列出全部事件流分片（按名称排序 = 按天排序）。 */
-  shards(): string[] {
-    try {
-      return readdirSync(eventsRoot(this.root))
-        .filter((name) => name.endsWith('.jsonl'))
-        .sort()
-    } catch {
-      return []
-    }
-  }
-
-  /** 读取某分片并更新该分片水位（返回新行；水位之前的行跳过）。 */
-  readShardSince(name: string): LedgerEvent[] {
-    const path = join(eventsRoot(this.root), name)
-    let text = ''
-    try {
-      text = readFileSync(path, 'utf8')
-    } catch {
-      return []
-    }
-    const lines = text.split('\n')
-    const start = this.watermarks.get(name) ?? 0
-    const out: LedgerEvent[] = []
-    for (let i = start; i < lines.length; i += 1) {
-      const ev = parseEventLine(lines[i] ?? '')
-      if (ev) out.push(ev)
-    }
-    this.watermarks.set(name, lines.length)
-    return out
-  }
-
-  /** 读取全部事件（冷启动/重建：每分片水位从 0 起，全部行消费并建立水位）。 */
-  readAll(): LedgerEvent[] {
-    const out: LedgerEvent[] = []
-    for (const name of this.shards()) {
-      out.push(...this.readShardSince(name))
-    }
-    return out
-  }
-
-  /** 更新会话元数据（增量合并，防抖落盘）。 */
+  /** 更新会话元数据（增量合并；内存缓存 + 同步写回）。 */
   setMeta(id: string, patch: Partial<SessionMeta>): void {
-    if (this.closed) return
-    const current = this.meta.get(id) ?? emptySessionMeta()
+    this.assertOpen()
+    const current = this.metaCache.get(id) ?? emptySessionMeta()
     const next: SessionMeta = {
       title: typeof patch.title === 'string' ? patch.title : current.title,
       cwd: typeof patch.cwd === 'string' ? patch.cwd : current.cwd,
       createdAt: Number(patch.createdAt) || current.createdAt,
       lastActive: Number(patch.lastActive) || current.lastActive,
     }
-    this.meta.set(id, next)
-    this.markMetaDirty()
+    this.metaCache.set(id, next)
+    this.stmts.upsertMeta.run(id, next.title, next.cwd, next.createdAt, next.lastActive)
   }
 
   /** 取会话元数据（无则 null）。 */
   getMeta(id: string): SessionMeta | null {
-    return this.meta.get(id) ?? null
+    this.assertOpen()
+    return this.metaCache.get(id) ?? null
   }
 
-  private markMetaDirty(): void {
-    if (this.metaDirty || this.closed) return
-    this.metaDirty = true
-    this.metaTimer = setTimeout(() => {
-      this.metaTimer = null
-      this.flushMeta()
-    }, 2000)
+  /** 全部账本事件（冷启动/重建：逐条折叠进聚合缓存）。 */
+  allEvents(): LedgerEvent[] {
+    this.assertOpen()
+    const rows = this.stmts.allEvents.all() as Array<Record<string, unknown>>
+    return rows.map((r) => ({
+      t: Number(r.t) || 0,
+      sessionId: String(r.session_id),
+      provider: String(r.provider),
+      model: String(r.model),
+      seq: Number(r.seq) || 0,
+      input: Number(r.input) || 0,
+      output: Number(r.output) || 0,
+      cacheRead: Number(r.cache_read) || 0,
+      cacheWrite: Number(r.cache_write) || 0,
+      reasoning: Number(r.reasoning) || 0,
+    }))
   }
 
-  /** 立即落盘元数据（原子写；防抖到期或 close 时调用）。 */
-  flushMeta(): void {
-    if (!this.metaDirty || this.closed) return
-    this.metaDirty = false
-    const sessions: Record<string, SessionMeta> = {}
-    for (const [id, meta] of this.meta) sessions[id] = { ...meta }
-    try {
-      writeJsonAtomic(metaPath(this.root), { version: LEDGER_VERSION, sessions })
-    } catch (error) {
-      console.warn(`[usage-statistics] 会话元数据写入失败: ${String((error as Error)?.message ?? error)}`)
-    }
+  /** 清空事件流与元数据（重建账本用；保留表结构）。 */
+  clear(): void {
+    this.assertOpen()
+    this.db.exec('DELETE FROM events')
+    this.db.exec('DELETE FROM session_meta')
+    this.metaCache.clear()
   }
 
-  /** 停止定时器并最终落盘元数据（插件卸载）。 */
+  /** 关闭数据库连接（插件卸载；幂等）。 */
   close(): void {
+    if (this.closed) return
     this.closed = true
-    if (this.metaTimer !== null) {
-      clearTimeout(this.metaTimer)
-      this.metaTimer = null
-    }
-    this.flushMeta()
+    this.db.close()
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error('ledger is closed')
   }
 }
