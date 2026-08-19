@@ -1,142 +1,38 @@
 # dsh-usage-statistics — DSH 用量统计插件
 
-DSH (DeepSeek Harness) 的 Web 持久化插件：把 **token 用量** 按 **模型/Provider**、
-**会话**、**日期** 三个维度统计出来，挂在**侧边栏底部**（设置按钮旁）——
-底部显示**今日统计**（宽列与 56px 折叠 rail 两种形态），点击弹出**模态窗**
-查看详情（汇总、模型拆分、会话列表、每日趋势曲线与热力图）。不做费用换算 ——
-只统计 token 与调用次数。
+DSH (DeepSeek Harness) 的 Web 用量统计插件：把 **token 用量** 按 **模型 /
+Provider**、**会话**、**日期** 三个维度统计出来，挂在**侧边栏底部**（设置按钮旁）。
+底部显示**今日统计**，点击弹出**详情模态窗**查看完整统计与 **OpenCode Go
+订阅额度**。不做费用换算——只统计 token 与调用次数。
 
-```
-dsh-usage-statistics/
-├── src/host/                    ← 服务端（Host，Node ESM）
-│   ├── index.ts                 ← 入口：账本装配/监听/初始化/对账/路由
-│   ├── agg.ts                   ← 聚合口径与纯函数（Agg / ink / usable / modelKeyOf）
-│   ├── logs.ts                  ← 会话日志的目录发现与 NDJSON 解析（解码走 persistence）
-│   ├── ledger.ts                ← 原始事件流账本（按天分片 JSONL + 会话元数据表 + 版本）
-│   ├── store.ts                 ← UsageStore 聚合缓存与折叠助手（账本事件的派生统计）
-│   ├── scan.ts                  ← 账本导入/重建（persistence.readRaw 优先 + harness 兜底）
-│   ├── snapshot.ts              ← 快照 value 构建（汇总/模型/会话/按日序列）
-│   ├── goquota.ts               ← OpenCode Go 额度查询（滚动5h/周/月 + TTL 缓存）
-│   └── http.ts                  ← JSON API 的 HTTP 辅助与回环围栏
-├── src/client/                  ← 浏览器端（Client）bundle
-│   ├── index.ts                 ← 入口：注册 sidebar.footer.action
-│   ├── UsageStatsFooter.tsx     ← 侧边栏底部今日统计按钮 + Go 额度芯片行（wide / rail 双模式）
-│   ├── UsageStatsPanel.tsx      ← 模态窗详情，Tab 化：概览/日期/会话/模型/设置
-│   ├── *.module.css             ← CSS Modules（与 harness 的 ui-sidebar 同款写法）
-│   ├── useSnapshot.ts           ← 4s 轮询 /usage-stats/api/snapshot（含手动刷新）
-│   ├── useGoQuota.ts            ← 60s 轮询 /usage-stats/api/go-quota（含手动刷新）
-│   ├── stats.ts                 ← 纯函数：格式化/分桶/曲线几何/26 周热力图网格
-│   ├── locales.ts               ← zh/en 文案（LocaleNamespaceMap 类型安全）
-│   └── css-modules.d.ts         ← *.module.css 的类型声明（harness 同款）
-├── scripts/
-│   └── css-modules-inline.mjs   ← 构建期把 .module.css 编译并内联进 bundle
-├── lib/                         ← tsdown 构建产物（index.js / client.js）
-├── cordis.patch.yml             ← 组合包 patch（dsh.bundle.patch）：插入插件条目
-└── test/smoke.mjs               ← 服务端冒烟测试（mock cordis + 真实会话日志）
-```
+## 功能
 
-## 类型来源（npm @deepseek-ai 包，不手写镜像）
-
-本插件的所有 harness 相关类型（`Context` / `ClientContext` / `SessionEvent` /
-`TokenUsage` / `PropsRuntime` / `PropsLocale` / `Modal` / `Tooltip` / 服务接口）
-**全部直接 import 自 npm 上的 `@deepseek-ai/*` 包**（`devDependencies`，版本
-对齐 shell 冻结模块表的 `0.1.0-rc.7` / `4.0.1`），不写任何镜像类型。`tsconfig`
-不设 paths 映射，TypeScript 直接从 `node_modules` 解析整张 .d.ts 闭包（peer
-依赖由 pnpm 自动装齐）；打包时 `import type` 被剥离、运行时值导入走冻结模块表。
-范式详见工作区根 `AGENTS.md`（红线条款）。
-
-## 样式（CSS Modules）
-
-样式与 harness 仓库一致：`*.module.css` + `import css from './X.module.css'`
-（参考 `packages/client/ui-sidebar/` 的写法），颜色用设计 token
-（`--dsw-alias-*` / `--dsw-shadow-*`）。独立插件 bundle 只能携带一个 JS 文件，
-由 `scripts/css-modules-inline.mjs`（lightningcss）在构建时把 .module.css 编译
-成 scoped 类名并**内联注入** `<style>`（按文件幂等），产物仍是单文件
-`lib/client.js`。
+- **侧边栏底部今日统计**：`icon + 今日 + 今日 tokens + 调用数`（宽列），
+  折叠成 56px rail 时显示纯图标按钮；缺少会话权限或扫描中时给出状态角标。
+- **详情模态窗**（点击角标打开），按 **Tab** 划分：
+  - **概览**：今日 / 总 tokens、调用数、会话数汇总网格 + **近 26 周热力图** +
+    **OpenCode Go 额度区**（三档进度条 + 百分比 + 重置时间）；
+  - **日期**：每日趋势**曲线**（7 天 / 2 周 / 1 月 / 全部）；
+  - **会话**：按会话查看（标题 / 工作目录 / 最近活跃）；
+  - **模型**：按模型 / Provider 拆分（输入 / 输出 / 缓存 / 总计 + 占比条）；
+  - **设置**：手动刷新、重建账本。
+- **OpenCode Go 额度**：自动显示滚动 5 小时 / 本周 / 本月用量百分比
+  （≥80% 预警、≥100% 超支，hover 显示重置时间）。
 
 ## 统计口径
 
-- **数据源**：`assistant/message` 事件，其 `data.usage.inputTokens` 为数字即计入。
-- **total = input + output + cacheRead + cacheWrite**（reasoning 单列，不计入 total）。
-- **按模型**：`data.message.source.provider` + `.model`（缺失记 `unknown`）。
-- **按会话**：会话标题（`session/title` 事件）、cwd（`session` 事件顶层字段）、
-  创建时间、最近活跃时间。
+- 只统计 `assistant/message` 事件中带用量数据的调用，不做费用换算。
+- `total = input + output + cacheRead + cacheWrite`（reasoning 单列，不计入 total）。
+- 按模型 = Provider + 模型名；会话维度记录标题 / 工作目录 / 创建与最近活跃时间。
 
-## 服务端（lib/index.js，Node cordis 插件）
+## 安装
 
-**账本模式**：插件以「原始事件流账本 + 派生聚合缓存」统计用量，取代旧的
-「周期性全量扫描内存聚合」模式。账本 = 唯一事实来源，聚合 = 只读派生缓存。
-
-- **账本布局**（`$DSH_HOME/storages/dsh-usage-statistics/`）：
-  - `events/YYYY-MM-DD.jsonl` —— 原始事件流，按天分片追加写，**全量保留**
-    （不剪枝）。每行一条 `assistant/message` 的 usage 事件
-    （`{t, sessionId, provider, model, seq, input, output, cacheRead, cacheWrite, reasoning}`），
-    seq 供去重/审计；
-  - `session-meta.json` —— 会话元数据表（title/cwd/createdAt/lastActive），
-    临时文件 + 原子重命名 + 2s 防抖落盘。
-- **安装时初始化**：首次挂载且事件流为空时，扫描全部会话日志写入账本
-  （RAW 优先 `persistence.readRaw` —— 后端纯 JS zstd 解码，无 CLI 依赖；
-  失败走 harness 兜底 `sessionQuery.readSession` / `persistence.readFrom`；
-  4 路 worker 并行），并抄录会话元数据。
-- **重启恢复**：账本已有事件时直接 `rebuildFromEvents` 从事件流重建聚合，
-  **不再重扫日志**（日志删除/不可读也能恢复统计）。
-- **实时增量**：`ctx.on('session/event')` 逐条写账本 + 折聚合，与扫描共用
-  `foldRecord` 路径，per-session `maxSeq` 水位去重（防双记）。
-- **60s 对账**：按事件流分片水位增量折叠新增行（补崩溃丢失的增量），
-  取代旧版周期性全量重扫。
-- **重建账本**：`POST /usage-stats/api/rebuild` 清空事件流与元数据、复位
-  聚合、重扫日志重算（设置页有入口）；账本版本不兼容时自动重建。
-- **JSON API**：`POST /usage-stats/api/snapshot`，请求 `{ sessionId? }`，
-  响应 `{ ok, value }`；`POST /usage-stats/api/go-quota` 返回 OpenCode Go
-  订阅额度（滚动 5 小时 / 本周 / 本月用量百分比 + 重置时间，服务端 5 分钟
-  TTL 缓存，key 自动发现：环境变量 `OPENCODE_GO_API_KEY` / `OPENCODE_API_KEY`
-  → opencode CLI 登录态 `auth.json`）。只读聚合，**回环 Host 围栏**
-  （防 DNS 重绑定/跨站探测）。
-
-API 响应结构见 `src/client/useSnapshot.ts` 的 `UsageSnapshot` 类型：
-`all`（总量）、`series.all`（按日序列）、`models[]`（模型拆分）、
-`sessionsList[]`（会话明细）、`current`（请求带 sessionId 时）。
-
-## 浏览器端（lib/client.js）
-
-- **`sidebar.footer.action` 插槽**（注册形态参考 harness 的 `ui-cordis CordisPanel`）：
-  - **宽列**：上方一排带"Go 额度"标签的 **OpenCode Go 额度芯片**（滚动 5h /
-    本周 / 本月用量百分比，≥80% 预警、≥100% 超支，hover 显示重置时间）；
-    下方 `icon + 今日 + 今日 tokens + 调用数`，扫描/缺会话时给出状态角标；
-  - **56px rail 折叠**：纯圆形图标按钮上方显示**滚动 5 小时额度芯片**
-    （两行：短标签 + 百分比，居中；tooltip 含三档窗口完整明细 + 重置时间），
-    按钮 Tooltip 只放今日数字明细，不含 Go 额度；
-  - 点击打开 **`Modal` 模态窗**（harness `@deepseek-ai/dsh-client-ui-primitives` 的
-    `Modal` 组件：遮罩 + 居中卡片 + Escape/遮罩点击关闭 + `aria-modal`），
-    宽 ≤800px、高 ≤78vh，内容区内部滚动。内容按 **Tab 划分**（语义化
-    `role="tablist"`，图标 + 文字，与插件内 chip/seg 控件风格统一）：
-    - **概览**：今日 tokens / 今日调用 / 总 tokens / 会话数 汇总网格 +
-      **近 26 周热力图**（Codex 风格：列=周、行=周一..周日、4 档强度 +
-      月份标签 + 今日高亮，参考 dsh-cost-meter 的 cm-ug-grid）+
-      **OpenCode Go 额度区**（三档进度条 + 百分比 + 重置时间）+ 扫描页脚；
-    - **日期**：每日趋势（7D / 2周 / 1月 / 全部）的**曲线**（悬停 tooltip
-      显示当日明细）；
-    - **会话**：按会话表（标题/cwd/最近活跃，默认 8 条可展开）；
-    - **模型**：按模型/Provider 拆分表（输入/输出/缓存/总计 + 占比条）；
-    - **设置**：手动刷新入口（立即重拉快照与 Go 额度，不等下个轮询周期）+
-      偏好设置占位（后续参数扩展点）。
-  - 每 4s 轮询快照、每 60s 轮询 Go 额度（服务端 5 分钟缓存，几乎不触达
-    opencode.ai 官方端点），数据在角标、芯片与模态窗间共享；每次打开默认
-    落在概览，Tab 内视图状态（日期范围/曲线视图/会话展开）切换时保留。
-
-## 安装（标准 cordis.patch 模式）
-
-本插件是标准的 cordis **组合包**：`package.json` 声明
-`dsh.bundle.patch: ./cordis.patch.yml`，patch 把 `usage-statistics` 条目插入
-profile 组合树（`lib/index.js` 挂载服务端、`lib/client.js` 由 `dsh.client`
-声明注入浏览器端）。
-
-装入 web profile（link 依赖，改代码即时生效）：
+本插件是标准的 cordis **组合包**，装入 web profile（link 依赖，改代码后
+重新 `pnpm build` + 重启生效）：
 
 ```bash
-dsh plugin --profile web add "link:$(pwd)/dsh-usage-statistics"
-# 等价于：在 ~/.dsh/profiles/web 下 pnpm add "link:..."
-# 并保证 dsh.profile.bundles 含 "dsh-usage-statistics"（dsh plugin 自动对账）
+# 在本仓库目录内执行（link 指向仓库自身）
+dsh plugin --profile web add "link:$(pwd)"
 ```
 
 移除：
@@ -145,23 +41,30 @@ dsh plugin --profile web add "link:$(pwd)/dsh-usage-statistics"
 dsh plugin --profile web remove dsh-usage-statistics
 ```
 
-装完后**重启 dsh（web profile）生效**。验证 API：
+装完后**重启 dsh（web profile）**。验证 API：
 
 ```bash
 curl -s -X POST http://127.0.0.1:3080/usage-stats/api/snapshot \
   -H 'content-type: application/json' -d '{}'
 ```
 
-## 开发
+## 数据存储
 
-```bash
-pnpm install            # 安装 devDependencies（@deepseek-ai/* 类型来自 npm）
-pnpm build              # lib/index.js + lib/client.js
-pnpm watch              # 增量构建
-npx tsc --noEmit        # 类型检查（TS5 + @types/node@22 + @types/react）
-node test/smoke.mjs   # 服务端冒烟（内部使用临时 DSH_HOME，验证账本落盘/去重/rebuild）
-node test/client-bundle.mjs  # 浏览器端 bundle 冒烟（模拟 __ModuleLoader__ + document，验证 CSS 内联注入）
-```
+统计账本保存在 `$DSH_HOME/storages/dsh-usage-statistics/ledger.sqlite`
+（SQLite，`$DSH_HOME` 默认 `~/.dsh`）。首次启动自动扫描历史会话日志导入，
+之后随会话事件实时更新；日志被删除也能从账本恢复统计（重启后不依赖日志）。
+
+## OpenCode Go 额度配置
+
+无订阅或不关心时可忽略。要显示 OpenCode Go 额度，任选其一：
+
+- 设置环境变量 `OPENCODE_GO_API_KEY`（或兼容旧名 `OPENCODE_API_KEY`），或
+- 已用 `opencode login` 登录（自动复用 CLI 的登录态，无需额外配置）。
+
+## 开发者
+
+构建、测试与编码规范见仓库内 `AGENTS.md`（目录结构、架构、API、验证命令）。
+README 面向普通用户，不展开工程细节。
 
 ## License
 
