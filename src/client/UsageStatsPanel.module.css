@@ -522,7 +522,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Codex 风格 26 周热力图（列 = 周，行 = 周一..周日，参考 dsh-cost-meter）---- */
+/* ---- Codex 风格 26 周热力图（列 = 周，行 = 周一..周日）---- */
 .heatGrid {
   display: grid;
   grid-auto-flow: column;
@@ -540,7 +540,7 @@
   border: 1px solid var(--dsw-alias-border-l1);
 }
 
-/* 强度档 l1..l4：business 主色按窗口最大值占比混入底色（与 dsh-cost-meter 同款）。 */
+/* 强度档 l1..l4：business 主色按窗口最大值占比混入底色。 */
 .hl1 {
   background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 25%, var(--dsw-alias-bg-layer-3));
   border-color: transparent;
