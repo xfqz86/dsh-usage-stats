@@ -1,17 +1,18 @@
 /**
  * 内存聚合缓存：由账本事件流折叠而来的派生统计（按天 / 会话 / 模型 / 全量）。
  *
- * 边界：账本（ledger.ts 的 Ledger）持有原始事件流与会话元数据；本模块只做
- * 折叠与聚合，是快照 API 的读取面。折叠路径：
+ * 边界：账本（ledger.ts 的 Ledger）持有 sqlite 事件流与会话元数据；本模块
+ * 只做折叠与聚合，是快照 API 的读取面。折叠路径：
  *   - 启动/重建：从账本事件全量折叠（scan.ts 的 rebuildFromEvents）；
- *   - 实时：session/event 监听逐条折叠（foldRecord，与账本追加共用）；
- *   - 60s 对账：把账本新增行增量折叠。
+ *   - 实时：session/event 监听逐条折叠（foldRecord，与账本追加共用）。
+ * 账本写入同步落盘（sqlite 自动提交，即写即持久），不再需要周期性对账。
  * 所有操作以 store 为首参的纯函数或接受 ledger 参数的折叠助手，可独立测试。
  */
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { Agg, SessionInfo } from './agg.ts'
-import { newAgg, localMidnight, ink, usable } from './agg.ts'
+import { newAgg, ink, usable } from './agg.ts'
+import { startOfDay } from '../utils.ts'
 import type { Ledger, LedgerEvent } from './ledger.ts'
 import { toLedgerEvent } from './ledger.ts'
 
@@ -83,7 +84,7 @@ export function ensureModel(store: UsageStore, key: string): Agg {
 
 /** 把一次真实用量折进会话日桶 / 会话总桶 / 全量日桶 / 全量总桶。 */
 export function foldUsage(store: UsageStore, info: SessionInfo, timeMs: number, u: TokenUsage): void {
-  const day = localMidnight(timeMs)
+  const day = startOfDay(timeMs)
   ink(dayAgg(info.daily, day), u)
   ink(info.allAgg, u)
   ink(dayAgg(store.allDaily, day), u)
@@ -92,8 +93,10 @@ export function foldUsage(store: UsageStore, info: SessionInfo, timeMs: number, 
 }
 
 /**
- * 折叠一条账本事件进聚合缓存（幂等前提：账本内事件唯一，由 foldRecord 的
- * seq 水位去重保证）。返回是否真正折叠（事件无用量时 false）。
+ * 折叠一条账本事件进聚合缓存（幂等前提：账本内事件唯一 —— event 表按
+ * session+seq 键 upsert，重开账本时每键只折一次）。返回是否真正折叠
+ * （事件无用量时 false）。顺带推进该会话的 maxSeq 水位，使重启恢复后
+ * 实时路径同样能去重历史事件。
  */
 export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent): boolean {
   if (ev.input + ev.output + ev.cacheRead + ev.cacheWrite + ev.reasoning <= 0) return false
@@ -105,6 +108,7 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent): boolean {
     reasoningTokens: ev.reasoning,
   }
   const info = ensureSession(store, ev.sessionId)
+  if (ev.seq >= 0 && ev.seq > info.maxSeq) info.maxSeq = ev.seq
   foldUsage(store, info, ev.t, usage)
   ink(ensureModel(store, ev.provider + '\u0000' + ev.model), usage)
   store.foldedEvents += 1
@@ -115,6 +119,7 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent): boolean {
  * 处理一条原始记录（会话种子 / session/title / assistant/message）：
  * 元数据写账本 meta；usable 事件按 per-session seq 水位去重后追加进账本
  * 并折叠进聚合缓存。初始化扫描与实时监听共用此路径，保证账本内事件唯一。
+ * 全部同步（sqlite 即写即持久，无需等待落盘）。
  */
 export function foldRecord(
   store: UsageStore,
@@ -151,7 +156,6 @@ export function foldRecord(
   }
   ledger.append(ev)
   foldLedgerEvent(store, ev)
-  if (typeof ev.seq === 'number' && ev.seq >= 0) info.maxSeq = Math.max(info.maxSeq, ev.seq)
 }
 
 /** 取会话 meta（缺省用空元数据,避免 snapshot 层判空）。 */

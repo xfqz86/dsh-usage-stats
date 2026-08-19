@@ -1,6 +1,7 @@
 /**
  * 聚合口径与纯函数：Agg / SessionInfo 结构、折叠原子操作（newAgg / ink）、
- * 事件守卫（usable / modelKeyOf）、本地日划分（localMidnight）。
+ * 事件守卫（usable / modelKeyOf）。本地日划分（startOfDay）在 utils.ts
+ * （host 与 client 共用，避免两处定义漂移）。
  *
  * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测。
  *
@@ -9,17 +10,10 @@
  */
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { TokenUsage } from '@deepseek-ai/dsh-llm'
+import type { Agg } from '../types.ts'
 
-/** 一组聚合计数。 */
-export interface Agg {
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  reasoning: number
-  total: number
-  calls: number
-}
+/** 聚合计数结构定义在 types.ts（与 client 端 UsageAgg 统一）。 */
+export type { Agg } from '../types.ts'
 
 /** 会话级状态：聚合 + 去重水位（title/cwd/createdAt 在账本 meta）。 */
 export interface SessionInfo {
@@ -32,12 +26,6 @@ export interface SessionInfo {
 /** 新建空计数（所有字段归零）。 */
 export function newAgg(): Agg {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 }
-}
-
-/** 时间戳对应的本地零点（避免 UTC 漂移）。 */
-export function localMidnight(timeMs: number): number {
-  const d = new Date(timeMs)
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
 }
 
 /** 把一次用量折进聚合（调用次数 +1）。 */

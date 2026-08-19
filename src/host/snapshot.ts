@@ -1,22 +1,18 @@
 /**
  * 快照构建：把聚合缓存（UsageStore）+ 账本会话元数据整理成
  * /usage-stats/api/snapshot 的响应 value（纯函数，不触碰 HTTP / ctx）。
+ * 类型（SeriesPoint / UsageAgg）来自 types.ts；splitModelKey 来自 utils.ts
+ * （dim 与 client 共用）。
  */
 import type { Agg } from './agg.ts'
 import type { UsageStore } from './store.ts'
 import type { Ledger } from './ledger.ts'
 import { metaOf } from './store.ts'
+import type { SeriesPoint, UsageAgg } from '../types.ts'
+import { splitModelKey } from '../utils.ts'
 
-/** 按日序列点（快照 series 元素）。 */
-export interface SeriesPoint {
-  t: number
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  reasoning: number
-  calls: number
-}
+/** 按日序列点结构定义在 types.ts（与 client 端 SeriesPoint 统一）。 */
+export type { SeriesPoint } from '../types.ts'
 
 /** 把某会话/全量的逐日聚合转成按时间升序的序列。 */
 export function buildSeries(dailyMap: Map<number, Agg>): SeriesPoint[] {
@@ -33,7 +29,7 @@ export function buildSeries(dailyMap: Map<number, Agg>): SeriesPoint[] {
 }
 
 /** 聚合 → 对外 usage 形状（total 由各分量之和得到，已含调用数分离）。 */
-export function usageOf(agg: Agg) {
+export function usageOf(agg: Agg): UsageAgg {
   return {
     input: agg.input, output: agg.output, cacheRead: agg.cacheRead,
     cacheWrite: agg.cacheWrite, reasoning: agg.reasoning, total: agg.total,
@@ -64,9 +60,7 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
 
   const models: Array<Record<string, unknown>> = []
   for (const [key, agg] of store.models) {
-    const sep = key.indexOf('\u0000')
-    const provider = sep === -1 ? key : key.slice(0, sep)
-    const model = sep === -1 ? 'unknown' : key.slice(sep + 1)
+    const { provider, model } = splitModelKey(key)
     models.push({ provider, model, calls: agg.calls, usage: usageOf(agg) })
   }
   models.sort((a, b) => (b.usage as { total: number }).total - (a.usage as { total: number }).total)

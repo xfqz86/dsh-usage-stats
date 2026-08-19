@@ -17,21 +17,12 @@ import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots
 import css from './UsageStatsFooter.module.css'
 import { useSnapshot } from './useSnapshot.ts'
 import { useGoQuota, type GoWindow } from './useGoQuota.ts'
-import { alignedRows, fmt, fmtFull, pctOf, todayOf } from './stats.ts'
+import { alignedRows, dayTotal, fmt, fmtFull, pctOf, todayOf } from './stats.ts'
+import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../utils.ts'
 import { UsageStatsPanel } from './UsageStatsPanel.tsx'
 
 export type UsageStatsFooterProps =
   PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-statistics'>
-
-/** 用量百分比四舍五入并夹在 0..100。 */
-function clampPct(win: GoWindow): number {
-  return Math.round(Math.max(0, Math.min(100, win.percent)))
-}
-
-/** 额度档位：≥100% 超支、≥80% 预警、其余正常。 */
-function levelOf(pct: number): 'over' | 'warn' | 'ok' {
-  return pct >= 100 ? 'over' : pct >= 80 ? 'warn' : 'ok'
-}
 
 /** 单个额度窗口的展示条目（短/全名 + 窗口数据）。 */
 interface GoWindowEntry {
@@ -53,14 +44,12 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   }, [rootRef])
 
   const today = todayOf(data?.series.all ?? [])
-  const todayTokens = today
-    ? (today.input || 0) + (today.output || 0) + (today.cacheRead || 0) + (today.cacheWrite || 0)
-    : 0
+  const todayTokens = today ? dayTotal(today) : 0
   const todayCalls = today?.calls ?? 0
   const missing = (data?.failed ?? 0) > 0
 
-  // 今日各分类 token 数
-  const cacheTokens = (today?.cacheRead || 0) + (today?.cacheWrite || 0)
+  // 今日各分类 token 数（缓存 = cacheRead + cacheWrite，共用 utils.cacheTotal）
+  const cacheTokens = cacheTotal(today ?? {})
   const inputTokens = today?.input || 0
   const outputTokens = today?.output || 0
   // 缓存命中率 = cacheRead / (cacheRead + input)
@@ -78,16 +67,15 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         { key: 'monthly', short: t('go.short.monthly'), full: t('go.monthly'), win: go.monthly },
       ].filter((w): w is GoWindowEntry => w.win !== null)
       : []
-  const resetsOf = (win: GoWindow): string =>
-    win.resetsAt ? t('go.resetsAt', { time: new Date(win.resetsAt).toLocaleString() }) : ''
+  const resetsOf = (win: GoWindow): string => goResetsAt(t, win)
   const windowLine = (win: GoWindow | null, full: string): string =>
-    win ? `${full}: ${clampPct(win)}%` + (resetsOf(win) ? ' · ' + resetsOf(win) : '') : ''
+    win ? `${full}: ${goPercent(win)}%` + (resetsOf(win) ? ' · ' + resetsOf(win) : '') : ''
 
   // 单个额度芯片（宽列 chips）：短标签 + 百分比，按档位着色，
   // hover 仅显示重置时间（无重置时间时兜底显示窗口全名）。
   const goChip = ({ key, short, full, win }: GoWindowEntry) => {
-    const pct = clampPct(win)
-    const level = levelOf(pct)
+    const pct = goPercent(win)
+    const level = goLevelOf(pct)
     const cls = level === 'over' ? css.goChipOver : level === 'warn' ? css.goChipWarn : css.goChipOk
     return (
       <Tooltip key={key} label={resetsOf(win) || full} side="top" delayMs={400}>
@@ -121,7 +109,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       : t('go.title') + '\n' + goWindows.map((w) => windowLine(w.win, w.full)).join('\n')
 
   // 折叠态芯片档位：正常态用底色，预警 / 超支沿用芯片警示色。
-  const railLevel = railRolling === undefined ? undefined : levelOf(clampPct(railRolling.win))
+  const railLevel = railRolling === undefined ? undefined : goLevelOf(goPercent(railRolling.win))
   const railCls = railLevel === 'over' ? css.goChipOver : railLevel === 'warn' ? css.goChipWarn : ''
 
   // 展开（宽列）比例条 tooltip：4 行对齐（缓存 / 输入 / 输出 / 缓存命中率）
@@ -159,7 +147,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           <Tooltip label={railQuotaLabel} side="top" delayMs={400}>
             <span className={`${css.goRailChipBox} ${railCls}`}>
               <span className={css.goRailChipLabel}>{railRolling.short}</span>
-              <span className={css.goRailChipPct}>{clampPct(railRolling.win)}%</span>
+              <span className={css.goRailChipPct}>{goPercent(railRolling.win)}%</span>
             </span>
           </Tooltip>
         </div>

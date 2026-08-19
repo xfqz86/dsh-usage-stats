@@ -1,9 +1,12 @@
 /**
  * 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
  * 不依赖 React / DOM，可单测，角标与模态窗共用。
+ * 本地日划分 / 日期键（startOfDay / dateKeyOf）来自 utils.ts；类型
+ * （SeriesPoint / UsageAgg）来自 types.ts（与 host 端共用，避免两端镜像漂移）。
  */
 
-import type { SeriesPoint, UsageAgg } from './useSnapshot.ts'
+import type { SeriesPoint, UsageAgg } from '../types.ts'
+import { dateKeyOf, startOfDay } from '../utils.ts'
 
 /** 紧凑 token 格式化：1.2万 / 3.4亿 / 万以下原样。 */
 export function fmt(n: number | null | undefined): string {
@@ -77,13 +80,10 @@ export function alignedRows(rows: [string, string][]): string {
     .join('\n')
 }
 
-export const startOfDay = (t: number): number => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime() }
+/** 本地日划分（utils.ts 单一事实来源）。 */
+export { startOfDay } from '../utils.ts'
 export const dayLabel = (t: number): string => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() }
-export const fullDayLabel = (t: number): string => {
-  const d = new Date(t)
-  const pad = (v: number): string => String(v).padStart(2, '0')
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
-}
+export const fullDayLabel = (t: number): string => dateKeyOf(t)
 
 /** 取序列中最新一天的点（底部角标读今日数据用）。 */
 export function todayOf(series: SeriesPoint[]): SeriesPoint | undefined {
@@ -229,7 +229,7 @@ export function heatGridOf(series: SeriesPoint[], weeks = 26): HeatGrid {
     lastMonth = m.getMonth()
   }
 
-  // 强度 4 档：按窗口内最大值占比（与 dsh-cost-meter 的 cm-ug-cell l1..l4 同口径）。
+  // 强度 4 档：按窗口内最大值占比分档。
   let max = 1
   for (const c of cells) if (c.v > max) max = c.v
   for (const c of cells) {

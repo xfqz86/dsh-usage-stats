@@ -2,7 +2,7 @@
  * OpenCode Go 订阅额度查询：滚动 5 小时 / 本周 / 本月三档用量百分比
  * 与重置时间（`GET https://opencode.ai/zen/go/v1/usage`）。
  *
- * 机制与 dsh-cost-meter 同款：
+ * 机制要点：
  *   - 官方固定域名端点；Bearer key + 浏览器 UA（否则被 opencode.ai 前置
  *     Cloudflare 以 error 1010 拦截）。
  *   - key 解析：环境变量 OPENCODE_GO_API_KEY → 兼容旧名 OPENCODE_API_KEY
@@ -10,10 +10,15 @@
  *     key 在 `auth.json['opencode-go'].key`）。
  *   - 结果带 TTL 缓存（5 分钟）+ 单飞（并发请求只打一次官方端点）。
  *
+ * GoWindow / GoQuota 协议类型定义在 types.ts（与客户端 useGoQuota 统一）。
  * 纯数据模块：请求失败 / 未配置 key 都返回带 status 的结构化结果，由
  * 客户端按 status 本地化文案，不在服务端拼用户文案。
  */
 import { readFileSync } from 'node:fs'
+import type { GoQuota, GoWindow } from '../types.ts'
+
+/** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
+export type { GoQuota, GoWindow } from '../types.ts'
 
 /** OpenCode Go 官方额度端点（固定域名）。 */
 const GO_QUOTA_URL = 'https://opencode.ai/zen/go/v1/usage'
@@ -22,21 +27,6 @@ const GO_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 /** 结果缓存时长：客户端轮询期间不反复打官方端点。 */
 const CACHE_TTL_MS = 5 * 60 * 1000
-
-/** 单个额度窗口（用量百分比 + 重置时间）。 */
-export interface GoWindow {
-  percent: number
-  resetsAt: string
-}
-
-/** 额度查询结果（status 由客户端本地化展示）。 */
-export interface GoQuota {
-  status: 'ok' | 'no-key' | 'error'
-  fetchedAt: number
-  rolling: GoWindow | null
-  weekly: GoWindow | null
-  monthly: GoWindow | null
-}
 
 /** 从 opencode auth.json 自动发现 opencode-go 的 API Key（与 opencode CLI 共用登录态）。 */
 function findGoKeyInAuthJson(): string | null {

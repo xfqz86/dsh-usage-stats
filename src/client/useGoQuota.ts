@@ -4,24 +4,14 @@
  * 服务端（Host）提供 POST /usage-stats/api/go-quota（回环围栏 + TTL 缓存），
  * 本 hook 定期轮询；额度窗口（滚动 5 小时 / 本周 / 本月）显示在底部角标
  * 与模态窗详情里。服务端缓存 5 分钟，本地 60s 轮询几乎不触达官方端点。
+ * GoWindow / GoQuota 协议类型定义在 types.ts（与 host 端 goquota 统一）。
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import type { GoQuota } from '../types.ts'
 
-/** 单个额度窗口（用量百分比 + 重置时间）。 */
-export interface GoWindow {
-  percent: number
-  resetsAt: string
-}
-
-/** 服务端 go-quota 路由的返回体（status 决定本地化文案）。 */
-export interface GoQuota {
-  status: 'ok' | 'no-key' | 'error'
-  fetchedAt: number
-  rolling: GoWindow | null
-  weekly: GoWindow | null
-  monthly: GoWindow | null
-}
+/** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
+export type { GoQuota, GoWindow } from '../types.ts'
 
 /** 每 `intervalMs` 轮询一次额度；未加载 / 请求失败时为 null。返回 [数据, 手动刷新]。 */
 export function useGoQuota(intervalMs = 60000): [GoQuota | null, () => void] {

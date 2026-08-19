@@ -3,30 +3,15 @@
  *
  * 服务端（Host）提供 POST /usage-stats/api/snapshot（回环围栏）。本 hook
  * 维持一个 4s 轮询，底部角标与模态窗共用同一份数据。
+ * UsageAgg / SeriesPoint 协议类型定义在 types.ts（与 host 端 Agg /
+ * SeriesPoint 统一，避免两端镜像漂移）。
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import type { UsageAgg, SeriesPoint } from '../types.ts'
 
-/** 一组聚合计数（对应服务端 usageOf 的返回）。 */
-export interface UsageAgg {
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  reasoning: number
-  total: number
-}
-
-/** 服务端每日序列中的一个点。 */
-export interface SeriesPoint {
-  t: number
-  input: number
-  output: number
-  cacheRead: number
-  cacheWrite: number
-  reasoning: number
-  calls: number
-}
+/** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
+export type { UsageAgg, SeriesPoint } from '../types.ts'
 
 /** 按模型/Provider 的拆分条目。 */
 export interface ModelStat {

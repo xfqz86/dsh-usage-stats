@@ -2,6 +2,7 @@
  * JSON API 的 HTTP 辅助：请求体读取、JSON 响应写出、回环信任围栏。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { errorMessage } from '../utils.ts'
 
 /** 读取 POST 请求体（≤1MB），空体按 {} 处理，非法 JSON 抛错。 */
 export function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -40,8 +41,7 @@ export function writeOk(res: ServerResponse, value: unknown): void {
 
 /** 内部错误响应：{ ok: false, error: { code: 'internal', message } }。 */
 export function writeError(res: ServerResponse, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error)
-  writeJson(res, 500, { ok: false, error: { code: 'internal', message } })
+  writeJson(res, 500, { ok: false, error: { code: 'internal', message: errorMessage(error) } })
 }
 
 /** JSON API 的信任围栏：仅回环 Host 可访问（防 DNS 重绑定 / 跨站探测，
