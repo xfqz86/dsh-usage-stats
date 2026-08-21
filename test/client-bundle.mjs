@@ -6,7 +6,7 @@
  *   2. factory(require) 可执行，exports.inject 含必需服务、exports.apply 为函数；
  *   3. CSS Modules 内联注入：每个 *.module.css 注入一个 data-plugin-css 的
  *      <style>（UsageStatsFooter / UsageStatsPanel / UsageStatsCommon /
- *      OverviewTab / TodayTile / UsageHeatmap / DatesTab / SessionsTab /
+ *      OverviewTab / HeroTile / UsageHeatmap / DatesTab / SessionsTab /
  *      ModelsTab / SettingsTab / SettingsSwitch），且样式文本含 scoped 类名。
  */
 
@@ -96,7 +96,7 @@ try {
     'dsh-usage-statistics/UsageStatsPanel',
     'dsh-usage-statistics/UsageStatsCommon',
     'dsh-usage-statistics/OverviewTab',
-    'dsh-usage-statistics/TodayTile',
+    'dsh-usage-statistics/HeroTile',
     'dsh-usage-statistics/UsageHeatmap',
     'dsh-usage-statistics/DatesTab',
     'dsh-usage-statistics/SessionsTab',

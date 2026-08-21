@@ -19,19 +19,18 @@ dsh-usage-statistics/
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：每日趋势曲线 + 时间范围切换，悬停 tooltip 显示当日明细。
 │   │   │   ├── FollowTooltip.module.css ← 鼠标跟随 Tooltip（FollowTooltip）：复刻 primitives Tooltip 的视觉 （dark plate、white text、size m 无箭头），仅定位逻辑不同——水平跟随鼠标。
 │   │   │   ├── FollowTooltip.tsx ← 鼠标跟随的 Tooltip：用于三色比例条等宽条形锚点。
+│   │   │   ├── HeroTile.module.css ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴样式。
+│   │   │   ├── HeroTile.tsx ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴。
 │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：占总比条形图（表格样式在共用基元里）。
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表（含占比条）。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 + 标题刷新按钮）、扫描页脚。
-│   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」合并磁贴（占 2 列，含三色比例条） + 总 tokens / 会话数磁贴 + OpenCode Go 额度磁贴（窄列，纵向堆叠三档窗口 进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）+ 扫描页脚。
+│   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴 （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用； 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）+ 扫描页脚。
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab（SessionsTab）：展开/收起切换链接（表格样式在共用基元里）。
 │   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表（标题/cwd/最近活跃，默认 8 条可展开）。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
 │   │   │   ├── SettingsTab.module.css ← 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、 抓取间隔数字输入。
 │   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置（OpenCode Go 抓取相关三项）+ 重建账本（最底部， 危险操作，点击后需二次确认：RiskConfirmation 复选「我已了解」+ 确认）。
-│   │   │   ├── StatCell.tsx ← 概览 Tab 的统计磁贴（可选图标 + 数值 + 标签）。
-│   │   │   ├── TodayTile.module.css ← 「今日」合并磁贴（TodayTile）：占 2 列，今日 tokens + 今日调用 + 三色比例条（缓存 / 输入 / 输出）。
-│   │   │   ├── TodayTile.tsx ← 概览 Tab 的「今日」汇总磁贴：今日 tokens + 今日调用 + 三色比例条 （缓存 / 输入 / 输出，tooltip 明细与侧边栏同款口径）合并到一个磁贴。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
 │   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格（列 = 周，行 = 周一..周日， 4 档强度 + 月份标签 + 今日高亮）。
 │   │   │   ├── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。

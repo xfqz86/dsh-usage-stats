@@ -25,7 +25,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ---- 统计磁贴 / 单元格（StatCell 与 TodayTile 共用）---- */
+/* ---- 统计磁贴 / 单元格（HeroTile 等通用磁贴基元）---- */
 .cell {
   display: flex;
   flex-direction: column;

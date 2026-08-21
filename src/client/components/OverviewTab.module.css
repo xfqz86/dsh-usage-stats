@@ -32,7 +32,7 @@
   gap: 8px;
 }
 
-/* 汇总磁贴组：display:contents 让子磁贴直接参与 bento 网格（1 行 4 磁贴）。 */
+/* 汇总磁贴组：display:contents 让子磁贴直接参与 bento 网格（今日 2+总计 2 占首行）。 */
 .summary {
   display: contents;
 }
