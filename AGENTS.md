@@ -263,7 +263,7 @@ node test/client-bundle.mjs  # 浏览器端 bundle 冒烟（模拟 __ModuleLoade
   - `type` 取值：`feat`（新特性）、`fix`（修复）、`docs`（文档）、`style`（样式/格式）、`refactor`（重构）、`perf`（性能）、`test`（测试）、`build`（构建）、`ci`（持续集成）、`chore`（杂项）、`revert`（回滚）等，严格按 CC 列表。
   - `scope` 建议：`client` / `host` / `build` / `docs` / `deps` 等，按模块标注。
 - **正文与脚注**：`body` 用中文补充变更细节与动机；关联 issue 写在 `footer`（如 `Refs #123`）；`BREAKING CHANGE:` 必须在脚注首行声明不兼容变更。
-- **原子性**：一次提交只做一件事，禁止 `wip`、`update`、`fix bug` 等无意义信息，禁止在同一提交中混入无关变更。
+- **原子性**：一次提交只做一件事，禁止 `wip`、`update`、`fix bug` 等无意义信息，禁止在同一提交中混入无关变更。**一个提交只处理一个特定问题**（如一个 bug 修复或一个特性），不得将多个不相关的修复/特性混在同一提交；若一次改动涉及多个独立问题，必须拆分为多个提交，每个提交可独立验证与回滚。
 - **语言**：`type/scope` 用英文，`subject/body/footer` 用中文（与本仓库文档语言一致）。
 - **验证**：提交前必须通过 `npx tsc --noEmit`、`pnpm build`、`node test/smoke.mjs`、`node test/client-bundle.mjs`（见 §9）；未通过不得提交。
 - **示例**：
