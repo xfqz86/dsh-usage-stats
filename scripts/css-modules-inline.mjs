@@ -25,8 +25,9 @@
  * 已知 bug（需要 --config-loader tsx），原生 ESM 则无此问题。
  */
 
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname, relative, resolve } from 'node:path'
 import { transform } from 'lightningcss'
 
 /** 插件所属标识，用于注入标签的 data-plugin 属性。 */
@@ -44,17 +45,23 @@ function cssTagOf(filePath) {
   return `${PLUGIN_NAME}/${basename(filePath, '.module.css')}`
 }
 
-/** 绝对路径 -> 确定性虚拟 id（base64url 强编码；无共享状态，处处一致）。 */
+// 虚拟 id -> 真实路径的全局映射，解决 rolldown 多实例下模块级 Map 不共享的问题
+// 同时用哈希而非明文路径做 id，彻底避免把本地绝对路径（/Users/...）编码进产物变量名
+const idToPath = (globalThis.__dshCssModulesMap ??= new Map())
+
+/** 绝对路径 -> 确定性短哈希虚拟 id（基于相对路径的 sha256，无本地环境泄露）。 */
 function virtualIdOf(filePath) {
-  return VIRTUAL_PREFIX + Buffer.from(filePath, 'utf8').toString('base64url')
+  const rel = relative(process.cwd(), filePath)
+  const hash = createHash('sha256').update(rel).digest('base64url').slice(0, 12)
+  const id = VIRTUAL_PREFIX + hash
+  idToPath.set(id, filePath)
+  return id
 }
 
-/** 虚拟 id -> 绝对路径（仅解析本插件产生的 id；解析失败返回 null）。 */
+/** 虚拟 id -> 绝对路径（查表；未命中返回 null）。 */
 function filePathOf(id) {
   if (!id.startsWith(VIRTUAL_PREFIX) || id === RUNTIME_ID) return null
-  const b64 = id.slice(VIRTUAL_PREFIX.length)
-  if (!/^[A-Za-z0-9_-]+$/.test(b64)) return null
-  return Buffer.from(b64, 'base64url').toString('utf8')
+  return idToPath.get(id) ?? null
 }
 
 /** 共享运行时源码：注入助手只定义一次，各 CSS 模块调一行即可。 */
