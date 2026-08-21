@@ -118,51 +118,11 @@ Record<string, string>` + `export type UsageStatsKey = keyof typeof zh` +
 
 ## 4. 项目结构与模块职责
 
-```
-dsh-usage-statistics/
-├── src/
-│   ├── types.ts                 ← 跨端共用协议类型（GoWindow/GoQuota/UsageAgg/Agg/SeriesPoint；
-│   │                              只放类型声明、零运行时，host/client 各自 re-export）
-│   ├── utils.ts                 ← 跨端共用纯函数（startOfDay/dateKeyOf、errorMessage、
-│   │                              parseJsonLine、splitModelKey、goPercent/goLevelOf/goResetsAt）
-│   ├── css-modules.d.ts         ← *.module.css 的类型声明（harness 同款，仓库根）
-│   ├── host/                    ← 服务端（Host，Node ESM）
-│   │   ├── index.ts             ← 入口：账本装配/监听/初始化/路由（回环围栏）
-│   │   ├── agg.ts               ← 聚合口径与纯函数（Agg / ink / usable / modelKeyOf）
-│   │   ├── logs.ts              ← 会话日志的目录发现与 NDJSON 解析（解码走 persistence）
-│   │   ├── ledger.ts            ← 自管理 SQLite 账本（node:sqlite，events/session_meta 表）
-│   │   ├── store.ts             ← UsageStore 聚合缓存与折叠助手（账本事件的派生统计）
-│   │   ├── scan.ts              ← 账本导入/重建（persistence.readRaw 优先 + harness 兜底）
-│   │   ├── snapshot.ts          ← 快照 value 构建（汇总/模型/会话/按日序列）
-│   │   ├── goquota.ts           ← OpenCode Go 额度查询（滚动5h/周/月 + TTL 缓存）
-│   │   └── http.ts              ← JSON API 的 HTTP 辅助与回环围栏
-│   └── client/                  ← 浏览器端（Client）bundle（一个组件一个 tsx 文件）
-│       ├── index.ts             ← 入口：注册 sidebar.footer.action
-│       ├── UsageStatsFooter.tsx ← 侧边栏底部今日统计按钮 + Go 额度芯片行（wide / rail 双模式）
-│       ├── UsageStatsPanel.tsx  ← 模态窗壳：Modal + Tab 栏切换（只做编排）
-│       ├── OverviewTab.tsx      ← 概览 Tab：汇总 + Go 额度 + 热力图 + 页脚
-│       ├── DatesTab.tsx         ← 日期 Tab：趋势曲线 + 时间范围
-│       ├── SessionsTab.tsx      ← 会话 Tab：按会话表（默认 8 条可展开）
-│       ├── ModelsTab.tsx        ← 模型 Tab：按模型/Provider 拆分表（占比条）
-│       ├── SettingsTab.tsx      ← 设置 Tab：手动刷新 + 重建账本
-│       ├── StatCell.tsx         ← 概览统计格（数值 + 标签）
-│       ├── UsageHeatmap.tsx     ← 概览 26 周热力图（Codex 风格）
-│       ├── *.module.css         ← 样式（Footer / Panel 两个模块）
-│       ├── useSnapshot.ts       ← 4s 轮询 /usage-stats/api/snapshot（含手动刷新）
-│       ├── useGoQuota.ts        ← 60s 轮询 /usage-stats/api/go-quota（含手动刷新）
-│       ├── stats.ts             ← 纯函数：格式化/分桶/曲线几何/26 周热力图网格
-│       └── locales.ts           ← zh/en 文案（LocaleNamespaceMap 类型安全）
-├── scripts/
-│   └── css-modules-inline.mjs   ← 构建期把 .module.css 编译并内联进 bundle
-├── lib/                         ← tsdown 构建产物（index.js / client.js）
-├── test/
-│   ├── session-events.jsonl     ← 真实会话 usage 事件 fixture（从 ~/.dsh/sessions 解码裁剪）
-│   ├── smoke.mjs                ← 服务端冒烟测试（mock cordis + 真实 node:sqlite 账本）
-│   └── client-bundle.mjs        ← 浏览器端 bundle 冒烟（模拟 __ModuleLoader__ + document）
-├── cordis.patch.yml             ← 组合包 patch（dsh.bundle.patch）：插入插件条目
-├── tsdown.config.ts             ← 双 bundle 构建配置（host ESM + client CJS）
-├── package.json / pnpm-workspace.yaml / tsconfig.json
-```
+目录树与各文件职责见 **`docs/STRUCTURE.md`**（由 `scripts/gen-tree.mjs` 自动
+生成：改动代码结构后运行 `pnpm tree` 重新生成，勿手改）。两个 bundle 的源码入口
+分别是 `src/host/index.ts`（服务端 Host）与 `src/client/index.ts`（浏览器端
+Client）；跨端共用的协议类型在 `src/types.ts`、纯函数在 `src/utils.ts`。各文件
+的模块职责写在其头部注释里，AGENTS.md 不再维护目录树现状。
 
 ## 5. 架构：自管理 SQLite 账本 + 派生聚合缓存
 
@@ -254,24 +214,11 @@ lightningcss 的 `cssModules` 模式）在构建时把 `*.module.css` 编译成 
 
 - **Host 注入**：`inject = ['webServer', 'sessionQuery', 'sessionPersistence']`。
   挂载顺序：先挂实时监听（初始扫描期间不漏事件）→ 再 bootstrap 初始化。
-- **路由**：`ctx.webServer.register({ kind:'prefix', path:'/usage-stats/api',
-  handler })`，POST only。每次调用先过 **回环围栏**
-  （`isLoopbackHost`：仅 127.0.0.1 / localhost / ::1 / 127.x 网段 Host 可访问
-  —— 防 DNS 重绑定 / 跨站探测）。
-- **`POST /usage-stats/api/snapshot`**：body `{ sessionId? }`；响应
-  `{ ok: true, value }`。value 含：统计元信息（scanning/scans/failed/
-  rawSessions/harnessSessions/foldedEvents/dedupSkipped/lastError/scanError/
-  lastScanAt/time）、`sessions`（有量会话数）、`all`（总量）、`series.all`（按日
-  序列）、`models[]`（模型拆分）、`sessionsList[]`（会话明细）、请求带 sessionId
-  时的 `current` / `series.current`。协议类型在 `src/client/useSnapshot.ts`
-  的 `UsageSnapshot`（与 `src/types.ts` 类型统一）。
-- **`POST /usage-stats/api/go-quota`**：OpenCode Go 订阅额度（滚动 5 小时 /
-  本周 / 本月 percent + resetsAt，status: ok|no-key|error 结构化，客户端按
-  status 本地化）。key 解析：`OPENCODE_GO_API_KEY` → `OPENCODE_API_KEY` →
-  opencode CLI 登录态 `auth.json`（`['opencode-go'].key`）；固定域名端点
-  `https://opencode.ai/zen/go/v1/usage` + 浏览器 UA（否则被前置 Cloudflare
-  以 error 1010 拦截）；**5 分钟 TTL 缓存 + 单飞**（并发只打一次官方端点）。
-- **`POST /usage-stats/api/rebuild`**：见 §5。
+- **路由**：`ctx.webServer.register({ kind: 'prefix', path: '/usage-stats/api',
+  handler })`，**仅 POST**，每次调用先过**回环围栏**（仅回环 Host 可访问，防
+  DNS 重绑定 / 跨站探测）。
+- `snapshot` / `go-quota` / `rebuild` 的请求/响应形状、Go 额度 key 解析与 TTL
+  规则、偏好设置字段等协议细节见 **`docs/API.md`**（随接口演进维护，本文件不重复）。
 
 ## 9. 验证（每次改动必须）
 
@@ -292,6 +239,18 @@ node test/client-bundle.mjs  # 浏览器端 bundle 冒烟（模拟 __ModuleLoade
   返回空仍能从介质重建 394**。
 - `test/client-bundle.mjs`：加载 `lib/client.js`，验证顶层
   `window.__ModuleLoader__.load` 注册（id=dsh-usage-statistics）、
-  `factory(require)` 返回 inject/apply、`document` 出现两个
-  `data-plugin-css` 的 `<style>`（UsageStatsFooter / UsageStatsPanel）且样式
-  文本含 scoped 类名（xyz → `_hash_xyz`）。
+  `factory(require)` 返回 inject/apply、`document` 出现每个 `*.module.css`
+  对应的 `data-plugin-css` `<style>`（UsageStatsFooter / UsageStatsPanel /
+  UsageStatsCommon / OverviewTab / TodayTile / 各 Tab 组件等）且样式文本含
+  scoped 类名（xyz → `_hash_xyz`）。
+
+## 10. 文档维护约定（防止注入上下文 churn）
+
+- **AGENTS.md 是注入到模型上下文的稳定前缀**：只在**规则 / 不变量**变化时改动；
+  纯代码改动（新增文件、改接口形状、调文案）**禁止顺手改 AGENTS.md**。需要记录
+  结构 / 协议现状时，改 `docs/*` 或各文件头注释。
+- 描述性 / 现状快照类内容（目录树、API 细节、数据流 walkthrough）一律放
+  `docs/*` 或文件头注释；README 面向普通用户；AGENTS.local.md 只放本机私有 /
+  强时效的小量事实。
+- `docs/STRUCTURE.md` 是生成文件：结构变了运行 `pnpm tree` 重新生成，不手写；
+  `docs/API.md` 记录接口协议现状，随接口演进维护。

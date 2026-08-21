@@ -38,7 +38,8 @@
   "scripts": {
     "build": "tsdown",
     "watch": "tsdown --watch",
-    "prepare": "tsdown"
+    "prepare": "tsdown",
+    "tree": "node scripts/gen-tree.mjs"
   },
   "license": "MIT",
   "devDependencies": {
