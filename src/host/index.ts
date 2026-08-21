@@ -123,6 +123,13 @@ export function apply(ctx: Context): void {
             writeOk(res, { rebuilt: true, foldedEvents: store.foldedEvents })
             return
           }
+          if (method === 'clear') {
+            // 清零账本：清空 sqlite 事件与 meta → 复位聚合缓存，不重扫（与重建的区别）。
+            ledger.clear()
+            resetStore(store)
+            writeOk(res, { cleared: true, foldedEvents: store.foldedEvents })
+            return
+          }
           if (method === 'go-quota') {
             const raw = payload.intervalMinutes
             const intervalMinutes = (typeof raw === 'number' && Number.isFinite(raw)) ? raw : undefined

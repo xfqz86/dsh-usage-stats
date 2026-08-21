@@ -50,6 +50,12 @@
 - 清空 sqlite 两表 + 复位聚合缓存 → 全量重扫日志导入 →
   `{ rebuilt: true, foldedEvents }`。设置页有入口。
 
+## 4.1 POST /usage-stats/api/clear
+
+- 清空 sqlite 两表 + 复位聚合缓存 → `{ cleared: true, foldedEvents }`，
+  **不重扫**（与重建的区别：重建会重新读取历史会话，清零不会，统计直接归零）。
+  设置页有入口（二次确认）。
+
 ## 5. 偏好设置（浏览器端 localStorage）
 
 - key `dsh-usage-statistics.settings`；读取失败 / 字段非法回退默认值。

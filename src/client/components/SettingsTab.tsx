@@ -19,11 +19,11 @@ import type { UsageSettings } from '../settings.ts'
 import { clampGoFetchMinutes, GO_FETCH_MIN_MINUTES } from '../settings.ts'
 import { SettingsSwitch } from './SettingsSwitch.tsx'
 
-/** 设置 Tab：偏好设置 + 重建账本（最底部，二次确认）。 */
+/** 设置 Tab：偏好设置 + 重建/清零账本（最底部，二次确认）。 */
 export function SettingsTab({
   onRefresh, settings, onUpdateSettings, t,
 }: {
-  /** 重建完成后立即重新拉取快照（不再暴露"手动刷新"按钮）。 */
+  /** 重建/清零完成后立即重新拉取快照（不再暴露"手动刷新"按钮）。 */
   onRefresh: () => void
   settings: UsageSettings
   onUpdateSettings: (patch: Partial<UsageSettings>) => void
@@ -33,6 +33,10 @@ export function SettingsTab({
   // 重建账本二次确认：确认弹窗可见性 + 「我已了解」复选（防误触）。
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [acknowledged, setAcknowledged] = useState(false)
+  const [clearState, setClearState] = useState<'idle' | 'busy' | 'done'>('idle')
+  // 清零账本二次确认
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
+  const [clearAcknowledged, setClearAcknowledged] = useState(false)
   // 抓取间隔输入：本地文本态，失焦时才夹取并提交（避免每键回跳）。
   const [intervalText, setIntervalText] = useState(String(settings.goFetchMinutes))
   const intervalInputRef = useRef<HTMLInputElement>(null)
@@ -67,6 +71,36 @@ export function SettingsTab({
     setConfirmOpen(false)
     setAcknowledged(false)
     void handleRebuild()
+  }
+
+  /** 清零账本：清空事件流与元数据，不重扫；完成后立即拉快照。 */
+  const handleClear = async () => {
+    if (clearState === 'busy') return
+    setClearState('busy')
+    try {
+      await fetch('/usage-stats/api/clear', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      setClearState('done')
+      onRefresh()
+      window.setTimeout(() => setClearState('idle'), 1500)
+    } catch {
+      setClearState('idle')
+    }
+  }
+
+  const armClear = () => {
+    if (clearState === 'busy') return
+    setClearAcknowledged(false)
+    setClearConfirmOpen(true)
+  }
+
+  const confirmClear = () => {
+    setClearConfirmOpen(false)
+    setClearAcknowledged(false)
+    void handleClear()
   }
 
   /** 提交抓取间隔：夹到下限后更新设置，并把输入框同步为提交值。 */
@@ -133,6 +167,33 @@ export function SettingsTab({
           <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
         </span>
       </label>
+
+      {/* 清零账本（危险操作：点击后先二次确认，不重扫） */}
+      <div className={shared.sectionHead}>
+        <span className={shared.sectionLabel}>{t('settings.clear')}</span>
+      </div>
+      <button
+        type="button"
+        className={clearState === 'done' ? `${css.refreshBtn} ${css.refreshBtnDone}` : clearState === 'busy' ? `${css.refreshBtn} ${css.refreshBtnBusy}` : css.refreshBtn}
+        onClick={armClear}
+        disabled={clearState === 'busy'}
+      >
+        {clearState === 'busy' ? t('settings.clearing') : clearState === 'done' ? t('settings.cleared') : t('settings.clearAction')}
+      </button>
+      <span className={shared.goHint}>{t('settings.clearHint')}</span>
+
+      <RiskConfirmation
+        open={clearConfirmOpen}
+        title={t('settings.clearConfirmTitle')}
+        description={t('settings.clearConfirmDesc')}
+        acknowledgeLabel={t('settings.clearConfirmAck')}
+        cancelLabel={t('settings.clearCancel')}
+        confirmLabel={t('settings.clearConfirm')}
+        acknowledged={clearAcknowledged}
+        onAcknowledgedChange={setClearAcknowledged}
+        onCancel={() => setClearConfirmOpen(false)}
+        onConfirm={confirmClear}
+      />
 
       {/* 重建账本（最底部，危险操作：点击后先二次确认） */}
       <div className={shared.sectionHead}>
