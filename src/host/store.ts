@@ -155,6 +155,8 @@ export function foldRecord(
     return
   }
   ledger.append(ev)
+  // 同步更新会话元数据的 lastActive（事件时间），保证 session_meta 不为空
+  ledger.setMeta(id, { lastActive: ev.t })
   foldLedgerEvent(store, ev)
 }
 

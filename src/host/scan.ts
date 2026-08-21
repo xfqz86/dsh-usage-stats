@@ -61,17 +61,24 @@ export async function scanOnce(
     const query = ctx.sessionQuery
     const persist = ctx.sessionPersistence
 
-    // 1) 会话 id 全集 = 磁盘原始日志 ∪ harness 会话清单。
+    // 1) 会话 id 全集 = 磁盘原始日志 ∪ harness 会话清单；同时收集 header 的 cwd/createdAt 以便在无 RAW 时仍能填充 session_meta。
     const logPaths = new Map<string, string>()
     findSessionLogs(getSessionsRoot(), 0, logPaths)
     const ids = new Set<string>(logPaths.keys())
+    const headerMap = new Map<string, { cwd?: string; createdAt?: number }>()
 
     if (query) {
       try {
         const listed = await query.listSessions()
         if (Array.isArray(listed)) {
           for (const rec of listed) {
-            if (rec.header && typeof rec.header.id === 'string') ids.add(rec.header.id)
+            if (rec.header && typeof rec.header.id === 'string') {
+              ids.add(rec.header.id)
+              const h = rec.header as { cwd?: unknown; createdAt?: unknown }
+              if (typeof h.cwd === 'string' || typeof h.createdAt === 'number') {
+                headerMap.set(rec.header.id, { cwd: typeof h.cwd === 'string' ? h.cwd : undefined, createdAt: typeof h.createdAt === 'number' ? h.createdAt : undefined })
+              }
+            }
           }
         }
       } catch (e) {
@@ -83,7 +90,13 @@ export async function scanOnce(
         const headers = await persist.list()
         if (Array.isArray(headers)) {
           for (const header of headers) {
-            if (header && typeof header.id === 'string') ids.add(header.id)
+            if (header && typeof header.id === 'string') {
+              ids.add(header.id)
+              const h = header as { cwd?: unknown; createdAt?: unknown }
+              if (typeof h.cwd === 'string' || typeof h.createdAt === 'number') {
+                if (!headerMap.has(header.id)) headerMap.set(header.id, { cwd: typeof h.cwd === 'string' ? h.cwd : undefined, createdAt: typeof h.createdAt === 'number' ? h.createdAt : undefined })
+              }
+            }
           }
           if (headers.length > 0) store.scanError = null
         }
@@ -94,10 +107,16 @@ export async function scanOnce(
     const idList: string[] = [...ids]
 
     // 2) 逐会话：RAW 优先（完整、不受解释器限制），失败则 harness 兜底。
+    //    对于无 RAW 的会话，用 headerMap 的 cwd/createdAt 预填充 session_meta，避免 cwd/created_at/last_active 为空。
     let i = 0
     async function worker(): Promise<void> {
       while (i < idList.length) {
         const id = idList[i]; i += 1
+        // 预填充 header 元数据（若有），保证即使无 RAW/无 seed 记录时也不为空
+        const hdr = headerMap.get(id)
+        if (hdr && (hdr.cwd !== undefined || hdr.createdAt !== undefined)) {
+          ledger.setMeta(id, { cwd: hdr.cwd, createdAt: hdr.createdAt, lastActive: hdr.createdAt })
+        }
         try {
           // 2a) RAW 优先：后端原样工件（readRaw 返回解码后的完整 JSONL
           //     文本；zstd 物理编码由后端纯 JS 解码，无 CLI 依赖）。

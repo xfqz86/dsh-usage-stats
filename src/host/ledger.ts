@@ -209,8 +209,11 @@ export class Ledger {
     const next: SessionMeta = {
       title: typeof patch.title === 'string' ? patch.title : current.title,
       cwd: typeof patch.cwd === 'string' ? patch.cwd : current.cwd,
-      createdAt: Number(patch.createdAt) || current.createdAt,
-      lastActive: Number(patch.lastActive) || current.lastActive,
+      createdAt: typeof patch.createdAt === 'number' && Number.isFinite(patch.createdAt) && patch.createdAt > 0 ? patch.createdAt : current.createdAt,
+      // lastActive 取最大值，保证事件时间单调递增且不被旧值覆盖
+      lastActive: typeof patch.lastActive === 'number' && Number.isFinite(patch.lastActive) && patch.lastActive > 0
+        ? Math.max(current.lastActive, patch.lastActive)
+        : current.lastActive,
     }
     this.metaCache.set(id, next)
     this.stmts.upsertMeta.run(id, next.title, next.cwd, next.createdAt, next.lastActive)
