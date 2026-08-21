@@ -1,0 +1,39 @@
+/* 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰，
+   on 用成功绿（token 配色）。 */
+
+.switch {
+  flex: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-fill-2, var(--dsw-alias-interactive-bg-hover));
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.switchOn {
+  background: var(--dsw-alias-state-success-primary, #34c759);
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-base, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.switchOn .switchKnob {
+  transform: translateX(14px);
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+}

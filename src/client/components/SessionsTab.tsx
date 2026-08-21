@@ -5,9 +5,10 @@
 
 import { useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import css from './UsageStatsPanel.module.css'
-import type { SessionStat } from './useSnapshot.ts'
-import { fmt, fmtFull, fullDayLabel, shortId, usageTotal } from './stats.ts'
+import css from './SessionsTab.module.css'
+import shared from './UsageStatsCommon.module.css'
+import type { SessionStat } from '../useSnapshot.ts'
+import { fmt, fmtFull, fullDayLabel, shortId, usageTotal } from '../stats.ts'
 
 /** 会话 Tab：按会话表（默认 8 条，可展开全部）。 */
 export function SessionsTab({
@@ -21,20 +22,20 @@ export function SessionsTab({
   const shownSessions = showAllSessions ? sessionsList.slice(0, 50) : sessionsList.slice(0, 8)
 
   if (sessionsList.length === 0) {
-    return <div className={css.empty}>{t('state.noUsage')}</div>
+    return <div className={shared.empty}>{t('state.noUsage')}</div>
   }
 
   return (
-    <div className={css.section}>
-      <div className={css.sectionHead}>
-        <span className={css.sectionLabel}>{t('panel.sessions')}</span>
+    <div className={shared.section}>
+      <div className={shared.sectionHead}>
+        <span className={shared.sectionLabel}>{t('panel.sessions')}</span>
         {hasMoreSessions && (
           <button className={css.toggle} onClick={() => setShowAllSessions(v => !v)}>
             {t(showAllSessions ? 'sessions.collapseAll' : 'sessions.showAll', { n: sessionsList.length })}
           </button>
         )}
       </div>
-      <table className={css.table}>
+      <table className={shared.table}>
         <thead>
           <tr>
             <th>{t('table.session')}</th>
@@ -52,12 +53,12 @@ export function SessionsTab({
               : '--'
             return (
               <tr key={i} title={(s.cwd ? s.cwd + '\n' : '') + (s.title ? s.title : '')}>
-                <td className={css.cellText}>
-                  {s.title || shortId(s.id)} <span className={css.sub}>· {shortId(s.id)}</span>
+                <td className={shared.cellText}>
+                  {s.title || shortId(s.id)} <span className={shared.sub}>· {shortId(s.id)}</span>
                 </td>
-                <td className={css.num}>{fmtFull(s.calls)}</td>
-                <td className={`${css.num} ${css.strong}`}>{fmt(usageTotal(s.usage))}</td>
-                <td className={css.num}>{when}</td>
+                <td className={shared.num}>{fmtFull(s.calls)}</td>
+                <td className={`${shared.num} ${shared.strong}`}>{fmt(usageTotal(s.usage))}</td>
+                <td className={shared.num}>{when}</td>
               </tr>
             )
           })}

@@ -5,9 +5,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SeriesPoint } from '../types.ts'
-import css from './UsageStatsPanel.module.css'
-import { buildSet, curveOf, dayTotal, fmtFull, fullDayLabel } from './stats.ts'
+import type { SeriesPoint } from '../../types.ts'
+import css from './DatesTab.module.css'
+import shared from './UsageStatsCommon.module.css'
+import { buildSet, curveOf, dayTotal, fmtFull, fullDayLabel } from '../stats.ts'
 
 /** 时间范围选项：值 + 对应文案键。 */
 const RANGE_KEYS = [
@@ -60,9 +61,9 @@ export function DatesTab({
   }
 
   return (
-    <div className={css.section}>
-      <div className={css.sectionHead}>
-        <span className={css.sectionLabel}>{t('panel.trend')}</span>
+    <div className={shared.section}>
+      <div className={shared.sectionHead}>
+        <span className={shared.sectionLabel}>{t('panel.trend')}</span>
         <span className={css.chips}>
           {RANGE_KEYS.map(([value, label]) => (
             <button
@@ -80,7 +81,7 @@ export function DatesTab({
         onMouseLeave={() => setTip(null)}
       >
         {!curve
-          ? <div className={css.empty}>{t('state.noUsage')}</div>
+          ? <div className={shared.empty}>{t('state.noUsage')}</div>
           : (
             <svg className={css.svg} viewBox={`0 0 ${curve.W} ${curve.H}`}>
                 {[0.25, 0.5, 0.75].map(f => (

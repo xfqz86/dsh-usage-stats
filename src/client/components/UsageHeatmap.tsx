@@ -7,10 +7,11 @@
 import { useMemo } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import css from './UsageStatsPanel.module.css'
-import type { UsageSnapshot } from './useSnapshot.ts'
-import { fmtFull, heatGridOf, type HeatGridCell } from './stats.ts'
-import { cacheTotal } from '../utils.ts'
+import css from './UsageHeatmap.module.css'
+import shared from './UsageStatsCommon.module.css'
+import type { UsageSnapshot } from '../useSnapshot.ts'
+import { fmtFull, heatGridOf, type HeatGridCell } from '../stats.ts'
+import { cacheTotal } from '../../utils.ts'
 
 /** 月份文案键：每列（周）首月变化时显示。 */
 const MONTH_KEYS = [
@@ -55,9 +56,9 @@ export function UsageHeatmap({
   }
 
   return (
-    <div className={css.section}>
-      <div className={css.sectionHead}>
-        <span className={css.sectionLabel}>{t('heat.title')}</span>
+    <div className={shared.section}>
+      <div className={shared.sectionHead}>
+        <span className={shared.sectionLabel}>{t('heat.title')}</span>
       </div>
       <span className={css.heatTotal}>
         {t('heat.total', { tokens: fmtFull(totalTokens), calls: fmtFull(totalCalls) })}
@@ -78,7 +79,7 @@ export function UsageHeatmap({
           </div>
         </>
       ) : (
-        <div className={css.empty}>{t('state.noUsage')}</div>
+        <div className={shared.empty}>{t('state.noUsage')}</div>
       )}
     </div>
   )

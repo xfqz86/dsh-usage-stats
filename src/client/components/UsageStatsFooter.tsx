@@ -9,16 +9,21 @@
  * 5 小时额度芯片（两行：短标签 + 百分比，居中），芯片 tooltip 给出三档窗口
  * 完整明细（百分比 + 重置时间）；按钮 Tooltip 只放今日数字明细，不含 Go 额度。
  * 点击打开模态窗详情（{@link UsageStatsPanel}）。
+ *
+ * Go 额度抓取开关、侧边栏展示开关与抓取间隔来自偏好设置（useGoSettings /
+ * settings.ts）：关闭抓取则不轮询（go 恒为 null，芯片自然不渲染）；侧边栏
+ * 开关只影响底部芯片展示，不影响模态窗内额度详情。
  */
 
 import { useEffect, useRef, useState } from 'react'
 import { IconDataOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './UsageStatsFooter.module.css'
-import { useSnapshot } from './useSnapshot.ts'
-import { useGoQuota, type GoWindow } from './useGoQuota.ts'
-import { alignedRows, dayTotal, fmt, fmtFull, pctOf, todayOf } from './stats.ts'
-import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../utils.ts'
+import { useSnapshot } from '../useSnapshot.ts'
+import { useGoQuota, type GoWindow } from '../useGoQuota.ts'
+import { useGoSettings } from '../useGoSettings.ts'
+import { alignedRows, dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts'
+import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts'
 import { UsageStatsPanel } from './UsageStatsPanel.tsx'
 
 export type UsageStatsFooterProps =
@@ -35,7 +40,9 @@ interface GoWindowEntry {
 export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const [open, setOpen] = useState(false)
   const [data, err, refreshSnapshot] = useSnapshot(4000)
-  const [go, refreshQuota] = useGoQuota(60000)
+  // Go 额度抓取开关 + 间隔来自偏好设置（默认开启、5 分钟）
+  const [settings, updateSettings] = useGoSettings()
+  const [go, refreshQuota] = useGoQuota(settings.goEnabled, settings.goFetchMinutes)
   const rootRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const root = rootRef?.current
@@ -76,7 +83,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const goChip = ({ key, short, full, win }: GoWindowEntry) => {
     const pct = goPercent(win)
     const level = goLevelOf(pct)
-    const cls = level === 'over' ? css.goChipOver : level === 'warn' ? css.goChipWarn : css.goChipOk
+    const cls = level === 'over' ? css.goChipOver : level === 'warn' ? css.goChipWarn : ''
     return (
       <Tooltip key={key} label={resetsOf(win) || full} side="top" delayMs={400}>
         <span className={`${css.goChip} ${cls}`}>{short} {pct}%</span>
@@ -130,19 +137,22 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         data={data}
         err={err}
         go={go}
+        settings={settings}
+        onUpdateSettings={updateSettings}
         onClose={() => setOpen(false)}
         onRefresh={() => { refreshSnapshot(); refreshQuota() }}
+        onRefreshGo={refreshQuota}
         t={t}
       />
-      {/* 宽列：Go 额度行在顶部，今日用量 badge 在其下方 */}
-      {wide && goWindows.length > 0 && (
+      {/* 宽列：Go 额度行在顶部（受「侧边栏展示」偏好门控），今日用量 badge 在其下方 */}
+      {wide && settings.showGoInSidebar && goWindows.length > 0 && (
         <div className={css.goRow}>
           <span className={css.goLabel}>{t('go.label')}</span>
           {goWindows.map(goChip)}
         </div>
       )}
       {/* rail 折叠态：圆形按钮上方仅显示滚动 5 小时额度芯片（两行：短标签 / 百分比，居中） */}
-      {!wide && railRolling !== undefined && (
+      {!wide && settings.showGoInSidebar && railRolling !== undefined && (
         <div className={css.goRailChip}>
           <Tooltip label={railQuotaLabel} side="top" delayMs={400}>
             <span className={`${css.goRailChipBox} ${railCls}`}>

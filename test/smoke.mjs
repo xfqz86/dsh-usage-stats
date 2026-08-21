@@ -171,6 +171,25 @@ if (goBody.ok !== true || !['ok', 'no-key', 'error'].includes(goBody.value?.stat
   process.exit(1)
 }
 
+// go-quota 支持客户端抓取间隔（TTL 适配）：携带 intervalMinutes（如 3 分钟下限）
+// 不改变结构化结果，且不抛错；未携带时用默认 5 分钟（上面已覆盖）。
+const goOut2 = await callRoute({ intervalMinutes: 3 }, '/usage-stats/api/go-quota')
+const goBody2 = JSON.parse(goOut2.payload)
+console.log('go-quota w/ interval ok:', goBody2.ok === true, '| status:', goBody2.value?.status)
+if (goBody2.ok !== true || !['ok', 'no-key', 'error'].includes(goBody2.value?.status)) {
+  console.error('FAIL: unexpected go-quota response with intervalMinutes')
+  process.exit(1)
+}
+
+// go-quota force=true：绕过 TTL 缓存强制重新抓取（仍返回结构化状态，不抛错）
+const goOut3 = await callRoute({ intervalMinutes: 3, force: true }, '/usage-stats/api/go-quota')
+const goBody3 = JSON.parse(goOut3.payload)
+console.log('go-quota force ok:', goBody3.ok === true, '| status:', goBody3.value?.status)
+if (goBody3.ok !== true || !['ok', 'no-key', 'error'].includes(goBody3.value?.status)) {
+  console.error('FAIL: unexpected go-quota response with force')
+  process.exit(1)
+}
+
 // 重启恢复路径：重开同一 sqlite 文件、会话清单返回空 → 账本有事件 →
 // 直接从介质重建聚合缓存（不重扫日志）
 const emptyQuery = { async listSessions() { return [] }, async readSession() { return { events: [] } } }

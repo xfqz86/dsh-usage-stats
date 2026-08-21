@@ -18,7 +18,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { NS, zh, en } from './locales.ts'
-import { UsageStatsFooter } from './UsageStatsFooter.tsx'
+import { UsageStatsFooter } from './components/UsageStatsFooter.tsx'
 
 /** 必需服务（cordis fiber inject）。 */
 export const inject = ['slots', 'locale']

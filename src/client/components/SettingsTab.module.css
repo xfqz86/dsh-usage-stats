@@ -1,0 +1,114 @@
+/* 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、
+   抓取间隔数字输入。颜色全部使用设计 token。 */
+/* .section* / .goHint 等基元见 UsageStatsCommon.module.css。 */
+
+/* ---- 操作按钮（重建账本）---- */
+.refreshBtn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.refreshBtn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.refreshBtnDone {
+  color: var(--dsw-alias-state-success-primary);
+  border-color: var(--dsw-alias-state-success-primary);
+}
+
+.refreshBtnBusy {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.refreshBtn:disabled {
+  cursor: not-allowed;
+}
+
+/* ---- 偏好设置行（开关 + 数字输入）---- */
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-base);
+  cursor: pointer;
+}
+
+.settingRowDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settingText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settingTitle {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.settingDesc {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 抓取间隔数字输入：焦点高亮，禁用时半透明。 */
+.intervalInput {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+}
+
+.intervalInput input {
+  width: 56px;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-base);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.intervalInput input:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.intervalInput input:disabled {
+  opacity: 0.6;
+}
+
+.intervalUnit {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}

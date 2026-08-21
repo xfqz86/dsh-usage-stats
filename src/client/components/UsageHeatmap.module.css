@@ -1,0 +1,73 @@
+/* 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、
+   月份标签、今日外框高亮。颜色全部使用设计 token。 */
+/* .section* / .empty 等基元见 UsageStatsCommon.module.css。 */
+
+.heatTotal {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Codex 风格 26 周热力图（列 = 周，行 = 周一..周日）。 */
+.heatGrid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, auto);
+  gap: 3px;
+  width: 100%;
+}
+
+.hcell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+  border: 1px solid var(--dsw-alias-border-l1);
+}
+
+/* 强度档 l1..l4：business 主色按窗口最大值占比混入底色。 */
+.hl1 {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 25%, var(--dsw-alias-bg-layer-3));
+  border-color: transparent;
+}
+
+.hl2 {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 50%, var(--dsw-alias-bg-layer-3));
+  border-color: transparent;
+}
+
+.hl3 {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 75%, var(--dsw-alias-bg-layer-3));
+  border-color: transparent;
+}
+
+.hl4 {
+  background: var(--dsw-alias-state-business-primary);
+  border-color: transparent;
+}
+
+/* 今天：外框高亮。 */
+.hcellToday {
+  outline: 1px solid var(--dsw-alias-label-secondary);
+  outline-offset: 1px;
+}
+
+/* 月份标签行：每列（周）首个非连续月份。 */
+.heatMonths {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 3px;
+  width: 100%;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  margin-top: 4px;
+}
+
+.heatMonth {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

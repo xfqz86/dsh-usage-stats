@@ -1,0 +1,29 @@
+/* 模型 Tab（ModelsTab）：占总比条形图（表格样式在共用基元里）。 */
+/* .table* / .empty / .section* 等基元见 UsageStatsCommon.module.css。 */
+
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-brand-primary, #4d6bfe);
+}
+
+.barPct {
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  width: 40px;
+  text-align: right;
+}

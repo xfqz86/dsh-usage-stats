@@ -1,0 +1,73 @@
+/* 日期 Tab（DatesTab）：每日趋势曲线（SVG）+ 时间范围切换 chips +
+   悬停 tooltip。颜色全部使用设计 token。 */
+/* .section* / .empty 等基元见 UsageStatsCommon.module.css。 */
+
+.chips {
+  display: flex;
+  gap: 4px;
+}
+
+.chip {
+  flex: 1;
+  text-align: center;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chipOn {
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
+}
+
+/* ---- 趋势图 ---- */
+.chart {
+  position: relative;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+}
+
+.gridline {
+  stroke: var(--dsw-alias-border-l1);
+  stroke-dasharray: 3 4;
+}
+
+.axisLabel {
+  font-size: 10px;
+  fill: var(--dsw-alias-label-tertiary);
+}
+
+/* 曲线悬停 tooltip（与热力图的 values 不同，这里用自绘 div 定位）。 */
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-shadow-lv2);
+  z-index: 31;
+  white-space: nowrap;
+}
+
+.tip b {
+  font-variant-numeric: tabular-nums;
+}

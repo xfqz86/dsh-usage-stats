@@ -1,0 +1,17 @@
+/* 会话 Tab（SessionsTab）：展开/收起切换链接（表格样式在共用基元里）。 */
+/* .table* / .empty / .section* 等基元见 UsageStatsCommon.module.css。 */
+
+.toggle {
+  font: inherit;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  background: 0 0;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.toggle:hover {
+  color: var(--dsw-alias-label-primary);
+}

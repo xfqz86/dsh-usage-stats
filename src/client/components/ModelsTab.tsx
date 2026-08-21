@@ -4,9 +4,10 @@
  */
 
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import css from './UsageStatsPanel.module.css'
-import type { ModelStat } from './useSnapshot.ts'
-import { fmt, fmtFull, pctOf, usageTotal } from './stats.ts'
+import css from './ModelsTab.module.css'
+import shared from './UsageStatsCommon.module.css'
+import type { ModelStat } from '../useSnapshot.ts'
+import { fmt, fmtFull, pctOf, usageTotal } from '../stats.ts'
 
 /** 模型 Tab：按模型/Provider 拆分表（含占比条）。 */
 export function ModelsTab({
@@ -20,15 +21,15 @@ export function ModelsTab({
     : 1
 
   if (models.length === 0) {
-    return <div className={css.empty}>{t('state.noUsage')}</div>
+    return <div className={shared.empty}>{t('state.noUsage')}</div>
   }
 
   return (
-    <div className={css.section}>
-      <div className={css.sectionHead}>
-        <span className={css.sectionLabel}>{t('panel.models')}</span>
+    <div className={shared.section}>
+      <div className={shared.sectionHead}>
+        <span className={shared.sectionLabel}>{t('panel.models')}</span>
       </div>
-      <table className={css.table}>
+      <table className={shared.table}>
         <thead>
           <tr>
             <th>{t('table.model')}</th>
@@ -45,14 +46,14 @@ export function ModelsTab({
             const share = Math.round((total / maxModel) * 1000) / 10
             return (
               <tr key={i}>
-                <td className={css.cellText}>
-                  {m.model} <span className={css.sub}>· {m.provider}</span>
+                <td className={shared.cellText}>
+                  {m.model} <span className={shared.sub}>· {m.provider}</span>
                 </td>
-                <td className={css.num}>{fmtFull(m.calls)}</td>
-                <td className={css.num}>{fmt(m.usage.input)}</td>
-                <td className={css.num}>{fmt(m.usage.output)}</td>
-                <td className={css.num}>{fmt(m.usage.cacheRead)}</td>
-                <td className={`${css.num} ${css.strong}`}>{fmt(total)}</td>
+                <td className={shared.num}>{fmtFull(m.calls)}</td>
+                <td className={shared.num}>{fmt(m.usage.input)}</td>
+                <td className={shared.num}>{fmt(m.usage.output)}</td>
+                <td className={shared.num}>{fmt(m.usage.cacheRead)}</td>
+                <td className={`${shared.num} ${shared.strong}`}>{fmt(total)}</td>
                 <td className={css.barRow}>
                   <span className={css.bar}><span className={css.barFill} style={{ width: share + '%' }} /></span>
                   <span className={css.barPct}>{pctOf(share)}</span>

@@ -124,7 +124,12 @@ export function apply(ctx: Context): void {
             return
           }
           if (method === 'go-quota') {
-            writeOk(res, await queryGoQuota())
+            const raw = payload.intervalMinutes
+            const intervalMinutes = (typeof raw === 'number' && Number.isFinite(raw)) ? raw : undefined
+            // force=true（概览 Go 磁贴"立即刷新"）绕过 TTL 缓存强制重新抓取；
+            // 默认 false 保持轮询语义（有效 TTL 内返回缓存）。
+            const force = payload.force === true
+            writeOk(res, await queryGoQuota(intervalMinutes, force))
             return
           }
           writeJson(res, 404, { ok: false, error: { code: 'not-found', message: `未知的 usage-stats API 方法 "${method}"` } })

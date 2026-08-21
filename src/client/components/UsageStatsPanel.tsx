@@ -26,9 +26,11 @@ import {
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './UsageStatsPanel.module.css'
-import type { UsageSnapshot } from './useSnapshot.ts'
-import type { GoQuota } from './useGoQuota.ts'
-import type { UsageStatsKey } from './locales.ts'
+import shared from './UsageStatsCommon.module.css'
+import type { UsageSnapshot } from '../useSnapshot.ts'
+import type { GoQuota } from '../useGoQuota.ts'
+import type { UsageSettings } from '../settings.ts'
+import type { UsageStatsKey } from '../locales.ts'
 import { OverviewTab } from './OverviewTab.tsx'
 import { DatesTab } from './DatesTab.tsx'
 import { SessionsTab } from './SessionsTab.tsx'
@@ -42,12 +44,18 @@ export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-statistics'
   data: UsageSnapshot | null
   /** 拉取失败（服务不可达 / 响应非 ok）。 */
   err: boolean
-  /** OpenCode Go 订阅额度（底部按钮轮询）；null 表示尚未加载。 */
+  /** OpenCode Go 订阅额度（底部按钮轮询）；null 表示尚未加载或抓取被禁用。 */
   go: GoQuota | null
+  /** 偏好设置（Go 抓取开关 / 侧边栏展示 / 间隔），设置 Tab 读写。 */
+  settings: UsageSettings
+  /** 局部更新偏好设置。 */
+  onUpdateSettings: (patch: Partial<UsageSettings>) => void
   /** 关闭模态窗（关闭按钮、遮罩点击或 Escape）。 */
   onClose: () => void
   /** 立即重新拉取快照与 Go 额度（设置页"手动刷新"按钮）。 */
   onRefresh: () => void
+  /** 立即重新拉取 Go 额度（概览 Go 磁贴标题右侧刷新按钮，不受抓取间隔控制）。 */
+  onRefreshGo: () => void
 }
 
 /** Tab 键：与面板内视图一一对应。 */
@@ -62,7 +70,7 @@ const TABS: Array<{ key: TabKey; labelKey: UsageStatsKey; Icon: ComponentType<Ic
   { key: 'settings', labelKey: 'tab.settings', Icon: IconSettingsOutline16 },
 ]
 
-export function UsageStatsPanel({ open, data, err, go, onClose, onRefresh, t }: UsageStatsPanelProps) {
+export function UsageStatsPanel({ open, data, err, go, settings, onUpdateSettings, onClose, onRefresh, onRefreshGo, t }: UsageStatsPanelProps) {
   const [active, setActive] = useState<TabKey>('overview')
 
   const value = data
@@ -121,16 +129,23 @@ export function UsageStatsPanel({ open, data, err, go, onClose, onRefresh, t }: 
 
       <div className={css.body} role="tabpanel">
         {err
-          ? <div className={css.empty}>{t('state.unavailable')}</div>
+          ? <div className={shared.empty}>{t('state.unavailable')}</div>
           : !value
-            ? <div className={css.empty}>{t('state.loading')}</div>
+            ? <div className={shared.empty}>{t('state.loading')}</div>
             : (
               <>
-                {active === 'overview' && <OverviewTab value={value} go={go} t={t} />}
+                {active === 'overview' && <OverviewTab value={value} go={go} t={t} onRefreshGo={onRefreshGo} />}
                 {active === 'dates' && <DatesTab series={value.series.all} t={t} />}
                 {active === 'sessions' && <SessionsTab sessionsList={value.sessionsList} t={t} />}
                 {active === 'models' && <ModelsTab models={value.models} t={t} />}
-                {active === 'settings' && <SettingsTab onRefresh={onRefresh} t={t} />}
+                {active === 'settings' && (
+                  <SettingsTab
+                    onRefresh={onRefresh}
+                    settings={settings}
+                    onUpdateSettings={onUpdateSettings}
+                    t={t}
+                  />
+                )}
               </>
             )}
       </div>
