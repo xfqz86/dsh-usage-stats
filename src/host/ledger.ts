@@ -5,9 +5,10 @@
  * （DatabaseSync，Node ≥22 内置；运行时仅打印一条 experimental 警告）。
  * 数据落在 `$DSH_HOME/storages/dsh-usage-statistics/ledger.sqlite`：
  *
- *   - `events` 表：一行一条用量事件，PRIMARY KEY (session_id, seq, t) 天然
+ *   - `events` 表：一行一条用量事件，PRIMARY KEY (t, session_id, seq) 天然
  *     幂等（同一条事件重复写入收敛，重开账本时每行只折一次；seq=-1 的未知
- *     序事件再按毫秒时间戳区分）。结构化列，无旧版按天分片 + 行水位。
+ *     序事件再按毫秒时间戳区分）。结构化列，无旧版按天分片 + 行水位。列顺序
+ *     为 t、session_id、seq。
  *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/
  *     lastActive（初始化扫描抄录、实时 session/title 事件更新）。
  *   - `PRAGMA user_version` = LEDGER_VERSION：结构不兼容时清空重建
@@ -25,7 +26,7 @@ import { modelKeyOf } from './agg.ts'
 import { splitModelKey } from '../utils.ts'
 
 /** 账本 schema 版本（PRAGMA user_version）：结构不兼容时自动清库重建。 */
-export const LEDGER_VERSION = 1
+export const LEDGER_VERSION = 2
 /** 归属目录名（storages 下，与插件同名）。 */
 export const LEDGER_DIR_NAME = 'dsh-usage-statistics'
 /** 账本 sqlite 文件名。 */
@@ -61,9 +62,9 @@ export interface SessionMeta {
 /** events 表 DDL（列名 snake_case，读回时映射回 camelCase）。 */
 const EVENT_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS events (
+  t           INTEGER NOT NULL,
   session_id  TEXT    NOT NULL,
   seq         INTEGER NOT NULL,
-  t           INTEGER NOT NULL,
   provider    TEXT    NOT NULL,
   model       TEXT    NOT NULL,
   input       INTEGER NOT NULL DEFAULT 0,
@@ -71,7 +72,7 @@ CREATE TABLE IF NOT EXISTS events (
   cache_read  INTEGER NOT NULL DEFAULT 0,
   cache_write INTEGER NOT NULL DEFAULT 0,
   reasoning   INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (session_id, seq, t)
+  PRIMARY KEY (t, session_id, seq)
 )`
 
 /** session_meta 表 DDL。 */
@@ -155,16 +156,16 @@ export class Ledger {
     }
     const hasEvent = this.db.prepare('SELECT 1 AS x FROM events LIMIT 1')
     const insertEvent = this.db.prepare(
-      `INSERT INTO events (session_id, seq, t, provider, model, input, output, cache_read, cache_write, reasoning)
+      `INSERT INTO events (t, session_id, seq, provider, model, input, output, cache_read, cache_write, reasoning)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(session_id, seq, t) DO UPDATE SET
+       ON CONFLICT(t, session_id, seq) DO UPDATE SET
          provider = excluded.provider, model = excluded.model,
          input = excluded.input, output = excluded.output,
          cache_read = excluded.cache_read, cache_write = excluded.cache_write,
          reasoning = excluded.reasoning`,
     )
     const allEvents = this.db.prepare(
-      'SELECT session_id, seq, t, provider, model, input, output, cache_read, cache_write, reasoning FROM events',
+      'SELECT t, session_id, seq, provider, model, input, output, cache_read, cache_write, reasoning FROM events',
     )
     const upsertMeta = this.db.prepare(
       `INSERT INTO session_meta (session_id, title, cwd, created_at, last_active)
@@ -192,11 +193,11 @@ export class Ledger {
     return this.stmts.hasEvent.get() !== undefined
   }
 
-  /** 追加一条事件（幂等：同 session+seq+毫秒 收敛为 upsert）。 */
+  /** 追加一条事件（幂等：同 t+session+seq 收敛为 upsert）。 */
   append(ev: LedgerEvent): void {
     this.assertOpen()
     this.stmts.insertEvent.run(
-      ev.sessionId, ev.seq, ev.t,
+      ev.t, ev.sessionId, ev.seq,
       ev.provider, ev.model,
       ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning,
     )
