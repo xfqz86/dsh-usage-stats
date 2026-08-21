@@ -1,0 +1,41 @@
+/* 鼠标跟随 Tooltip（FollowTooltip）：复刻 primitives Tooltip 的视觉
+  （dark plate、white text、size m 无箭头），仅定位逻辑不同——水平跟随鼠标。 */
+
+.bubble {
+  position: fixed;
+  z-index: 100;
+  width: max-content;
+  max-width: 50vw;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: var(--dsw-alias-tooltip-bg);
+  color: var(--dsw-static-neutral-bluish-00);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  animation: tooltip-in 150ms var(--ds-ease-in-out);
+}
+
+.bubble[data-side='right'] {
+  transform: translateY(-50%);
+}
+
+.bubble[data-side='bottom'] {
+  transform: translateX(-50%);
+}
+
+.bubble[data-side='top'] {
+  transform: translate(-50%, -100%);
+}
+
+@keyframes tooltip-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation: none;
+  }
+}

@@ -25,6 +25,7 @@ import { useGoSettings } from '../useGoSettings.ts'
 import { alignedRows, dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts'
 import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts'
 import { UsageStatsPanel } from './UsageStatsPanel.tsx'
+import { FollowTooltip } from './FollowTooltip.tsx'
 
 export type UsageStatsFooterProps =
   PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-statistics'>
@@ -45,10 +46,15 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const [go, refreshQuota] = useGoQuota(settings.goEnabled, settings.goFetchMinutes)
   const rootRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const root = rootRef?.current
-    const footerActionsDiv = root?.parentElement?.parentElement
-    if (footerActionsDiv) footerActionsDiv.style.flexDirection = 'column';
-  }, [rootRef])
+    const root = rootRef.current
+    const footerActionsDiv = root?.parentElement?.parentElement as HTMLElement | null
+    if (!footerActionsDiv) return
+    const prev = footerActionsDiv.style.flexDirection
+    footerActionsDiv.style.flexDirection = 'column'
+    return () => {
+      footerActionsDiv.style.flexDirection = prev
+    }
+  }, [])
 
   const today = todayOf(data?.series.all ?? [])
   const todayTokens = today ? dayTotal(today) : 0
@@ -144,22 +150,50 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         onRefreshGo={refreshQuota}
         t={t}
       />
-      {/* 宽列：Go 额度行在顶部（受「侧边栏展示」偏好门控），今日用量 badge 在其下方 */}
-      {wide && settings.showGoInSidebar && goWindows.length > 0 && (
+      {/* 宽列：Go 额度行在顶部（受「侧边栏展示」偏好门控），今日用量 badge 在其下方。
+          开启抓取后即使首请求失败也要显示（no-key / error 态同样渲染，避免“开启后看不到组件”） */}
+      {wide && settings.showGoInSidebar && go !== null && (
         <div className={css.goRow}>
           <span className={css.goLabel}>{t('go.label')}</span>
-          {goWindows.map(goChip)}
+          {go.status === 'ok' && goWindows.length > 0 && goWindows.map(goChip)}
+          {go.status === 'ok' && goWindows.length === 0 && <span className={css.goChip}>—</span>}
+          {go.status === 'no-key' && (
+            <Tooltip label={t('go.notConfigured')} side="top" delayMs={400}>
+              <span className={css.goChip}>—</span>
+            </Tooltip>
+          )}
+          {go.status === 'error' && (
+            <Tooltip label={t('go.unavailable')} side="top" delayMs={400}>
+              <span className={`${css.goChip} ${css.goChipOver}`}>!</span>
+            </Tooltip>
+          )}
         </div>
       )}
-      {/* rail 折叠态：圆形按钮上方仅显示滚动 5 小时额度芯片（两行：短标签 / 百分比，居中） */}
-      {!wide && settings.showGoInSidebar && railRolling !== undefined && (
+      {/* rail 折叠态：圆形按钮上方显示 Go 芯片；ok 时为滚动 5h 百分比，失败态同样显示（保证可见） */}
+      {!wide && settings.showGoInSidebar && go !== null && (
         <div className={css.goRailChip}>
-          <Tooltip label={railQuotaLabel} side="top" delayMs={400}>
-            <span className={`${css.goRailChipBox} ${railCls}`}>
-              <span className={css.goRailChipLabel}>{railRolling.short}</span>
-              <span className={css.goRailChipPct}>{goPercent(railRolling.win)}%</span>
-            </span>
-          </Tooltip>
+          {go.status === 'ok' && railRolling !== undefined ? (
+            <Tooltip label={railQuotaLabel} side="top" delayMs={400}>
+              <span className={`${css.goRailChipBox} ${railCls}`}>
+                <span className={css.goRailChipLabel}>{railRolling.short}</span>
+                <span className={css.goRailChipPct}>{goPercent(railRolling.win)}%</span>
+              </span>
+            </Tooltip>
+          ) : go.status === 'no-key' ? (
+            <Tooltip label={t('go.notConfigured')} side="top" delayMs={400}>
+              <span className={`${css.goRailChipBox}`}>
+                <span className={css.goRailChipLabel}>{t('go.label')}</span>
+                <span className={css.goRailChipPct}>—</span>
+              </span>
+            </Tooltip>
+          ) : (
+            <Tooltip label={t('go.unavailable')} side="top" delayMs={400}>
+              <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
+                <span className={css.goRailChipLabel}>{t('go.label')}</span>
+                <span className={css.goRailChipPct}>!</span>
+              </span>
+            </Tooltip>
+          )}
         </div>
       )}
       <Tooltip label={wide ? t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) }) : railLabel} side="right" delayMs={500} disabled={wide}>
@@ -185,9 +219,9 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                     </>
                   )}
               </span>
-              {/* 三色比例条：缓存 / 输入 / 输出 */}
+              {/* 三色比例条：缓存 / 输入 / 输出（跟随鼠标） */}
               {!err && todayTokens > 0 && (
-                <Tooltip label={barLabel} side="top" delayMs={300} disabled={!wide}>
+                <FollowTooltip label={barLabel} side="top" delayMs={300} disabled={!wide}>
                   <span className={css.barRow}>
                     {cacheTokens > 0 && (
                       <span
@@ -208,7 +242,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                       />
                     )}
                   </span>
-                </Tooltip>
+                </FollowTooltip>
               )}
             </>
           )}

@@ -29,21 +29,37 @@
 .cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-base);
   box-shadow: var(--dsw-shadow-lv1);
-  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-/* 磁贴悬浮：轻微抬升 + 加深阴影（仅汇总磁贴，Go/热力磁贴无互动故不应用）。 */
+/* 磁贴标题行：图标 + 说明（说明由底部移至标题图标后） */
+.cellHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cellHead .cellIcon {
+  margin-bottom: 0;
+}
+
+.cellHead .cellK {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 磁贴悬浮：加深阴影（移除 translateY，避免 fixed tooltip 被 transform 创建的 containing block 捕获而漂移/撑出滚动条） */
 .cell:hover {
   border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, var(--dsw-alias-border-l2));
   box-shadow: var(--dsw-shadow-lv2);
-  transform: translateY(-1px);
 }
 
 .cellIcon {

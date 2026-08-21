@@ -35,16 +35,17 @@ export function DatesTab({
   const buckets = useMemo(() => buildSet(series, range), [range, series])
   const curve = useMemo(() => curveOf(buckets, 300, 130), [buckets])
 
-  // 把 tooltip 约束在图表区域内。
+  // 把 tooltip 约束在图表区域内（按实际渲染尺寸，而非固定 viewBox）。
   useEffect(() => {
     if (!tip) { setTipPos(null); return }
     const w = tipRef.current?.offsetWidth ?? 180
     const h = tipRef.current?.offsetHeight ?? 40
-    const chartW = 300
+    const chartW = chartRef.current?.clientWidth ?? 300
+    const chartH = chartRef.current?.clientHeight ?? 130
     let left = tip.x - w / 2
     left = Math.max(6, Math.min(left, chartW - w - 6))
     let top = tip.y - h - 10
-    top = Math.max(6, Math.min(top, 130))
+    top = Math.max(6, Math.min(top, chartH))
     setTipPos({ left, top })
   }, [tip])
 

@@ -20,7 +20,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { DSH_HOME } from './logs.ts'
+import { getDshHome } from './logs.ts'
 import { modelKeyOf } from './agg.ts'
 import { splitModelKey } from '../utils.ts'
 
@@ -33,7 +33,7 @@ export const DB_FILE_NAME = 'ledger.sqlite'
 
 /** 账本数据库文件绝对路径（默认 $DSH_HOME/storages/dsh-usage-statistics/）。 */
 export function ledgerDatabasePath(): string {
-  return join(DSH_HOME, 'storages', LEDGER_DIR_NAME, DB_FILE_NAME)
+  return join(getDshHome(), 'storages', LEDGER_DIR_NAME, DB_FILE_NAME)
 }
 
 /** 一条账本事件：一次模型调用的用量（t 为毫秒时间戳）。 */

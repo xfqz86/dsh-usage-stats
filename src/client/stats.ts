@@ -113,14 +113,16 @@ export function buildSet(series: SeriesPoint[], range: string): SeriesPoint[] {
     }
     return buckets
   }
+  // 全量范围：从最早一天到今天（含两端），桶数 = diff + 1
   let spanDays = 1
   if (raw.length > 0) {
     let firstT = todayStart
     raw.forEach((p) => { if (p.t != null && p.t < firstT) firstT = p.t })
-    spanDays = Math.max(1, Math.round((todayStart - startOfDay(firstT)) / 86400000))
+    const diff = Math.round((todayStart - startOfDay(firstT)) / 86400000)
+    spanDays = Math.max(1, diff + 1)
   }
   const buckets: SeriesPoint[] = []
-  for (let i = spanDays; i >= 0; i--) {
+  for (let i = spanDays - 1; i >= 0; i--) {
     const t = todayStart - i * 86400000
     buckets.push(Object.assign(zero(t), map[t]))
   }

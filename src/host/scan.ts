@@ -12,7 +12,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId, SessionEvent } from '@deepseek-ai/dsh-session'
-import { SESSIONS_ROOT, findSessionLogs, parseLogLines } from './logs.ts'
+import { findSessionLogs, getSessionsRoot, parseLogLines } from './logs.ts'
 import type { UsageStore } from './store.ts'
 import { foldLedgerEvent, foldRecord } from './store.ts'
 import type { Ledger } from './ledger.ts'
@@ -47,9 +47,9 @@ export async function scanOnce(
   options: { initial?: boolean },
 ): Promise<void> {
   const initial = !!(options && options.initial)
-  if (initial) store.scanning = true
-  // 防重入：扫描永不重叠。
+  // 防重入：扫描永不重叠（检查在 scanning 标记之前，避免早返回时 scanning 卡死）。
   if (store.running) return
+  if (initial) store.scanning = true
   store.running = true
   store.scans += 1
   store.lastScanAt = Date.now()
@@ -63,7 +63,7 @@ export async function scanOnce(
 
     // 1) 会话 id 全集 = 磁盘原始日志 ∪ harness 会话清单。
     const logPaths = new Map<string, string>()
-    findSessionLogs(SESSIONS_ROOT, 0, logPaths)
+    findSessionLogs(getSessionsRoot(), 0, logPaths)
     const ids = new Set<string>(logPaths.keys())
 
     if (query) {

@@ -14,16 +14,22 @@
 .todayHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
-.todayCalls {
+.todayLabel {
   font-size: 11px;
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.todayMain {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .todayValue {
@@ -32,6 +38,23 @@
   font-variant-numeric: tabular-nums;
   line-height: 24px;
   color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+}
+
+.todayHitRate {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.todayCallsRight {
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

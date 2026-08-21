@@ -55,7 +55,10 @@ export default [
     sourcemap: true,
     clean: false,
     plugins: [cssModulesInline()],
-    external: [...CLIENT_EXTERNALS],
+    deps: {
+      neverBundle: [...CLIENT_EXTERNALS],
+      alwaysBundle: (id: string) => !CLIENT_EXTERNALS.includes(id),
+    },
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     },
@@ -64,7 +67,6 @@ export default [
         conditionNames: ['browser', 'import', 'require', 'default'],
       },
     },
-    noExternal: (id: string) => (CLIENT_EXTERNALS.includes(id) ? undefined : true),
     outputOptions: {
       entryFileNames: 'client.js',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,

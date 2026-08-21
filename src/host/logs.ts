@@ -4,12 +4,21 @@
  * （见 scan.ts），本模块只负责定位会话目录、解析文本行。
  */
 import { readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 
-/** DSH 数据主目录；SESSIONS_ROOT 是其下的会话目录。 */
-export const DSH_HOME = process.env.DSH_HOME || join(process.env.HOME || '', '.dsh')
+/** 读取当前 DSH 数据主目录（每次调用重新读取环境变量，避免模块加载时环境未就绪导致路径陈旧）。 */
+export function getDshHome(): string {
+  return process.env.DSH_HOME || join(process.env.HOME || '', '.dsh')
+}
+/** DSH 数据主目录；SESSIONS_ROOT 是其下的会话目录（兼容旧常量，内部已改用动态函数）。 */
+export const DSH_HOME = getDshHome()
+/** 会话根目录（兼容旧常量，新代码请用 getSessionsRoot()）。 */
 export const SESSIONS_ROOT = join(DSH_HOME, 'sessions')
+/** 动态获取会话根目录。 */
+export function getSessionsRoot(): string {
+  return join(getDshHome(), 'sessions')
+}
 
 /** 持久化的会话种子记录：会话头（SessionHeader）序列化后带
  *  `type: 'session'` 标记，作为日志第一行。 */
@@ -51,7 +60,7 @@ export function findSessionLogs(root: string, depth: number, out: Map<string, st
     if ((st as { isDirectory(): boolean }).isDirectory()) {
       findSessionLogs(p, depth + 1, out)
     } else if (entry === 'session.jsonl.zstd') {
-      const id = root.split('/').pop() || ''
+      const id = basename(root) || ''
       if (id) out.set(id, p)
     }
   }

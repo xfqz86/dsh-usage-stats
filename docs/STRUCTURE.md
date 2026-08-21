@@ -17,6 +17,8 @@ dsh-usage-statistics/
 │   │   ├── components/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab（DatesTab）：每日趋势曲线（SVG）+ 时间范围切换 chips + 悬停 tooltip。
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：每日趋势曲线 + 时间范围切换，悬停 tooltip 显示当日明细。
+│   │   │   ├── FollowTooltip.module.css ← 鼠标跟随 Tooltip（FollowTooltip）：复刻 primitives Tooltip 的视觉 （dark plate、white text、size m 无箭头），仅定位逻辑不同——水平跟随鼠标。
+│   │   │   ├── FollowTooltip.tsx ← 鼠标跟随的 Tooltip：用于三色比例条等宽条形锚点。
 │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：占总比条形图（表格样式在共用基元里）。
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表（含占比条）。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 + 标题刷新按钮）、扫描页脚。

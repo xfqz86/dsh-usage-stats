@@ -41,11 +41,11 @@ export function ModelsTab({
           </tr>
         </thead>
         <tbody>
-          {models.map((m, i) => {
+          {models.map((m) => {
             const total = usageTotal(m.usage)
             const share = Math.round((total / maxModel) * 1000) / 10
             return (
-              <tr key={i}>
+              <tr key={m.provider + '\u0000' + m.model}>
                 <td className={shared.cellText}>
                   {m.model} <span className={shared.sub}>· {m.provider}</span>
                 </td>

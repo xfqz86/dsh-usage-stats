@@ -48,12 +48,19 @@ export function writeError(res: ServerResponse, error: unknown): void {
  *  DSH web 服务绑定 127.0.0.1）。 */
 export function isLoopbackHost(hostHeader: string | undefined): boolean {
   if (!hostHeader) return false
-  let hostname = hostHeader
-  const at = hostHeader.lastIndexOf('@')
-  if (at !== -1) hostname = hostHeader.slice(at + 1)
+  let hostname = hostHeader.trim()
+  const at = hostname.lastIndexOf('@')
+  if (at !== -1) hostname = hostname.slice(at + 1)
+  // 主机名大小写不敏感，统一小写后再校验
+  hostname = hostname.toLowerCase()
   if (hostname.startsWith('[')) {
     const end = hostname.indexOf(']')
-    return end !== -1 && hostname.slice(1, end) === '::1'
+    if (end === -1) return false
+    if (hostname.slice(1, end) !== '::1') return false
+    const rest = hostname.slice(end + 1)
+    // 括号后只能为空或 :port
+    if (rest === '') return true
+    return /^:\d+$/.test(rest)
   }
   if (hostname === '::1') return true
   const colon = hostname.lastIndexOf(':')

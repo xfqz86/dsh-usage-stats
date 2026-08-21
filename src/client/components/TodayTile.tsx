@@ -4,13 +4,14 @@
  * 独立成文件（一个组件一个文件）。
  */
 
-import { IconSparkle16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconSparkle16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SeriesPoint } from '../../types.ts'
 import css from './TodayTile.module.css'
 import shared from './UsageStatsCommon.module.css'
 import { alignedRows, dayTotal, fmtFull, pctOf } from '../stats.ts'
 import { cacheTotal } from '../../utils.ts'
+import { FollowTooltip } from './FollowTooltip.tsx'
 
 /** 今日磁贴：tokens / 调用 / 比例条（tooltip 给各类明细与缓存命中率）。 */
 export function TodayTile({
@@ -41,18 +42,23 @@ export function TodayTile({
     ])
     : ''
 
+  // 调用量文本：中文带后缀"次"，英文回退到 "351 Calls"
+  const callsSuffix = t('panel.summary.callsSuffix')
+  const callsText = callsSuffix ? fmtFull(calls) + callsSuffix : fmtFull(calls) + ' ' + t('table.calls')
+
   return (
     <div className={`${shared.cell} ${css.cellToday}`}>
       <div className={css.todayHead}>
         <span className={shared.cellIcon}><IconSparkle16 /></span>
-        <span className={css.todayCalls}>
-          {t('panel.summary.todayCalls')} {fmtFull(calls)}{t('panel.summary.callsSuffix')}
-        </span>
+        <span className={css.todayLabel}>{t('footer.todayLabel')}</span>
       </div>
-      <span className={css.todayValue}>{fmtFull(tokens)}</span>
-      <span className={shared.cellK}>{t('panel.summary.todayTokens')}</span>
+      <div className={css.todayMain}>
+        <span className={css.todayValue}>{fmtFull(tokens)}</span>
+        <span className={css.todayHitRate}>{t('footer.cacheHitRate')} {pctOf(cacheHitRate)}</span>
+        <span className={css.todayCallsRight}>{callsText}</span>
+      </div>
       {tokens > 0 && (
-        <Tooltip label={barLabel} side="bottom" delayMs={300}>
+        <FollowTooltip label={barLabel} side="bottom" delayMs={300}>
           <span className={css.todayBar}>
             {cache > 0 && (
               <span className={`${css.todayBarSeg} ${css.todayBarCache}`} style={{ flex: cache }} />
@@ -64,7 +70,7 @@ export function TodayTile({
               <span className={`${css.todayBarSeg} ${css.todayBarOutput}`} style={{ flex: output }} />
             )}
           </span>
-        </Tooltip>
+        </FollowTooltip>
       )}
     </div>
   )

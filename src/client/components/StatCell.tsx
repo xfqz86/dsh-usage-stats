@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react'
 import css from './UsageStatsCommon.module.css'
 
-/** 渲染一个统计磁贴（可选图标 + 数值 + 标签）。 */
+/** 渲染一个统计磁贴（标题行：图标 + 说明，主体：数值）。 */
 export function StatCell({
   icon,
   value,
@@ -20,9 +20,11 @@ export function StatCell({
 }) {
   return (
     <div className={css.cell}>
-      {icon != null && <span className={css.cellIcon}>{icon}</span>}
+      <div className={css.cellHead}>
+        {icon != null && <span className={css.cellIcon}>{icon}</span>}
+        <span className={css.cellK}>{label}</span>
+      </div>
       <span className={css.cellV}>{value}</span>
-      <span className={css.cellK}>{label}</span>
     </div>
   )
 }

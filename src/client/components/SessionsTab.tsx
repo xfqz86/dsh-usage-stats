@@ -45,14 +45,14 @@ export function SessionsTab({
           </tr>
         </thead>
         <tbody>
-          {shownSessions.map((s, i) => {
+          {shownSessions.map((s) => {
             const when = s.lastActive
               ? Date.now() - s.lastActive < 86400000
                 ? t('time.today') + ' ' + new Date(s.lastActive).toTimeString().slice(0, 5)
                 : fullDayLabel(s.lastActive)
               : '--'
             return (
-              <tr key={i} title={(s.cwd ? s.cwd + '\n' : '') + (s.title ? s.title : '')}>
+              <tr key={s.id} title={(s.cwd ? s.cwd + '\n' : '') + (s.title ? s.title : '')}>
                 <td className={shared.cellText}>
                   {s.title || shortId(s.id)} <span className={shared.sub}>· {shortId(s.id)}</span>
                 </td>

@@ -41,6 +41,7 @@
 .tile {
   display: flex;
   flex-direction: column;
+  gap: 10px;
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);

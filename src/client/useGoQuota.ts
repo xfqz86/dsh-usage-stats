@@ -50,7 +50,13 @@ export function useGoQuota(
         parsed = {}
       }
       if (!live) return
-      if (parsed.ok === true && parsed.value) setData(parsed.value)
+      if (parsed.ok === true && parsed.value) {
+        setData(parsed.value)
+      } else {
+        // 首次请求失败时不能保持 null（会导致侧边栏/概览的 Go 组件直接不渲染）；
+        // 若已有数据则保留旧值等待下次轮询，仅在首屏无数据时置为 error 态以保证组件可见。
+        setData((prev) => prev ?? { status: 'error', fetchedAt: Date.now(), rolling: null, weekly: null, monthly: null })
+      }
     }
     load()
     const timerId = window.setInterval(load, minutes * 60 * 1000)
@@ -70,10 +76,15 @@ export function useGoQuota(
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ intervalMinutes: minutes, force: true }),
         })
-        const parsed = await response.json().catch(() => ({}))
-        if (parsed.ok === true && parsed.value) setData(parsed.value)
+        const parsed = await response.json().catch(() => ({} as { ok?: boolean; value?: GoQuota }))
+        if (parsed.ok === true && (parsed as { value?: GoQuota }).value) {
+          setData((parsed as { value: GoQuota }).value)
+        } else {
+          setData((prev) => prev ?? { status: 'error', fetchedAt: Date.now(), rolling: null, weekly: null, monthly: null })
+        }
       } catch {
-        // 强制抓取失败：保留旧数据，等待下一个轮询周期自然恢复。
+        // 强制抓取失败：首屏无数据时置为 error 以保证组件可见，否则保留旧数据等待下次轮询。
+        setData((prev) => prev ?? { status: 'error', fetchedAt: Date.now(), rolling: null, weekly: null, monthly: null })
       }
     })()
   }, [enabled, intervalMinutes])

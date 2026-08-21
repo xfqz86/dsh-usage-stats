@@ -48,7 +48,8 @@ export function ink(agg: Agg, u: TokenUsage): void {
 export function usable(
   event: SessionEvent,
 ): event is SessionEvent<'assistant/message'> & { data: { usage: TokenUsage } } {
-  return event.type === 'assistant/message' && event.data.usage !== undefined
+  const usage = (event as { data?: { usage?: unknown } })?.data?.usage
+  return event.type === 'assistant/message' && usage != null && typeof usage === 'object'
 }
 
 /** assistant/message 事件的模型身份：provider + model（\0 分隔），缺失记 unknown。 */

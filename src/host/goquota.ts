@@ -37,6 +37,7 @@ function findGoKeyInAuthJson(): string | null {
     home ? `${home}/.local/share/opencode/auth.json` : '',
     process.env.XDG_CONFIG_HOME ? `${process.env.XDG_CONFIG_HOME}/opencode/auth.json` : '',
     home ? `${home}/.config/opencode/auth.json` : '',
+    home ? `${home}/Library/Application Support/opencode/auth.json` : '',
   ].filter(Boolean)
   for (const path of candidates) {
     try {
