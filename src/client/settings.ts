@@ -33,7 +33,9 @@ export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
 }
 
 /** localStorage 存储键。 */
-const STORAGE_KEY = 'dsh-usage-statistics.settings'
+const STORAGE_KEY = 'dsh-usage-stats.settings'
+/** 旧版存储键（兼容迁移）。 */
+const LEGACY_STORAGE_KEY = 'dsh-usage-statistics.settings'
 
 /** 把任意数值夹成合法抓取间隔：整数分钟、不低于下限（非法值回退默认）。 */
 export function clampGoFetchMinutes(value: number): number {
@@ -44,7 +46,15 @@ export function clampGoFetchMinutes(value: number): number {
 /** 读取偏好：字段级类型校验 + 夹取，缺省 / 坏数据回退默认值。 */
 export function loadUsageSettings(): UsageSettings {
   try {
-    const raw = window.localStorage?.getItem(STORAGE_KEY)
+    let raw = window.localStorage?.getItem(STORAGE_KEY)
+    // 兼容旧版存储键：新键不存在时尝试读取旧键并迁移
+    if (!raw) {
+      const legacyRaw = window.localStorage?.getItem(LEGACY_STORAGE_KEY)
+      if (legacyRaw) {
+        raw = legacyRaw
+        try { window.localStorage?.setItem(STORAGE_KEY, legacyRaw) } catch {}
+      }
+    }
     if (!raw) return { ...USAGE_SETTINGS_DEFAULTS }
     const parsed = JSON.parse(raw) as Partial<UsageSettings>
     return {

@@ -102,7 +102,7 @@ const body = ['# 项目结构（自动生成）', '',
   '> 由 `scripts/gen-tree.mjs` 生成；改动代码结构后运行 `pnpm tree` 重新生成，',
   '> 请勿手改本文件。每行职责取自对应代码文件的头部块注释的首句；',
   '> 非代码文件走固定备注。', '',
-  '```', 'dsh-usage-statistics/', ...renderTree(ROOT, ''), '```', ''].join('\n')
+  '```', 'dsh-usage-stats/', ...renderTree(ROOT, ''), '```', ''].join('\n')
 
 const out = join(ROOT, 'docs', 'STRUCTURE.md')
 writeFileSync(out, body)

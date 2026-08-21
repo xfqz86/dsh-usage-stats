@@ -34,7 +34,7 @@ export function OverviewTab({
 }: {
   value: UsageSnapshot
   go: GoQuota | null
-  t: PropsLocale<'dsh-usage-statistics'>['t']
+  t: PropsLocale<'dsh-usage-stats'>['t']
   /** 立即刷新 Go 额度（不受抓取间隔控制）。 */
   onRefreshGo: () => void
 }) {

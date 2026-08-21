@@ -31,14 +31,14 @@ import { basename, dirname, relative, resolve } from 'node:path'
 import { transform } from 'lightningcss'
 
 /** 插件所属标识，用于注入标签的 data-plugin 属性。 */
-const PLUGIN_NAME = 'dsh-usage-statistics'
+const PLUGIN_NAME = 'dsh-usage-stats'
 
 /** 虚拟 id 前缀（后缀不含 .css，绕开 tsdown 的 css-guard）。 */
 const VIRTUAL_PREFIX = '\0css-modules:'
 /** 共享运行时虚拟 id：样式注入助手，整个 bundle 只定义一份。 */
 const RUNTIME_ID = `${VIRTUAL_PREFIX}runtime`
 /** 生成的 CSS 模块 import 共享运行时所用的说明符（经 resolveId 路由到 RUNTIME_ID）。 */
-const RUNTIME_SPECIFIER = 'dsh-usage-statistics:css-inject'
+const RUNTIME_SPECIFIER = 'dsh-usage-stats:css-inject'
 
 /** 每个 .module.css 对应一个注入标签；键为不含扩展名的文件名。 */
 function cssTagOf(filePath) {
@@ -66,7 +66,7 @@ function filePathOf(id) {
 
 /** 共享运行时源码：注入助手只定义一次，各 CSS 模块调一行即可。 */
 const RUNTIME_CODE = [
-  `/** dsh-usage-statistics CSS Modules 内联注入助手（构建时生成，幂等）。 */`,
+  `/** dsh-usage-stats CSS Modules 内联注入助手（构建时生成，幂等）。 */`,
   `export function injectPluginStyle(css, cssTag, pluginName) {`,
   `  if (typeof document === 'undefined') return;`,
   `  if (document.querySelector('style[data-plugin-css="' + cssTag + '"]')) return;`,

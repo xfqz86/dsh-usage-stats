@@ -5,7 +5,7 @@
 > 非代码文件走固定备注。
 
 ```
-dsh-usage-statistics/
+dsh-usage-stats/
 ├── docs/
 │   ├── API.md ← 服务端 HTTP 协议与偏好设置约定（随接口演进维护）
 │   └── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改

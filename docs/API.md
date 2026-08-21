@@ -58,7 +58,7 @@
 
 ## 5. 偏好设置（浏览器端 localStorage）
 
-- key `dsh-usage-statistics.settings`；读取失败 / 字段非法回退默认值。
+- key `dsh-usage-stats.settings`；读取失败 / 字段非法回退默认值。
 - 字段（`UsageSettings`，`src/client/settings.ts`）：
   - `goEnabled`（默认 `true`）：关闭则**不再轮询** go-quota，侧边栏与模态窗
     均不显示 Go 额度；

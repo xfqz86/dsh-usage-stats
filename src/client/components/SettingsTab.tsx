@@ -27,7 +27,7 @@ export function SettingsTab({
   onRefresh: () => void
   settings: UsageSettings
   onUpdateSettings: (patch: Partial<UsageSettings>) => void
-  t: PropsLocale<'dsh-usage-statistics'>['t']
+  t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   const [rebuildState, setRebuildState] = useState<'idle' | 'busy' | 'done'>('idle')
   // 重建账本二次确认：确认弹窗可见性 + 「我已了解」复选（防误触）。

@@ -2,7 +2,7 @@
  * 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
  *
  * 加载 lib/client.js（CJS 形态的插件 bundle），验证：
- *   1. 顶层通过 window.__ModuleLoader__.load 注册，id 为 dsh-usage-statistics；
+ *   1. 顶层通过 window.__ModuleLoader__.load 注册，id 为 dsh-usage-stats；
  *   2. factory(require) 可执行，exports.inject 含必需服务、exports.apply 为函数；
  *   3. CSS Modules 内联注入：每个 *.module.css 注入一个 data-plugin-css 的
  *      <style>（UsageStatsFooter / UsageStatsPanel / UsageStatsCommon /
@@ -79,7 +79,7 @@ try {
   nodeRequire(bundlePath)
 
   assert(registered !== null, 'bundle 未通过 window.__ModuleLoader__.load 注册')
-  assert(registered.id === 'dsh-usage-statistics', `注册 id 应为 dsh-usage-statistics，实际为 ${registered.id}`)
+  assert(registered.id === 'dsh-usage-stats', `注册 id 应为 dsh-usage-stats，实际为 ${registered.id}`)
 
   const exports = registered.factory(requireStub)
 
@@ -92,17 +92,17 @@ try {
   // 物理文件缓存虚拟 id 去重，否则 bundle 会有 N 份重复的样式文本与注入代码。
   const cssTags = document.styles.map((s) => s.attributes['data-plugin-css'])
   const expectedTags = [
-    'dsh-usage-statistics/UsageStatsFooter',
-    'dsh-usage-statistics/UsageStatsPanel',
-    'dsh-usage-statistics/UsageStatsCommon',
-    'dsh-usage-statistics/OverviewTab',
-    'dsh-usage-statistics/HeroTile',
-    'dsh-usage-statistics/UsageHeatmap',
-    'dsh-usage-statistics/DatesTab',
-    'dsh-usage-statistics/SessionsTab',
-    'dsh-usage-statistics/ModelsTab',
-    'dsh-usage-statistics/SettingsTab',
-    'dsh-usage-statistics/SettingsSwitch',
+    'dsh-usage-stats/UsageStatsFooter',
+    'dsh-usage-stats/UsageStatsPanel',
+    'dsh-usage-stats/UsageStatsCommon',
+    'dsh-usage-stats/OverviewTab',
+    'dsh-usage-stats/HeroTile',
+    'dsh-usage-stats/UsageHeatmap',
+    'dsh-usage-stats/DatesTab',
+    'dsh-usage-stats/SessionsTab',
+    'dsh-usage-stats/ModelsTab',
+    'dsh-usage-stats/SettingsTab',
+    'dsh-usage-stats/SettingsSwitch',
   ]
   for (const tag of expectedTags) {
     assert(cssTags.includes(tag), `缺少 ${tag} 的 style 标签`)
@@ -112,11 +112,11 @@ try {
   for (const tag of expectedTags) {
     assert(countOf(tag) === 1, `${tag} 应恰好注入一次，实际 ${countOf(tag)} 次（去重失效）`)
   }
-  const panelCss = document.styles.find((s) => s.attributes['data-plugin-css'] === 'dsh-usage-statistics/UsageStatsPanel')?.textContent ?? ''
+  const panelCss = document.styles.find((s) => s.attributes['data-plugin-css'] === 'dsh-usage-stats/UsageStatsPanel')?.textContent ?? ''
   // lightningcss 的 scoped 类名形如 `_<hash>_tabbar`，断言匹配 scoped 化后的选择器
   assert(panelCss.includes('_tabbar'), 'UsageStatsPanel 样式应包含 scoped 的 .tabbar（Tab 栏）')
   assert(panelCss.includes('_modal'), 'UsageStatsPanel 样式应包含 scoped 的 .modal')
-  const commonCss = document.styles.find((s) => s.attributes['data-plugin-css'] === 'dsh-usage-statistics/UsageStatsCommon')?.textContent ?? ''
+  const commonCss = document.styles.find((s) => s.attributes['data-plugin-css'] === 'dsh-usage-stats/UsageStatsCommon')?.textContent ?? ''
   assert(commonCss.includes('_cell'), 'UsageStatsCommon 样式应包含 scoped 的 .cell（统计磁贴基元）')
 
   console.log('CLIENT BUNDLE OK')

@@ -24,7 +24,7 @@ export function DatesTab({
   series, t,
 }: {
   series: SeriesPoint[]
-  t: PropsLocale<'dsh-usage-statistics'>['t']
+  t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   const [range, setRange] = useState<RangeKey>('7d')
   const [tip, setTip] = useState<{ x: number; y: number; label: string; total: number; calls: number } | null>(null)

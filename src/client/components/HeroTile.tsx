@@ -22,7 +22,7 @@ export function HeroTile({
   label: ReactNode
   usage: UsageAgg
   calls: number
-  t: PropsLocale<'dsh-usage-statistics'>['t']
+  t: PropsLocale<'dsh-usage-stats'>['t']
   /** 标题行右侧的补充信息（如总计卡片的会话数）。 */
   side?: ReactNode
 }) {

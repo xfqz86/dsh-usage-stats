@@ -28,7 +28,7 @@ import { UsageStatsPanel } from './UsageStatsPanel.tsx'
 import { FollowTooltip } from './FollowTooltip.tsx'
 
 export type UsageStatsFooterProps =
-  PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-statistics'>
+  PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-stats'>
 
 /** 单个额度窗口的展示条目（短/全名 + 窗口数据）。 */
 interface GoWindowEntry {

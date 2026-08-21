@@ -3,7 +3,7 @@
  *
  * 不依赖 harness 的 storage 家族：直接用 node:sqlite 的同步 API
  * （DatabaseSync，Node ≥22 内置；运行时仅打印一条 experimental 警告）。
- * 数据落在 `$DSH_HOME/storages/dsh-usage-statistics/ledger.sqlite`：
+ * 数据落在 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`：
  *
  *   - `events` 表：一行一条用量事件，PRIMARY KEY (t, session_id, seq) 天然
  *     幂等（同一条事件重复写入收敛，重开账本时每行只折一次；seq=-1 的未知
@@ -17,7 +17,7 @@
  * 所有读写同步：append / setMeta 即写即持久（自动提交），崩溃后重启从
  * sqlite 恢复，无需周期性对账；会话元数据在内存缓存一份供快照读取。
  */
-import { mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -28,13 +28,20 @@ import { splitModelKey } from '../utils.ts'
 /** 账本 schema 版本（PRAGMA user_version）：结构不兼容时自动清库重建。 */
 export const LEDGER_VERSION = 2
 /** 归属目录名（storages 下，与插件同名）。 */
-export const LEDGER_DIR_NAME = 'dsh-usage-statistics'
+export const LEDGER_DIR_NAME = 'dsh-usage-stats'
+/** 旧版目录名（兼容迁移：v0.1.0 前为 dsh-usage-statistics）。 */
+export const LEGACY_LEDGER_DIR_NAME = 'dsh-usage-statistics'
 /** 账本 sqlite 文件名。 */
 export const DB_FILE_NAME = 'ledger.sqlite'
 
-/** 账本数据库文件绝对路径（默认 $DSH_HOME/storages/dsh-usage-statistics/）。 */
+/** 账本数据库文件绝对路径（默认 $DSH_HOME/storages/dsh-usage-stats/）。 */
 export function ledgerDatabasePath(): string {
   return join(getDshHome(), 'storages', LEDGER_DIR_NAME, DB_FILE_NAME)
+}
+
+/** 兼容旧版账本路径（dsh-usage-statistics）—— 用于自动迁移。 */
+export function legacyLedgerDatabasePath(): string {
+  return join(getDshHome(), 'storages', LEGACY_LEDGER_DIR_NAME, DB_FILE_NAME)
 }
 
 /** 一条账本事件：一次模型调用的用量（t 为毫秒时间戳）。 */
@@ -138,6 +145,19 @@ export class Ledger {
 
   /** 打开账本：建目录/建表/迁移（user_version 不匹配则清库）+ 载入 meta 缓存。 */
   open(): void {
+    // 兼容旧版目录名：若新路径不存在但旧路径存在，自动迁移账本文件
+    if (this.path === ledgerDatabasePath()) {
+      const legacyPath = legacyLedgerDatabasePath()
+      if (!existsSync(this.path) && existsSync(legacyPath)) {
+        try {
+          mkdirSync(dirname(this.path), { recursive: true })
+          copyFileSync(legacyPath, this.path)
+          console.warn(`[usage-stats] 已从旧账本路径自动迁移: ${legacyPath} -> ${this.path}`)
+        } catch {
+          // 迁移失败不阻断启动，下次启动全量重扫即可
+        }
+      }
+    }
     mkdirSync(dirname(this.path), { recursive: true })
     this.db = new DatabaseSync(this.path)
     this.db.exec(EVENT_TABLE_DDL)
@@ -147,7 +167,7 @@ export class Ledger {
     if (version !== LEDGER_VERSION) {
       // 首次使用（version 0）或结构不兼容：清空重建，事件表为空 → 下次
       // 启动走全量重扫（账本结构升级的安全网，与旧版语义一致）。
-      console.warn(`[usage-statistics] 账本 schema 版本 ${String(version)} 与 ${String(LEDGER_VERSION)} 不一致，重建空账本`)
+      console.warn(`[usage-stats] 账本 schema 版本 ${String(version)} 与 ${String(LEDGER_VERSION)} 不一致，重建空账本`)
       this.db.exec('DROP TABLE IF EXISTS events')
       this.db.exec('DROP TABLE IF EXISTS session_meta')
       this.db.exec(EVENT_TABLE_DDL)

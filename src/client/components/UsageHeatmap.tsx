@@ -27,7 +27,7 @@ export function UsageHeatmap({
   series, t,
 }: {
   series: UsageSnapshot['series']['all']
-  t: PropsLocale<'dsh-usage-statistics'>['t']
+  t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   const grid = useMemo(() => heatGridOf(series, 26), [series])
   // 按天索引序列，供 tooltip 取每日明细（缓存 = cacheRead + cacheWrite）。

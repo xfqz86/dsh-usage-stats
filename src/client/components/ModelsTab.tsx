@@ -14,7 +14,7 @@ export function ModelsTab({
   models, t,
 }: {
   models: ModelStat[]
-  t: PropsLocale<'dsh-usage-statistics'>['t']
+  t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   const maxModel = models.length
     ? Math.max(1, ...models.map((m) => usageTotal(m.usage)))

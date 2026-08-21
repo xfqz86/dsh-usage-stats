@@ -1,6 +1,6 @@
 /** 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。 */
 
-export const NS = 'dsh-usage-statistics'
+export const NS = 'dsh-usage-stats'
 
 /** 中文文案（源语言）。 */
 export const zh = {
@@ -118,7 +118,7 @@ export type UsageStatsKey = keyof typeof zh
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** 用量统计界面文案（英文）。 */
-    'dsh-usage-statistics': UsageStatsKey
+    'dsh-usage-stats': UsageStatsKey
   }
 }
 

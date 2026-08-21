@@ -4,7 +4,7 @@
  * 以 mock 的 cordis 服务挂载 apply()（存储不 mock：账本直接写 node:sqlite
  * 文件），喂入真实会话事件（从 session.jsonl.zstd 提取），验证：
  *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/
- *     dsh-usage-statistics/ledger.sqlite），快照从聚合缓存读出；
+ *     dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
  *   - 重启恢复：重开同一 sqlite 文件、会话清单返回空，仍能从介质重建统计
  *     （不依赖重扫日志）；
  *   - 实时重放事件经 seq 水位去重，不重复计数；
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 // 隔离 DSH_HOME：账本 sqlite 写入临时目录，避免污染真实 ~/.dsh。
 const tmpHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-'))
 process.env.DSH_HOME = tmpHome
-const ledgerDir = join(tmpHome, 'storages', 'dsh-usage-statistics')
+const ledgerDir = join(tmpHome, 'storages', 'dsh-usage-stats')
 const dbFile = join(ledgerDir, 'ledger.sqlite')
 
 const { apply } = await import('../lib/index.js')

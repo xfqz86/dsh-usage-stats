@@ -15,7 +15,7 @@ export function SessionsTab({
   sessionsList, t,
 }: {
   sessionsList: SessionStat[]
-  t: PropsLocale<'dsh-usage-statistics'>['t']
+  t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   const [showAllSessions, setShowAllSessions] = useState(false)
   const hasMoreSessions = sessionsList.length > 8

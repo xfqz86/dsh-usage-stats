@@ -3,7 +3,7 @@
  *
  * 数据流（账本为唯一事实来源，聚合为派生缓存）：
  *   - 打开自管理 sqlite 账本（ledger.ts，`$DSH_HOME/storages/
- *     dsh-usage-statistics/ledger.sqlite`）→ events / session_meta 两表；
+ *     dsh-usage-stats/ledger.sqlite`）→ events / session_meta 两表；
  *   - 首启/重建：扫描会话日志 → 经 foldRecord 写入账本（同步落盘）并折
  *     叠聚合缓存；
  *   - 实时：session/event 监听逐条入账本 + 折叠（seq 水位去重，与扫描共享
@@ -38,7 +38,7 @@ import { snapshot } from './snapshot.ts'
 import { queryGoQuota } from './goquota.ts'
 import { readJsonBody, writeJson, writeOk, writeError, isLoopbackHost } from './http.ts'
 
-export const name = 'dsh-usage-statistics'
+export const name = 'dsh-usage-stats'
 
 /** 挂载前必需的服务（cordis fiber inject）。 */
 export const inject = ['webServer', 'sessionQuery', 'sessionPersistence']
@@ -65,7 +65,7 @@ export function apply(ctx: Context): void {
       foldRecord(store, ledger, id, event)
     } catch (e) {
       // 写账本失败记日志，不打断事件循环；账本/内存保持上次成功点。
-      console.error('[usage-statistics] 实时事件入账失败', e)
+      console.error('[usage-stats] 实时事件入账失败', e)
     }
   })
 
@@ -81,7 +81,7 @@ export function apply(ctx: Context): void {
     // 首启场景：全量扫描日志写入账本并折叠聚合。
     await scanOnce(ctx, store, ledger, { initial: true })
   }
-  void bootstrap().catch((e) => console.error('[usage-statistics] 初始化失败', e))
+  void bootstrap().catch((e) => console.error('[usage-stats] 初始化失败', e))
 
   // ---- JSON API 路由：POST /usage-stats/api/* ----
   const webServer = ctx.webServer
@@ -144,6 +144,6 @@ export function apply(ctx: Context): void {
           writeError(res, error)
         }
       },
-    }), 'dsh-usage-statistics: /usage-stats/api 路由')
+    }), 'dsh-usage-stats: /usage-stats/api 路由')
   }
 }

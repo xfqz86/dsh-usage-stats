@@ -37,7 +37,7 @@ import { SessionsTab } from './SessionsTab.tsx'
 import { ModelsTab } from './ModelsTab.tsx'
 import { SettingsTab } from './SettingsTab.tsx'
 
-export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-statistics'> {
+export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-stats'> {
   /** 模态窗是否显示。 */
   open: boolean
   /** 底部按钮轮询到的最新快照；不可用时为 null。 */
