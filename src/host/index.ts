@@ -38,7 +38,7 @@ import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregat
 import { Ledger } from './ledger.ts'
 import { snapshot } from './snapshot.ts'
 import { queryGoQuota } from './goquota.ts'
-import { readJsonBody, writeJson, writeOk, writeError, isLoopbackHost } from './http.ts'
+import { readJsonBody, writeJson, writeOk, writeError, isLoopbackHost, hasUsageStatsHeader } from './http.ts'
 
 export const name = '@xfqz86/dsh-usage-stats'
 
@@ -103,6 +103,12 @@ export function apply(ctx: Context): void {
       handler: async (req: IncomingMessage, res: ServerResponse) => {
         // 信任围栏：仅回环 Host 可调用（防 DNS 重绑定）。
         if (!isLoopbackHost(req.headers.host)) {
+          writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'forbidden' } })
+          return
+        }
+        // CSRF 围栏：回环之外再要求插件自定义头（浏览器跨站请求无法携带，
+        // 缺失或不匹配拒绝，响应与非回环 403 同形）。
+        if (!hasUsageStatsHeader(req.headers)) {
           writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'forbidden' } })
           return
         }

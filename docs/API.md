@@ -10,6 +10,9 @@
 - 每次调用先过**回环围栏**（仅 127.0.0.1 / localhost / ::1 / 127.x 网段 Host
   可访问，防 DNS 重绑定 / 跨站探测）；非回环返回 403
   `{ ok: false, error: { code: 'forbidden' } }`。
+- 所有请求必须携带请求头 `x-dsh-usage-stats: dsh-usage-stats`，缺失或不匹配
+  返回 403 `{ ok: false, error: { code: 'forbidden' } }`（防跨站 CSRF：浏览器
+  跨站 fetch 无法在不触发 preflight 的前提下携带自定义头）。
 - 成功响应 `{ ok: true, value }`；失败 `{ ok: false, error: { code, message } }`。
 - 非 POST → 405 `method-error`；未知方法 / 路径含斜杠 → 404 `not-found`；
   执行异常 → `writeError`（5xx）。

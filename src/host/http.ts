@@ -1,7 +1,7 @@
 /**
- * JSON API 的 HTTP 辅助：请求体读取、JSON 响应写出、回环信任围栏。
+ * JSON API 的 HTTP 辅助：请求体读取、JSON 响应写出、回环信任围栏与 CSRF 自定义头围栏。
  */
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 import { errorMessage } from '../utils.ts'
 
 /** 读取 POST 请求体（≤1MB），空体按 {} 处理，非法 JSON 抛错。 */
@@ -71,4 +71,20 @@ export function isLoopbackHost(hostHeader: string | undefined): boolean {
   const parts = hostname.split('.')
   return parts.length === 4 && parts[0] === '127' &&
     parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255)
+}
+
+/** CSRF 围栏要求的自定义请求头名与值（两者一致）。 */
+export const USAGE_STATS_HEADER_NAME = 'x-dsh-usage-stats'
+export const USAGE_STATS_HEADER_VALUE = 'dsh-usage-stats'
+
+/**
+ * CSRF 自定义头围栏：回环围栏之后的第二道校验。浏览器跨站请求（表单 /
+ * 简单请求）无法携带非简单自定义头，缺失或不匹配即拒绝，与回环围栏
+ * 共同构成 JSON API 的信任边界（响应与非回环 403 同形）。
+ */
+export function hasUsageStatsHeader(headers: IncomingHttpHeaders | undefined): boolean {
+  if (!headers) return false
+  const value = headers[USAGE_STATS_HEADER_NAME]
+  if (Array.isArray(value)) return value.includes(USAGE_STATS_HEADER_VALUE)
+  return value === USAGE_STATS_HEADER_VALUE
 }

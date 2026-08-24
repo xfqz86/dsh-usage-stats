@@ -18,6 +18,7 @@ import shared from '../components/UsageStatsCommon.module.css'
 import type { UsageSettings } from '../settings.ts'
 import { clampGoFetchMinutes, GO_FETCH_MIN_MINUTES } from '../settings.ts'
 import { SettingsSwitch } from '../components/SettingsSwitch.tsx'
+import { API_HEADERS } from '../api.ts'
 
 /** 设置 Tab：偏好设置 + 重建/清零账本（最底部，二次确认）。 */
 export function SettingsTab({
@@ -48,7 +49,7 @@ export function SettingsTab({
     try {
       const response = await fetch('/usage-stats/api/rebuild', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: API_HEADERS,
         body: JSON.stringify({}),
       })
       const json = await response.json().catch(() => null) as { ok?: boolean } | null
@@ -82,7 +83,7 @@ export function SettingsTab({
     try {
       const response = await fetch('/usage-stats/api/clear', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: API_HEADERS,
         body: JSON.stringify({}),
       })
       const json = await response.json().catch(() => null) as { ok?: boolean } | null

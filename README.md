@@ -82,7 +82,9 @@ dsh plugin --profile web add ./xfqz86-dsh-usage-stats-0.1.0.tgz
 
 ```bash
 curl -s -X POST http://127.0.0.1:3080/usage-stats/api/snapshot \
-  -H 'content-type: application/json' -d '{}'
+  -H 'content-type: application/json' \
+  -H 'x-dsh-usage-stats: dsh-usage-stats' -d '{}'
+# 缺失或不匹配 x-dsh-usage-stats 头时返回 403 forbidden（防跨站 CSRF）。
 ```
 
 ### 卸载

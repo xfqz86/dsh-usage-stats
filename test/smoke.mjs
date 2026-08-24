@@ -9,7 +9,9 @@
  *     （不依赖重扫日志）；
  *   - 实时重放事件经 seq 水位去重，不重复计数；
  *   - rebuild API 清空账本并重扫；
- *   - 回环围栏与 go-quota 路由。
+ *   - 信任围栏双闸：非回环 Host、回环但缺 x-dsh-usage-stats 自定义头均 403；
+ *   - go-quota 在清空 key / home 定位环境变量的隔离段内运行，精确期望
+ *     结构化 no-key，不产生任何真实外网请求。
  */
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -70,34 +72,35 @@ function mockCtx(query, persist) {
 
 const listeners = {}
 
-// 挂载插件（apply 同步；初始扫描在 apply 内 fire-and-forget）
+// 挂载插件（apply 同步注册路由；初始扫描在 apply 内 fire-and-forget）
 apply(mockCtx(sessionQuery, sessionPersistence))
-
-// 等待初始扫描完成（sqlite 同步落盘，等待折叠结束即可）
-await new Promise((r) => setTimeout(r, 3000))
 
 if (!route) { console.error('FAIL: route not registered'); process.exit(1) }
 console.log('route:', route.kind, route.path)
 
-// 账本落盘验证：自管理 sqlite 文件存在
-if (!existsSync(dbFile)) {
-  console.error('FAIL: sqlite 账本文件未生成', dbFile)
-  process.exit(1)
-}
-console.log('sqlite ledger:', dbFile)
+// CSRF 自定义头围栏的请求头名/值（与服务端 http.ts 约定一致）
+const CSRF_NAME = 'x-dsh-usage-stats'
+const CSRF_VALUE = 'dsh-usage-stats'
 
-function callRoute(body, url = '/usage-stats/api/snapshot') {
+/**
+ * 构造 mock 请求调用路由。默认携带合法回环 Host 与 CSRF 自定义头；
+ * opts.host 覆盖 Host（围栏负向用例），opts.csrfHeader=false 省略自定义头。
+ */
+function requestRoute(body, url = '/usage-stats/api/snapshot', opts = {}) {
+  const { host = '127.0.0.1:3080', csrfHeader = true } = opts
   return new Promise((resolve, reject) => {
     const handlers = {}
+    const headers = { host, 'content-type': 'application/json' }
+    if (csrfHeader) headers[CSRF_NAME] = CSRF_VALUE
     const req = {
       url,
       method: 'POST',
-      headers: { host: '127.0.0.1:3080', 'content-type': 'application/json' },
+      headers,
       on(ev, fn) { (handlers[ev] ||= []).push(fn) },
       destroy() {},
     }
     const res = {
-      writeHead(status, headers) { res.status = status; res.headers = headers },
+      writeHead(status, hdrs) { res.status = status; res.headers = hdrs },
       end(payload) { resolve({ status: res.status, payload }) },
     }
     if (body !== undefined) {
@@ -112,13 +115,47 @@ function callRoute(body, url = '/usage-stats/api/snapshot') {
   })
 }
 
+/** 默认调用（合法回环 Host + CSRF 自定义头）。 */
+function callRoute(body, url = '/usage-stats/api/snapshot') {
+  return requestRoute(body, url)
+}
+
+/** 指定 Host 的调用（回环围栏负向用例）。 */
+function callRouteWithHost(body, host, url = '/usage-stats/api/snapshot') {
+  return requestRoute(body, url, { host })
+}
+
+// 账本落盘验证：自管理 sqlite 文件存在（openLedger 在 apply 内同步建库）
+if (!existsSync(dbFile)) {
+  console.error('FAIL: sqlite 账本文件未生成', dbFile)
+  process.exit(1)
+}
+console.log('sqlite ledger:', dbFile)
+
 async function snapshotBody(body = { sessionId: null }) {
   const out = await callRoute(body)
   if (out.status !== 200) throw new Error(`快照 HTTP ${out.status}: ${out.payload}`)
   return JSON.parse(out.payload).value
 }
 
-const snap = await snapshotBody()
+/**
+ * 轮询 snapshot 直到 foldedEvents > 0 或超时抛错（每 ~intervalMs 一次，
+ * 默认 10s 上限）：替代固定 sleep，等待初始扫描 / 重开介质重建完成。
+ */
+async function waitForFolded(timeoutMs = 10_000, intervalMs = 200) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const s = await snapshotBody()
+    if (s.foldedEvents > 0) return s
+    if (Date.now() > deadline) {
+      throw new Error(`等待折叠超时（${String(timeoutMs)}ms）：foldedEvents 仍为 0`)
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
+// 等待初始扫描完成：轮询至首条事件折叠，首个就绪快照即统计基线
+const snap = await waitForFolded()
 console.log(JSON.stringify({
   scanning: snap.scanning,
   sessions: snap.sessions,
@@ -161,66 +198,69 @@ const out3 = await callRoute({ sessionId: null })
 const snap3raw = JSON.parse(out3.payload)
 console.log('loopback ok:', snap3raw.ok === true)
 
-// 回环围栏拒绝分支（非回环 host 应返回 403）
-function callRouteWithHost(body, host, url = '/usage-stats/api/snapshot') {
-  return new Promise((resolve, reject) => {
-    const handlers = {}
-    const req = {
-      url,
-      method: 'POST',
-      headers: { host, 'content-type': 'application/json' },
-      on(ev, fn) { (handlers[ev] ||= []).push(fn) },
-      destroy() {},
-    }
-    const res = {
-      writeHead(status, headers) { res.status = status; res.headers = headers },
-      end(payload) { resolve({ status: res.status, payload }) },
-    }
-    if (body !== undefined) {
-      queueMicrotask(() => {
-        for (const fn of handlers.data || []) fn(Buffer.from(JSON.stringify(body)))
-        for (const fn of handlers.end || []) fn()
-      })
-    } else {
-      queueMicrotask(() => { for (const fn of handlers.end || []) fn() })
-    }
-    route.handler(req, res).catch(reject)
-  })
-}
+// 回环围栏拒绝分支（非回环 host 应返回同形 403 forbidden）
 const forbiddenOut = await callRouteWithHost({}, 'evil.com', '/usage-stats/api/snapshot')
 const forbiddenBody = JSON.parse(forbiddenOut.payload)
-console.log('loopback forbidden ok:', forbiddenOut.status === 403 && forbiddenBody.ok === false)
-if (forbiddenOut.status !== 403 || forbiddenBody.ok !== false) {
+console.log('loopback forbidden ok:', forbiddenOut.status === 403 && forbiddenBody.ok === false &&
+  forbiddenBody.error?.code === 'forbidden' && forbiddenBody.error?.message === 'forbidden')
+if (forbiddenOut.status !== 403 || forbiddenBody.ok !== false ||
+  forbiddenBody.error?.code !== 'forbidden' || forbiddenBody.error?.message !== 'forbidden') {
   console.error('FAIL: 回环围栏未拒绝非回环 host')
   process.exit(1)
 }
 
-// OpenCode Go 额度路由：queryGoQuota 永不抛错（结构化状态）
-const goOut = await callRoute({}, '/usage-stats/api/go-quota')
-const goBody = JSON.parse(goOut.payload)
-console.log('go-quota ok:', goBody.ok === true, '| status:', goBody.value?.status, '| rolling:', goBody.value?.rolling?.percent ?? null)
-if (goBody.ok !== true || !['ok', 'no-key', 'error'].includes(goBody.value?.status)) {
-  console.error('FAIL: unexpected go-quota response')
+// CSRF 自定义头围栏拒绝分支：合法回环 Host 但缺 x-dsh-usage-stats 头 →
+// 与非回环 403 同形 { ok:false, error:{ code:'forbidden', message:'forbidden' } }
+const csrfOut = await requestRoute({}, '/usage-stats/api/snapshot', { csrfHeader: false })
+const csrfBody = JSON.parse(csrfOut.payload)
+console.log('csrf header forbidden ok:', csrfOut.status === 403 && csrfBody.ok === false &&
+  csrfBody.error?.code === 'forbidden' && csrfBody.error?.message === 'forbidden')
+if (csrfOut.status !== 403 || csrfBody.ok !== false ||
+  csrfBody.error?.code !== 'forbidden' || csrfBody.error?.message !== 'forbidden') {
+  console.error('FAIL: 回环请求缺 CSRF 自定义头未被拒绝')
   process.exit(1)
 }
 
-// go-quota 支持客户端抓取间隔（TTL 适配）：携带 intervalMinutes（如 3 分钟下限）
-// 不改变结构化结果，且不抛错；未携带时用默认 5 分钟（上面已覆盖）。
-const goOut2 = await callRoute({ intervalMinutes: 3 }, '/usage-stats/api/go-quota')
-const goBody2 = JSON.parse(goOut2.payload)
-console.log('go-quota w/ interval ok:', goBody2.ok === true, '| status:', goBody2.value?.status)
-if (goBody2.ok !== true || !['ok', 'no-key', 'error'].includes(goBody2.value?.status)) {
-  console.error('FAIL: unexpected go-quota response with intervalMinutes')
-  process.exit(1)
-}
+// go-quota 段网络隔离：清空 key 相关环境变量与 home / XDG 定位变量，使
+// resolveGoKey 确定性返回 null → fetchGoQuota 直接短路为 no-key，
+// 冒烟测试不产生任何真实外网请求；段结束（含异常路径）后恢复原环境。
+const GO_ENV_KEYS = ['OPENCODE_GO_API_KEY', 'OPENCODE_API_KEY', 'HOME', 'USERPROFILE', 'XDG_CONFIG_HOME']
+const savedGoEnv = GO_ENV_KEYS.map((k) => [k, process.env[k]])
+for (const k of GO_ENV_KEYS) delete process.env[k]
+try {
+  // OpenCode Go 额度路由：无 key 场景精确期望结构化 no-key（永不抛错、不出网）
+  const goOut = await callRoute({}, '/usage-stats/api/go-quota')
+  const goBody = JSON.parse(goOut.payload)
+  console.log('go-quota ok:', goBody.ok === true, '| status:', goBody.value?.status)
+  if (goBody.ok !== true || goBody.value?.status !== 'no-key') {
+    console.error('FAIL: unexpected go-quota response (expected no-key)')
+    process.exit(1)
+  }
 
-// go-quota force=true：绕过 TTL 缓存强制重新抓取（仍返回结构化状态，不抛错）
-const goOut3 = await callRoute({ intervalMinutes: 3, force: true }, '/usage-stats/api/go-quota')
-const goBody3 = JSON.parse(goOut3.payload)
-console.log('go-quota force ok:', goBody3.ok === true, '| status:', goBody3.value?.status)
-if (goBody3.ok !== true || !['ok', 'no-key', 'error'].includes(goBody3.value?.status)) {
-  console.error('FAIL: unexpected go-quota response with force')
-  process.exit(1)
+  // go-quota 支持客户端抓取间隔（TTL 适配）：携带 intervalMinutes（如 3 分钟下限）
+  // 命中有效 TTL 缓存，仍为同一 no-key 结构化结果。
+  const goOut2 = await callRoute({ intervalMinutes: 3 }, '/usage-stats/api/go-quota')
+  const goBody2 = JSON.parse(goOut2.payload)
+  console.log('go-quota w/ interval ok:', goBody2.ok === true, '| status:', goBody2.value?.status)
+  if (goBody2.ok !== true || goBody2.value?.status !== 'no-key') {
+    console.error('FAIL: unexpected go-quota response with intervalMinutes (expected no-key)')
+    process.exit(1)
+  }
+
+  // go-quota force=true：绕过 TTL 缓存强制重新抓取；无 key 下仍确定性
+  // 短路为 no-key（且受官方端点频率保护，不出网）。
+  const goOut3 = await callRoute({ intervalMinutes: 3, force: true }, '/usage-stats/api/go-quota')
+  const goBody3 = JSON.parse(goOut3.payload)
+  console.log('go-quota force ok:', goBody3.ok === true, '| status:', goBody3.value?.status)
+  if (goBody3.ok !== true || goBody3.value?.status !== 'no-key') {
+    console.error('FAIL: unexpected go-quota response with force (expected no-key)')
+    process.exit(1)
+  }
+} finally {
+  for (const [k, v] of savedGoEnv) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
 }
 
 // 重启恢复路径：重开同一 sqlite 文件、会话清单返回空 → 账本有事件 →
@@ -228,8 +268,8 @@ if (goBody3.ok !== true || !['ok', 'no-key', 'error'].includes(goBody3.value?.st
 const emptyQuery = { async listSessions() { return [] }, async readSession() { return { events: [] } } }
 const emptyPersist = { async list() { return [] }, async readFrom() { return { events: [] } }, supportsRawArtifacts: true, async readRaw() { return undefined } }
 apply(mockCtx(emptyQuery, emptyPersist))
-await new Promise((r) => setTimeout(r, 500))
-const snap4 = await snapshotBody()
+// 重开介质后同样轮询等待从预统计重建完成（替代固定 sleep，慢机稳健）
+const snap4 = await waitForFolded()
 console.log('after reopen (rebuild from medium):', JSON.stringify({ calls: snap4.all.calls, foldedEvents: snap4.foldedEvents, sessions: snap4.sessions }))
 if (snap4.all.calls !== snap.all.calls) {
   console.error('FAIL: 重启恢复统计不一致（应直接从 sqlite 重建）')
