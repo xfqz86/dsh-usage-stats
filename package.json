@@ -1,8 +1,7 @@
 {
-  "name": "dsh-usage-stats",
+  "name": "@xfqz86/dsh-usage-stats",
   "version": "0.1.0",
   "description": "DSH web plugin: token usage statistics in the sidebar footer — today badge (wide/rail) opening a detail panel with per-model/provider breakdown, session list, daily trend curve and heatmap (host scans session logs, serves /usage-stats/api/snapshot)",
-  "private": true,
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -16,12 +15,25 @@
   },
   "files": [
     "lib",
-    "src",
-    "README.md",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "README.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xfqz86/dsh-usage-stats.git"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dsh": {
     "client": {

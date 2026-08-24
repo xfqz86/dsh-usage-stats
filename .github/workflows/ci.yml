@@ -1,0 +1,117 @@
+# CI：验证类型、构建与冒烟测试
+# 每次 PR 与推送到 dev/main 均执行，确保发布前的完整性（dev 为开发分支，main 为生产分支）。
+name: CI
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build (production, minified, no map)
+        run: NODE_ENV=production pnpm build
+
+      - name: Smoke — host (node:sqlite ledger + api)
+        run: node test/smoke.mjs
+
+      - name: Smoke — client bundle (ModuleLoader + CSS injection)
+        run: node test/client-bundle.mjs
+
+      - name: Verify prepare (git install path, before prune)
+        run: |
+          echo "prepare script is: $(node -p "require('./package.json').scripts.prepare")"
+          test "$(node -p "require('./package.json').scripts.prepare")" = "tsdown" || (echo "::error::prepare must be tsdown" && exit 1)
+          echo "prepare ok — git installs will build lib from src via pnpm prepare"
+
+      - name: Prune package.json for distribution check
+        run: |
+          echo "before keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
+          node scripts/prune-package.mjs
+          echo "after keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
+          cat package.json
+          # 校验仅保留必要字段
+          node -e "
+            const j = require('./package.json');
+            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
+            const extra = Object.keys(j).filter(k => !allow.includes(k));
+            if (extra.length) { console.error('pruned package.json has extra keys:', extra.join(', ')); process.exit(1); }
+            console.log('prune ok — allowlist only');
+          "
+
+      - name: Verify packed contents (after prune)
+        run: |
+          pnpm pack --dry-run
+          echo "--- tarball file list (dry-run) ---"
+          pnpm pack --dry-run 2>&1 | grep -E "lib/|cordis\.patch\.yml|package\.json"
+
+      - name: Verify packed install (after prune)
+        run: |
+          mkdir -p /tmp/pack-test
+          pnpm pack --pack-destination /tmp/pack-test
+          tar -tzf /tmp/pack-test/*.tgz | sort
+          echo "--- verify lib exists in tarball ---"
+          tar -tzf /tmp/pack-test/*.tgz | grep -q "package/lib/index.js" || (echo "::error::lib/index.js missing in tarball" && exit 1)
+          tar -tzf /tmp/pack-test/*.tgz | grep -q "package/lib/client.js" || (echo "::error::lib/client.js missing in tarball" && exit 1)
+          tar -tzf /tmp/pack-test/*.tgz | grep -q "package/cordis.patch.yml" || (echo "::error::cordis.patch.yml missing in tarball" && exit 1)
+          tar -tzf /tmp/pack-test/*.tgz | grep -q "package/README.md" || (echo "::error::README.md missing in tarball" && exit 1)
+          tar -tzf /tmp/pack-test/*.tgz | grep -q "package/package.json" || (echo "::error::package.json missing in tarball" && exit 1)
+          echo "--- verify ONLY allowed files (lib + package.json + cordis.patch.yml + README.md, no map) ---"
+          count=$(tar -tzf /tmp/pack-test/*.tgz | wc -l)
+          echo "file count: $count"
+          if [ "$count" -ne 5 ]; then
+            echo "::error::unexpected file count $count, expected 5 (lib/index.js + lib/client.js + package.json + cordis.patch.yml + README.md)"
+            tar -tzf /tmp/pack-test/*.tgz | sort
+            exit 1
+          fi
+          if tar -tzf /tmp/pack-test/*.tgz | grep -q "package/lib/client.js.map"; then
+            echo "::error::client.js.map should not be in tarball"
+            exit 1
+          fi
+          if tar -tzf /tmp/pack-test/*.tgz | grep -Eq "package/(src/|tsconfig|tsdown|scripts/|test/|docs/|\.github/)"; then
+            echo "::error::tarball contains unwanted src/tsconfig/scripts/test files"
+            tar -tzf /tmp/pack-test/*.tgz | sort
+            exit 1
+          fi
+          echo "--- verify packed package.json is pruned ---"
+          if tar -xzOf /tmp/pack-test/*.tgz package/package.json | grep -q '"devDependencies"'; then
+            echo "::error::devDependencies still in packed package.json"
+            exit 1
+          fi
+          if tar -xzOf /tmp/pack-test/*.tgz package/package.json | grep -q '"scripts"'; then
+            echo "::error::scripts still in packed package.json"
+            exit 1
+          fi
+          tar -xzOf /tmp/pack-test/*.tgz package/package.json | node -e "
+            const j = JSON.parse(require('fs').readFileSync(0,'utf-8'));
+            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
+            const extra = Object.keys(j).filter(k => !allow.includes(k));
+            if (extra.length) { console.error('packed package.json has extra keys:', extra.join(', ')); process.exit(1); }
+            console.log('packed package.json pruned ok:', Object.keys(j).join(', '));
+          "
+          echo "packed install ok — only lib(2) + package.json(pruned) + cordis.patch.yml + README.md"

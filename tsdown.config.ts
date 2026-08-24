@@ -14,12 +14,19 @@
  *
  * 源码结构：src/host（服务端，Node ESM）与 src/client（浏览器端 bundle）
  * 分离，入口分别是 src/host/index.ts 与 src/client/index.ts。
+ *
+ * 构建区分：
+ * - 本地调试（`pnpm build`，`NODE_ENV` 非 production）：不压缩、保留 sourcemap，便于跟踪问题
+ * - 生产发布（`NODE_ENV=production pnpm build`，CI/release 使用）：压缩（minify）且无 sourcemap，最终产物仅含压缩后的 2 个 js（无 map）
  */
 import type { UserConfig } from 'tsdown'
 import { cssModulesInline } from './scripts/css-modules-inline.mjs'
 
-/** bundle id = package.json `name`。 */
-const PLUGIN_ID = 'dsh-usage-stats'
+/** 是否为生产构建：仅 `NODE_ENV=production` 时压缩并去掉 sourcemap，便于本地调试时保留可读性与映射。 */
+const isProd = process.env.NODE_ENV === 'production'
+
+/** bundle id = package.json `name`（必须与 package.json 的 name 完全一致，含 scope）。 */
+const PLUGIN_ID = '@xfqz86/dsh-usage-stats'
 
 /** web shell 冻结模块表中的模块标识。 */
 const CLIENT_EXTERNALS = [
@@ -45,6 +52,8 @@ export default [
     fixedExtension: false,
     dts: false,
     clean: true,
+    minify: isProd,
+    sourcemap: !isProd,
   },
   {
     entry: { client: 'src/client/index.ts' },
@@ -52,8 +61,9 @@ export default [
     format: 'cjs',
     platform: 'browser',
     dts: false,
-    sourcemap: true,
+    sourcemap: !isProd,
     clean: false,
+    minify: isProd,
     plugins: [cssModulesInline()],
     deps: {
       neverBundle: [...CLIENT_EXTERNALS],

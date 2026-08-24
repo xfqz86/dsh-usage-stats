@@ -1,0 +1,170 @@
+# 同步 release 分支（GitHub 安装路径 — 仅最终交付物）
+# 目标：release 分支仅包含最终交付物（lib/ + package.json(已剪枝) + cordis.patch.yml + README.md），
+#   不含任何源码（src/、tsconfig、scripts、test、.github 等），满足：
+#     dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release
+#   dev 分支的源码安装仍通过 prepare 自构建（github:xfqz86/dsh-usage-stats），release 分支则为预构建的最小形态。
+#
+# 触发：
+#   - 推送到 main 时自动同步（dev 为开发分支，不参与发布）
+#   - 手动 workflow_dispatch
+#
+# 实现：构建 lib（压缩，无 map）→ 剪枝 package.json → 组装 payload（4 项）→ 以 orphan/clean 方式覆盖 release 分支
+name: sync-release-branch
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: sync release branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build lib (production, minified, no map)
+        run: NODE_ENV=production pnpm build
+
+      - name: Verify lib
+        run: |
+          ls -lh lib/
+          test -f lib/index.js || (echo "::error::lib/index.js missing" && exit 1)
+          test -f lib/client.js || (echo "::error::lib/client.js missing" && exit 1)
+          if [ -f lib/client.js.map ]; then echo "::error::lib/client.js.map should not exist (sourcemap disabled)"; exit 1; fi
+          # 验证为压缩产物（minify 后应明显小于未压缩的 35k/116k）
+          idx=$(wc -c < lib/index.js); cli=$(wc -c < lib/client.js)
+          echo "lib ready — $idx bytes index, $cli bytes client (both minified, no map)"
+          if [ "$cli" -gt 80000 ]; then echo "::warning::client.js >80k, may not be minified"; fi
+
+      - name: Prune package.json for distribution
+        run: |
+          echo "before keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
+          cp package.json package.json.full
+          node scripts/prune-package.mjs
+          echo "after keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
+          cat package.json
+          node -e "
+            const j = require('./package.json');
+            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
+            const extra = Object.keys(j).filter(k => !allow.includes(k));
+            if (extra.length) { console.error('pruned package.json has extra keys:', extra.join(', ')); process.exit(1); }
+            console.log('prune ok');
+          "
+
+      - name: Assemble payload (only deliverables)
+        run: |
+          rm -rf /tmp/payload && mkdir -p /tmp/payload/lib
+          cp -r lib/* /tmp/payload/lib/
+          cp package.json /tmp/payload/package.json
+          cp cordis.patch.yml /tmp/payload/cordis.patch.yml
+          cp README.md /tmp/payload/README.md
+          echo "=== payload ==="
+          find /tmp/payload -type f | sort
+          echo "--- payload package.json ---"
+          cat /tmp/payload/package.json
+          # 校验 payload 仅 4 项顶层（lib 目录 + 3 文件）→ 5 文件（含 lib/index.js + lib/client.js + 3 顶部，无 map 已压缩）
+          count=$(find /tmp/payload -type f | wc -l)
+          echo "payload file count: $count (expect 5: lib/index.js, lib/client.js + package.json/cordis.patch.yml/README.md)"
+          if [ "$count" -ne 5 ]; then
+            echo "::error::unexpected payload file count $count"
+            find /tmp/payload -type f | sort
+            exit 1
+          fi
+          if find /tmp/payload -name "client.js.map" | grep -q .; then
+            echo "::error::payload contains client.js.map (should be no map)"
+            exit 1
+          fi
+          if find /tmp/payload -name "*.ts" | grep -q .; then
+            echo "::error::payload contains .ts source"
+            exit 1
+          fi
+
+      - name: Sync to release branch (minimal, no source)
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMMIT_MSG="chore(release): deliver $(node -p "require('/tmp/payload/package.json').version") for ${GITHUB_SHA}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 准备 release 分支：若远端存在则检出，否则创建 orphan
+          if git show-ref --verify --quiet refs/remotes/origin/release; then
+            echo "release branch exists — fetching"
+            git fetch origin release:release
+            git checkout release
+          else
+            echo "creating orphan release branch"
+            git checkout --orphan release
+          fi
+
+          # 清空 release 分支所有内容（保留 .git）
+          # git rm 针对已跟踪文件，rm -rf 针对未跟踪；payload 在 /tmp 不受影响
+          git rm -rf . 2>/dev/null || true
+          # 兜底：物理删除残留的顶层文件/目录（除 .git）
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
+          echo "cleaned release branch, now empty except .git"
+          ls -la
+
+          # 写入 payload（仅 4 项）
+          cp -r /tmp/payload/lib ./
+          cp /tmp/payload/package.json ./
+          cp /tmp/payload/cordis.patch.yml ./
+          cp /tmp/payload/README.md ./
+
+          echo "=== release branch content ==="
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' | sort
+          find . -type f | sort
+          ls -lh lib/ package.json cordis.patch.yml README.md
+
+          # 校验 release 分支内容：仅允许的 4 顶层 + lib 内 2 文件（无 map，已压缩）
+          if [ ! -f lib/index.js ] || [ ! -f lib/client.js ] || [ ! -f package.json ] || [ ! -f cordis.patch.yml ] || [ ! -f README.md ]; then
+            echo "::error::release payload missing required files"
+            exit 1
+          fi
+          if [ -f lib/client.js.map ]; then echo "::error::release contains client.js.map"; exit 1; fi
+          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'README.md' | grep -q .; then
+            echo "::error::release branch contains unexpected top-level files"
+            find . -mindepth 1 -maxdepth 1 ! -name '.git' | sort
+            exit 1
+          fi
+          if find . -name "*.ts" -o -name "tsconfig.json" -o -name "pnpm-workspace.yaml" | grep -q .; then
+            echo "::error::release branch contains source files"
+            exit 1
+          fi
+
+          # 提交（即使 lib 已预构建，.gitignore 在 dev 中忽略 lib，但 release 分支已清空无 .gitignore，直接 add）
+          git add lib package.json cordis.patch.yml README.md
+          if git diff --cached --quiet; then
+            echo "No changes to release branch — already up to date"
+            exit 0
+          fi
+          git commit -m "$COMMIT_MSG"
+          git push origin release
+          echo "pushed release branch at $(git rev-parse HEAD)"
+
+      - name: Summary
+        run: |
+          echo "release branch synced — minimal deliverables only:"
+          echo "  lib/ package.json cordis.patch.yml README.md"
+          echo "users can now install via:"
+          echo "  dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release"

@@ -28,6 +28,7 @@ const HEADER_EXTS = new Set(['.ts', '.tsx', '.js', '.mjs', '.css'])
 /** 非代码文件的固定职责备注（以相对仓库根路径为键；这些文件无块注释可提取）。 */
 const NOTES = {
   'docs/API.md': '服务端 HTTP 协议与偏好设置约定（随接口演进维护）',
+  'docs/PUBLISH.md': '发布流程（GitHub Actions 交付三种形态：release / npm / tarball）',
   'docs/STRUCTURE.md': '生成文件：由 `pnpm tree` 重新生成，勿手改',
   'AGENTS.md': '工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）',
   'README.md': '面向普通用户的功能说明',

@@ -3,4 +3,4 @@
 # 不依赖 harness 的 storage 家族，无需额外的行或后端路由。
 - insert:
     - id: usage-stats
-      name: 'dsh-usage-stats'
+      name: '@xfqz86/dsh-usage-stats'
