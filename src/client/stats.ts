@@ -104,12 +104,19 @@ export function buildSet(series: SeriesPoint[], range: string): SeriesPoint[] {
   const todayStart = startOfDay(Date.now())
   const zero = (t: number): SeriesPoint =>
     ({ t, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, calls: 0 })
+  // 桶 key 从今天零点按本地日历逐日推进（Date.setDate，与 heatGridOf 同款），
+  // 不用 todayStart - i * 86400000 毫秒回推：夏令时切换日的相邻本地零点间隔
+  // 不是 24h，毫秒回推会让桶 key 整体漂移、匹配不上 host 端 startOfDay 的
+  // 产出；非 DST 时区两者完全等价（t 仍为本地零点毫秒）。
+  const cursor = new Date(todayStart)
 
   if (days !== null) {
+    cursor.setDate(cursor.getDate() - (days - 1))
     const buckets: SeriesPoint[] = []
     for (let i = days - 1; i >= 0; i--) {
-      const t = todayStart - i * 86400000
+      const t = cursor.getTime()
       buckets.push(Object.assign(zero(t), map[t]))
+      cursor.setDate(cursor.getDate() + 1)
     }
     return buckets
   }
@@ -121,10 +128,12 @@ export function buildSet(series: SeriesPoint[], range: string): SeriesPoint[] {
     const diff = Math.round((todayStart - startOfDay(firstT)) / 86400000)
     spanDays = Math.max(1, diff + 1)
   }
+  cursor.setDate(cursor.getDate() - (spanDays - 1))
   const buckets: SeriesPoint[] = []
   for (let i = spanDays - 1; i >= 0; i--) {
-    const t = todayStart - i * 86400000
+    const t = cursor.getTime()
     buckets.push(Object.assign(zero(t), map[t]))
+    cursor.setDate(cursor.getDate() + 1)
   }
   return buckets
 }
