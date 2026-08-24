@@ -23,22 +23,72 @@ DSH（DeepSeek Harness）的 Web 用量统计插件。按**模型 / Provider**�
 
 ## 安装与卸载
 
-本插件为标准 cordis 组合包，通过 `cordis.patch.yml` 注入 web profile。
+本插件为标准 cordis 组合包（`dsh.bundle.patch` → `cordis.patch.yml`），通过 profile 注入 web。
+
+### 本地开发（link）
 
 ```bash
 # 在本仓库目录执行
 dsh plugin --profile web add "link:$(pwd)"
+# 卸载（按安装时的包名）
+dsh plugin --profile web remove @xfqz86/dsh-usage-stats
+# 兼容旧 id 的卸载
+# dsh plugin --profile web remove dsh-usage-stats
 ```
+
+### 从 npm 安装（推荐，预构建，无需授权）
+
+发布到 npm 后，用户无需源码即可安装：
 
 ```bash
-dsh plugin --profile web remove dsh-usage-stats
+dsh plugin --profile web add @xfqz86/dsh-usage-stats
+# 指定版本
+dsh plugin --profile web add @xfqz86/dsh-usage-stats@0.1.0
 ```
 
-安装后重启 dsh（web profile）生效。验证：
+### 从 GitHub 安装
+
+```bash
+# 方式一：源码安装（dev 分支，触发 pnpm prepare 自构建）
+dsh plugin --profile web add github:xfqz86/dsh-usage-stats
+# 或显式指定 dev 分支
+# dsh plugin --profile web add github:xfqz86/dsh-usage-stats#dev
+# pnpm ≥10 首次会拒绝执行 prepare 并提示：
+#   allowBuilds:
+#     "@xfqz86/dsh-usage-stats": true
+# 按提示将该段加入 profile 的 pnpm-workspace.yaml 后重新执行 add
+
+# 方式二：预构建 release 分支（GitHub Actions 自动将 lib 推送至 release 分支，无需授权）
+dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release
+
+# 锁定 commit（可信安装）
+dsh plugin --profile web add github:xfqz86/dsh-usage-stats#<commit-sha>
+```
+
+### 从 tarball 安装
+
+```bash
+# 在本仓库目录生成 tarball（CI 与 release workflow 同款产物，NODE_ENV=production 产出压缩无 map）
+NODE_ENV=production pnpm build
+pnpm pack          # 或 pnpm pack --pack-destination ./dist
+# 产物：xfqz86-dsh-usage-stats-0.1.0.tgz（内含 lib/ + cordis.patch.yml + README.md，已剪枝无 prepare）
+dsh plugin --profile web add ./xfqz86-dsh-usage-stats-0.1.0.tgz
+# 或直接交付该 tgz 文件
+```
+
+### 验证
+
+安装后重启 dsh（web profile）生效：
 
 ```bash
 curl -s -X POST http://127.0.0.1:3080/usage-stats/api/snapshot \
   -H 'content-type: application/json' -d '{}'
+```
+
+### 卸载
+
+```bash
+dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 ```
 
 ## 设置
@@ -64,7 +114,8 @@ curl -s -X POST http://127.0.0.1:3080/usage-stats/api/snapshot \
 
 - 工程规范与架构说明见 `AGENTS.md`；
 - 接口协议见 `docs/API.md`；
-- 模块结构与文件职责见 `docs/STRUCTURE.md`（由 `pnpm tree` 生成，请勿手改）。
+- 模块结构与文件职责见 `docs/STRUCTURE.md`（由 `pnpm tree` 生成，请勿手改）；
+- 发布流程见 `docs/PUBLISH.md`。
 
 ## License
 

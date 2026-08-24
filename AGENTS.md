@@ -82,12 +82,13 @@ export function apply(ctx: ClientContext): void {
 
 存储不依赖 harness 的 storage 家族，直接使用 Node ≥22 内置的 `node:sqlite` 的 `DatabaseSync`（同步 API，运行时仅打印一条 experimental 警告）。数据落盘于 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`（`DSH_HOME` 默认为 `~/.dsh`，由 `logs.ts` 解析，测试通过注入 `DSH_HOME` 隔离介质）。
 
-### events / session_meta 两表
+### events / session_meta / agg_* 七表
 
-- **events 表**：一行一条用量事件，结构为 `(session_id TEXT, seq INTEGER, t INTEGER, provider TEXT, model TEXT, input/output/cache_read/cache_write/reasoning INTEGER)`，主键为 `PRIMARY KEY (session_id, seq, t)`。结构化列主键具备天然幂等性，重复写入经 `INSERT ... ON CONFLICT DO UPDATE` 收敛；重建账本时每行仅折叠一次。
+- **events 表**：一行一条用量事件，结构为 `(t INTEGER, session_id TEXT, seq INTEGER, provider TEXT, model TEXT, input/output/cache_read/cache_write/reasoning INTEGER)`，主键为 `PRIMARY KEY (t, session_id, seq)`。结构化列主键具备天然幂等性，重复写入经 `INSERT ... ON CONFLICT DO UPDATE` 收敛；重建账本时每行仅折叠一次。
   - 约束：`node:sqlite` 的 TEXT 不允许包含 U+0000。模型键在内存中以 `provider\0model` 形式存在，写入时经 `splitModelKey` 拆分为两列，不将含 `\0` 的整串写入 SQLite。
 - **session_meta 表**：`(session_id TEXT PRIMARY KEY, title, cwd, created_at, last_active)`，记录会话标题、工作目录、创建与最近活跃时间；初始化扫描时抄录，运行时由 `session/title` 事件更新；内存中保留一份 `Ledger.metaCache` 供快照读取。
-- **版本**：`PRAGMA user_version` 等于 `LEDGER_VERSION`（当前为 1）；结构不兼容时 `open()` 自动 DROP 两表重建（事件表为空时下次启动触发全量重扫）。所有读写为同步操作，`append` / `setMeta` 即写即持久（SQLite 自动提交），崩溃后重启可从介质恢复，无需周期性对账。
+- **agg_* 预统计表**：`agg_total`（全量单行）、`agg_daily`（按日）、`agg_model`（按模型）、`agg_session`（按会话）、`agg_session_daily`（按会话×日）、`agg_checkpoint`（密封边界），与 events 同库事务，用于冷启动时直接加载聚合而无需重放全量事件。
+- **版本**：`PRAGMA user_version` 等于 `LEDGER_VERSION`（当前为 3）；`version 2→3` 增量保留历史事件，其余不兼容时 `open()` 自动 DROP 全量表重建（事件表为空时下次启动触发全量重扫）。所有读写为同步操作，`append` / `setMeta` 即写即持久（SQLite 自动提交），崩溃后重启可从介质恢复，无需周期性对账。
 
 ### 数据流
 
@@ -114,8 +115,8 @@ export function apply(ctx: ClientContext): void {
 
 `tsdown.config.ts` 产出两个 bundle：
 
-- **lib/index.js** —— 服务端（Host，Node ESM）：运行时仅 import Node 内置模块（含 `node:sqlite`）与本地代码；DSH 服务由 cordis 注入，不直接 import。
-- **lib/client.js** —— 浏览器端 bundle（CJS 闭包工厂）：以包名 id `dsh-usage-stats` 通过 `window.__ModuleLoader__.load({ id, factory })` 注册；externals 复刻 shell 冻结模块表（react / react/jsx-runtime / react-dom / cordis / `@deepseek-ai/dsh-client-*` 等），bundle 运行时仅 require 这些已有模块，其余全部内联。
+- **lib/index.js** —— 服务端（Host，Node ESM）：包名 `@xfqz86/dsh-usage-stats`（`package.json:name`），运行时仅 import Node 内置模块（含 `node:sqlite`）与本地代码；DSH 服务由 cordis 注入，不直接 import。
+- **lib/client.js** —— 浏览器端 bundle（CJS 闭包工厂）：以包名 `@xfqz86/dsh-usage-stats` 通过 `window.__ModuleLoader__.load({ id, factory })` 注册；externals 复刻 shell 冻结模块表（react / react/jsx-runtime / react-dom / cordis / `@deepseek-ai/dsh-client-*` 等），bundle 运行时仅 require 这些已有模块，其余全部内联。
 
 CSS Modules 内联：`scripts/css-modules-inline.mjs`（rolldown 插件，使用 lightningcss 的 `cssModules` 模式）在构建时将 `*.module.css` 编译为 scoped 类名映射与 `<style data-plugin-css="dsh-usage-stats/<File>">` 注入（按文件名幂等，`data-plugin` 标记）。源码仍为真实 CSS Modules。
 
@@ -123,7 +124,7 @@ CSS Modules 内联：`scripts/css-modules-inline.mjs`（rolldown 插件，使用
 
 - **Host 注入**：`inject = ['webServer', 'sessionQuery', 'sessionPersistence']`。挂载顺序为先挂载实时监听（初始扫描期间不遗漏事件），再执行 bootstrap 初始化。
 - **路由**：`ctx.webServer.register({ kind: 'prefix', path: '/usage-stats/api', handler })`，仅支持 POST，每次调用先经过回环围栏校验（仅回环 Host 可访问，防御 DNS 重绑定与跨站探测）。
-- `snapshot` / `go-quota` / `rebuild` / `clear` 的请求与响应结构、Go 额度 key 解析与 TTL 规则、偏好设置字段等协议细节见 `docs/API.md`（随接口演进维护，本文件不重复）。
+- `snapshot` / `go-quota` / `rebuild` / `clear` / `seal` 的请求与响应结构、Go 额度 key 解析与 TTL 规则、偏好设置字段等协议细节见 `docs/API.md`（随接口演进维护，本文件不重复）。
 
 ## 9. 验证（每次改动必须）
 
@@ -135,7 +136,7 @@ node test/client-bundle.mjs  # 浏览器端 bundle 冒烟（模拟 __ModuleLoade
 ```
 
 - `test/smoke.mjs`：以 mock 的 webServer / sessionQuery / sessionPersistence 挂载 `apply()`（存储不 mock：账本直接写入真实 `node:sqlite` 文件，`DSH_HOME` 指向临时目录）；fixture 使用仓库内 `test/session-events.jsonl`（共 397 行，其中 394 条为带 usage 的 `assistant/message` 事件，其余为会话与元数据记录，单会话）。断言：SQLite 文件落盘 → 快照 394 → 实时重放 20 条去重不翻倍 → rebuild 一致 → 回环围栏 → go-quota 结构化 → 重开会话清单为空时仍可从介质重建 394。
-- `test/client-bundle.mjs`：加载 `lib/client.js`，验证顶层 `window.__ModuleLoader__.load` 注册（id 为 `dsh-usage-stats`）、`factory(require)` 返回 inject / apply、`document` 中出现每个 `*.module.css` 对应的 `data-plugin-css` `<style>` 且样式文本含 scoped 类名。
+- `test/client-bundle.mjs`：加载 `lib/client.js`，验证顶层 `window.__ModuleLoader__.load` 注册（id 为 `@xfqz86/dsh-usage-stats`）、`factory(require)` 返回 inject / apply、`document` 中出现每个 `*.module.css` 对应的 `data-plugin-css` `<style>` 且样式文本含 scoped 类名。
 
 ## 10. 文档维护约定（防止注入上下文 churn）
 

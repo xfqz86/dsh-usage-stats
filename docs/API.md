@@ -16,14 +16,14 @@
 
 ## 2. POST /usage-stats/api/snapshot
 
-- body `{ sessionId?: string }`（带 sessionId 时返回对应会话的 `current` /
-  `series.current`）。
+- body `{ sessionId?: string, limit?: number, sessionsLimit?: number }`（带 sessionId 时返回对应会话的 `current` /
+  `series.current`；`limit` / `sessionsLimit` 为会话明细分页上限，`1..1000`，默认 `200`，超出截断）。
 - 响应 `value` 字段（`UsageSnapshot`，类型见 `src/client/useSnapshot.ts`）：
   - 统计元信息：`scanning` / `scans` / `failed` / `rawSessions` /
     `harnessSessions` / `foldedEvents` / `dedupSkipped` / `lastError` /
     `scanError` / `lastScanAt` / `time`；
   - `sessions`（有量会话数）、`all`（全量 `Agg`）、`series.all`（按日
-    `SeriesPoint[]`）`models[]`（模型拆分）、`sessionsList[]`（会话明细）。
+    `SeriesPoint[]`）`models[]`（模型拆分）、`sessionsList[]`（会话明细，按 `lastActive` 倒序，已分页截断）、`sessionsListTotal`（会话总数，未截断）。
 
 ## 3. POST /usage-stats/api/go-quota
 
@@ -47,14 +47,20 @@
 
 ## 4. POST /usage-stats/api/rebuild
 
-- 清空 sqlite 两表 + 复位聚合缓存 → 全量重扫日志导入 →
-  `{ rebuilt: true, foldedEvents }`。设置页有入口。
+- 清空 sqlite 全量表（events / session_meta / agg_* 共 7 张）+ 复位聚合缓存 → 全量重扫日志导入
+  → 物化预统计 → `{ rebuilt: true, foldedEvents }`。设置页有入口。
 
 ## 4.1 POST /usage-stats/api/clear
 
-- 清空 sqlite 两表 + 复位聚合缓存 → `{ cleared: true, foldedEvents }`，
+- 清空 sqlite 全量表（events / session_meta / agg_* 共 7 张）+ 复位聚合缓存 → `{ cleared: true, foldedEvents }`，
   **不重扫**（与重建的区别：重建会重新读取历史会话，清零不会，统计直接归零）。
   设置页有入口（二次确认）。
+
+## 4.2 POST /usage-stats/api/seal
+
+- 手动触发预统计密封：物化当前内存聚合至 `agg_*` 物化表，并将密封边界推进至今日零点。
+- 用于将“不会再变动的历史数据”预统计进数据库，后续启动仅需加载物化表 + 少量增量事件，显著加快冷启动。
+- 响应 `{ sealed: true, sealedUntil, foldedEvents }`。批量导入与实时增量已自动密封，通常无需手动调用。
 
 ## 5. 偏好设置（浏览器端 localStorage）
 
