@@ -5,7 +5,7 @@
 
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './ModelsTab.module.css'
-import shared from './UsageStatsCommon.module.css'
+import shared from '../components/UsageStatsCommon.module.css'
 import type { ModelStat } from '../useSnapshot.ts'
 import { fmt, fmtFull, pctOf, usageTotal } from '../stats.ts'
 

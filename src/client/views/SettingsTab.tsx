@@ -14,10 +14,10 @@ import { useRef, useState } from 'react'
 import { RiskConfirmation } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './SettingsTab.module.css'
-import shared from './UsageStatsCommon.module.css'
+import shared from '../components/UsageStatsCommon.module.css'
 import type { UsageSettings } from '../settings.ts'
 import { clampGoFetchMinutes, GO_FETCH_MIN_MINUTES } from '../settings.ts'
-import { SettingsSwitch } from './SettingsSwitch.tsx'
+import { SettingsSwitch } from '../components/SettingsSwitch.tsx'
 
 /** 设置 Tab：偏好设置 + 重建/清零账本（最底部，二次确认）。 */
 export function SettingsTab({

@@ -5,12 +5,12 @@
  */
 
 import { useMemo } from 'react'
-import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { Tooltip } from '../components/Tooltip.tsx'
 import css from './UsageHeatmap.module.css'
-import shared from './UsageStatsCommon.module.css'
+import shared from '../components/UsageStatsCommon.module.css'
 import type { UsageSnapshot } from '../useSnapshot.ts'
-import { fmtFull, heatGridOf, type HeatGridCell } from '../stats.ts'
+import { fmtFull, heatGridOf, pctOf, type HeatGridCell } from '../stats.ts'
 import { cacheTotal } from '../../utils.ts'
 
 /** 月份文案键：每列（周）首月变化时显示。 */
@@ -42,17 +42,39 @@ export function UsageHeatmap({
     return c.today ? `${cls} ${css.hcellToday}` : cls
   }
 
-  /** 单格 tooltip 文案：日期 + 明细（与曲线 tooltip 同口径）。 */
-  const cellTip = (c: HeatGridCell): string => {
+  /** 单格 tooltip：富插槽排版（日期左对齐 + 标签左对齐/数值右对齐），顺序：日期、缓存、输入、输出、总计、缓存命中率、调用次数、平均每次调用。 */
+  const cellContent = (c: HeatGridCell) => {
     const day = byDay.get(c.t)
-    return t('heat.tip', {
-      date: c.label,
-      tokens: fmtFull(c.v),
-      input: fmtFull(day?.input ?? 0),
-      cache: fmtFull(cacheTotal(day ?? {})),
-      output: fmtFull(day?.output ?? 0),
-      calls: fmtFull(c.calls),
-    })
+    const cache = cacheTotal(day ?? {})
+    const input = day?.input ?? 0
+    const output = day?.output ?? 0
+    const total = c.v
+    const calls = c.calls
+    const cacheRead = day?.cacheRead ?? 0
+    const hitRate = (cacheRead + input) > 0 ? Math.round((cacheRead / (cacheRead + input)) * 1000) / 10 : null
+    const avg = calls > 0 ? Math.round(total / calls) : 0
+    const rows: Array<[string, string]> = [
+      [t('table.cacheRead'), fmtFull(cache)],
+      [t('table.input'), fmtFull(input)],
+      [t('table.output'), fmtFull(output)],
+      [t('table.total'), fmtFull(total)],
+      [t('footer.cacheHitRate'), pctOf(hitRate)],
+      [t('table.calls'), fmtFull(calls)],
+      [t('table.avgPerCall'), fmtFull(avg)],
+    ]
+    return (
+      <div style={{ minWidth: 200 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6, whiteSpace: 'nowrap', textAlign: 'left' }}>{c.label}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px' }}>
+          {rows.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+              <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
+              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -77,7 +99,7 @@ export function UsageHeatmap({
         <>
           <div className={css.heatGrid} style={{ gridTemplateColumns: `repeat(${grid.cols},1fr)` }}>
             {grid.cells.map((c, i) => (
-              <Tooltip key={i} label={cellTip(c)} side="top" delayMs={150}>
+              <Tooltip key={i} content={cellContent(c)} side="top" delayMs={150}>
                 <div className={cellClass(c)} />
               </Tooltip>
             ))}

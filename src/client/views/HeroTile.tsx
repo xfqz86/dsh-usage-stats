@@ -8,10 +8,10 @@
 import type { ReactNode } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './HeroTile.module.css'
-import shared from './UsageStatsCommon.module.css'
-import { alignedRows, fmtFull, pctOf } from '../stats.ts'
+import shared from '../components/UsageStatsCommon.module.css'
+import { fmtFull, pctOf } from '../stats.ts'
 import { cacheTotal } from '../../utils.ts'
-import { FollowTooltip } from './FollowTooltip.tsx'
+import { Tooltip } from '../components/Tooltip.tsx'
 import type { UsageAgg } from '../../types.ts'
 
 /** 英雄磁贴：标题图标 + 大数 / 命中率 / 调用 / 比例条。 */
@@ -36,15 +36,28 @@ export function HeroTile({
     ? Math.round((cacheRead / (cacheRead + input)) * 1000) / 10
     : null
 
-  // 三色比例条 tooltip：与侧边栏同一套对齐明细。
-  const barLabel = tokens > 0
-    ? alignedRows([
-      [t('footer.cacheTip', { n: '' }).trim(), fmtFull(cache)],
-      [t('footer.inputTip', { n: '' }).trim(), fmtFull(input)],
-      [t('footer.outputTip', { n: '' }).trim(), fmtFull(output)],
-      [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
-    ])
-    : ''
+  // 三色比例条 tooltip：顺序与热力图一致（缓存、输入、输出、总计、缓存命中率、调用次数、平均每次调用），标签左、数值右。
+  const avgPerCall = calls > 0 ? Math.round(tokens / calls) : 0
+  const barContent = tokens > 0
+    ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px', minWidth: 180 }}>
+        {([
+          [t('table.cacheRead'), fmtFull(cache)],
+          [t('table.input'), fmtFull(input)],
+          [t('table.output'), fmtFull(output)],
+          [t('table.total'), fmtFull(tokens)],
+          [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
+          [t('table.calls'), fmtFull(calls)],
+          [t('table.avgPerCall'), fmtFull(avgPerCall)],
+        ] as const).map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+            <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
+            <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    )
+    : null
 
   // 调用量文本：中文带后缀"次"，英文回退到 "351 Calls"
   const callsSuffix = t('panel.summary.callsSuffix')
@@ -63,7 +76,7 @@ export function HeroTile({
         <span className={css.heroCallsRight}>{callsText}</span>
       </div>
       {tokens > 0 && (
-        <FollowTooltip label={barLabel} side="bottom" delayMs={300}>
+        <Tooltip follow content={barContent} side="bottom" delayMs={300}>
           <span className={css.heroBar}>
             {cache > 0 && (
               <span className={`${css.heroBarSeg} ${css.heroBarCache}`} style={{ flex: cache }} />
@@ -75,7 +88,7 @@ export function HeroTile({
               <span className={`${css.heroBarSeg} ${css.heroBarOutput}`} style={{ flex: output }} />
             )}
           </span>
-        </FollowTooltip>
+        </Tooltip>
       )}
     </div>
   )

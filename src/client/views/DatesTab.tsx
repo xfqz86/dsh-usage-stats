@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SeriesPoint } from '../../types.ts'
 import css from './DatesTab.module.css'
-import shared from './UsageStatsCommon.module.css'
+import shared from '../components/UsageStatsCommon.module.css'
 import { buildSet, curveOf, dayTotal, fmtFull, fullDayLabel } from '../stats.ts'
 
 /** 时间范围选项：值 + 对应文案键。 */

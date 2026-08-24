@@ -16,16 +16,16 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { IconDataOutline16, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconDataOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { Tooltip } from '../components/Tooltip.tsx'
 import css from './UsageStatsFooter.module.css'
 import { useSnapshot } from '../useSnapshot.ts'
 import { useGoQuota, type GoWindow } from '../useGoQuota.ts'
 import { useGoSettings } from '../useGoSettings.ts'
-import { alignedRows, dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts'
+import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts'
 import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts'
 import { UsageStatsPanel } from './UsageStatsPanel.tsx'
-import { FollowTooltip } from './FollowTooltip.tsx'
 
 export type UsageStatsFooterProps =
   PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-stats'>
@@ -84,8 +84,6 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       ].filter((w): w is GoWindowEntry => w.win !== null)
       : []
   const resetsOf = (win: GoWindow): string => goResetsAt(t, win)
-  const windowLine = (win: GoWindow | null, full: string): string =>
-    win ? `${full}: ${goPercent(win)}%` + (resetsOf(win) ? ' · ' + resetsOf(win) : '') : ''
 
   // 单个额度芯片（宽列 chips）：短标签 + 百分比，按档位着色，
   // hover 仅显示重置时间（无重置时间时兜底显示窗口全名）。
@@ -100,18 +98,33 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     )
   }
 
-  // 折叠 rail tooltip（用量图标）：仅"今日"明细（调用 / 总计 / 缓存 / 输入 / 输出 / 缓存命中率），
-  // 不含 Go 额度（Go 明细由上方额度芯片的 tooltip 承载）。
-  const railLabel = (() => {
+  // 折叠 rail tooltip（用量图标）：顺序与热力图一致（缓存、输入、输出、总计、缓存命中率、调用次数、平均每次调用）
+  // 不含 Go 额度（Go 明细由上方额度芯片的 tooltip 承载），日期左对齐、其他标签左/数值右。
+  const railContent = (() => {
     if (!today || todayTokens === 0) return t('footer.railEmpty')
-    return t('footer.railHeader') + '\n' + alignedRows([
-      [t('footer.railCalls'), fmtFull(todayCalls)],
-      [t('footer.railTotal'), fmtFull(todayTokens)],
-      [t('footer.cacheTip', { n: '' }).trim(), fmtFull(cacheTokens)],
-      [t('footer.inputTip', { n: '' }).trim(), fmtFull(inputTokens)],
-      [t('footer.outputTip', { n: '' }).trim(), fmtFull(outputTokens)],
+    const avgPerCall = todayCalls > 0 ? Math.round(todayTokens / todayCalls) : 0
+    const rows: Array<[string, string]> = [
+      [t('table.cacheRead'), fmtFull(cacheTokens)],
+      [t('table.input'), fmtFull(inputTokens)],
+      [t('table.output'), fmtFull(outputTokens)],
+      [t('table.total'), fmtFull(todayTokens)],
       [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
-    ])
+      [t('table.calls'), fmtFull(todayCalls)],
+      [t('table.avgPerCall'), fmtFull(avgPerCall)],
+    ]
+    return (
+      <div style={{ minWidth: 200 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6, whiteSpace: 'nowrap', textAlign: 'left' }}>{t('footer.railHeader')}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px' }}>
+          {rows.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+              <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
+              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   })()
 
   // 折叠态芯片：只展示滚动 5 小时窗口（移在圆形按钮上方）。
@@ -119,24 +132,53 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
 
   // 折叠态 Go 芯片 tooltip：完整三档窗口明细（用量百分比 + 重置时间），
   // 与宽列三档窗口同款内容，全部数据都在这里。
-  const railQuotaLabel =
-    goWindows.length === 0
-      ? ''
-      : t('go.title') + '\n' + goWindows.map((w) => windowLine(w.win, w.full)).join('\n')
+  // 富插槽示例：标题 + 网格两列（窗口名 / 百分比 + 重置时间），避免 \n 拼接换行不精准。
+  const railQuotaContent = (() => {
+    if (goWindows.length === 0) return ''
+    return (
+      <div style={{ minWidth: 180 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6, whiteSpace: 'nowrap' }}>{t('go.title')}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px' }}>
+          {goWindows.map((w) => (
+            <div key={w.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+              <span style={{ opacity: 0.85, textAlign: 'left' }}>{w.full}</span>
+              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                {goPercent(w.win)}%{resetsOf(w.win) ? ` · ${resetsOf(w.win)}` : ''}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  })()
 
   // 折叠态芯片档位：正常态用底色，预警 / 超支沿用芯片警示色。
   const railLevel = railRolling === undefined ? undefined : goLevelOf(goPercent(railRolling.win))
   const railCls = railLevel === 'over' ? css.goChipOver : railLevel === 'warn' ? css.goChipWarn : ''
 
-  // 展开（宽列）比例条 tooltip：4 行对齐（缓存 / 输入 / 输出 / 缓存命中率）
-  const barLabel = (() => {
-    if (!today || todayTokens === 0) return ''
-    return alignedRows([
-      [t('footer.cacheTip', { n: '' }).trim(), fmtFull(cacheTokens)],
-      [t('footer.inputTip', { n: '' }).trim(), fmtFull(inputTokens)],
-      [t('footer.outputTip', { n: '' }).trim(), fmtFull(outputTokens)],
+  // 展开（宽列）比例条 tooltip：顺序与热力图一致（缓存、输入、输出、总计、缓存命中率、调用次数、平均每次调用）
+  const barContent = (() => {
+    if (!today || todayTokens === 0) return null
+    const avgPerCall = todayCalls > 0 ? Math.round(todayTokens / todayCalls) : 0
+    const rows: Array<[string, string]> = [
+      [t('table.cacheRead'), fmtFull(cacheTokens)],
+      [t('table.input'), fmtFull(inputTokens)],
+      [t('table.output'), fmtFull(outputTokens)],
+      [t('table.total'), fmtFull(todayTokens)],
       [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
-    ])
+      [t('table.calls'), fmtFull(todayCalls)],
+      [t('table.avgPerCall'), fmtFull(avgPerCall)],
+    ]
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px', minWidth: 180 }}>
+        {rows.map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+            <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
+            <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    )
   })()
 
   return (
@@ -176,7 +218,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       {!wide && settings.showGoInSidebar && go !== null && (
         <div className={css.goRailChip}>
           {go.status === 'ok' && railRolling !== undefined ? (
-            <Tooltip label={railQuotaLabel} side="top" delayMs={400}>
+            <Tooltip content={railQuotaContent} side="top" delayMs={400}>
               <span className={`${css.goRailChipBox} ${railCls}`}>
                 <span className={css.goRailChipLabel}>{railRolling.short}</span>
                 <span className={css.goRailChipPct}>{goPercent(railRolling.win)}%</span>
@@ -199,7 +241,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           )}
         </div>
       )}
-      <Tooltip label={wide ? t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) }) : railLabel} side="right" delayMs={500} disabled={wide}>
+      <Tooltip content={wide ? t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) }) : railContent} side="right" delayMs={500} disabled={wide}>
         <button
           type="button"
           className={css.badge}
@@ -222,9 +264,9 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                     </>
                   )}
               </span>
-              {/* 三色比例条：缓存 / 输入 / 输出（跟随鼠标） */}
+              {/* 三色比例条：缓存 / 输入 / 输出（跟随鼠标，富插槽；已合并为 Tooltip follow） */}
               {!err && todayTokens > 0 && (
-                <FollowTooltip label={barLabel} side="top" delayMs={300} disabled={!wide}>
+                <Tooltip follow content={barContent} side="top" delayMs={300} disabled={!wide}>
                   <span className={css.barRow}>
                     {cacheTokens > 0 && (
                       <span
@@ -245,7 +287,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                       />
                     )}
                   </span>
-                </FollowTooltip>
+                </Tooltip>
               )}
             </>
           )}

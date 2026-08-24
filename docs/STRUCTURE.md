@@ -7,6 +7,8 @@
 ```
 dsh-usage-stats/
 ├── docs/
+│   ├── images/
+│   │   └── heatmap-1176x514-preview.png
 │   ├── API.md ← 服务端 HTTP 协议与偏好设置约定（随接口演进维护）
 │   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付三种形态：release / npm / tarball）
 │   └── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
@@ -17,10 +19,14 @@ dsh-usage-stats/
 ├── src/
 │   ├── client/
 │   │   ├── components/
+│   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
+│   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
+│   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
+│   │   │   ├── Tooltip.tsx ← 自实现的 Tooltip（Tips）：基于 dsh 自带 `@deepseek-ai/dsh-client-ui-primitives/Tooltip` 的轻量修改版， 并已合并原 `FollowTooltip` 的鼠标跟随能力（通过 `follow` 参数控制）。
+│   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
+│   │   ├── views/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab（DatesTab）：每日趋势曲线（SVG）+ 时间范围切换 chips + 悬停 tooltip。
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：每日趋势曲线 + 时间范围切换，悬停 tooltip 显示当日明细。
-│   │   │   ├── FollowTooltip.module.css ← 鼠标跟随 Tooltip（FollowTooltip）：复刻 primitives Tooltip 的视觉 （dark plate、white text、size m 无箭头），仅定位逻辑不同——水平跟随鼠标。
-│   │   │   ├── FollowTooltip.tsx ← 鼠标跟随的 Tooltip：用于三色比例条等宽条形锚点。
 │   │   │   ├── HeroTile.module.css ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴样式。
 │   │   │   ├── HeroTile.tsx ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴。
 │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：占总比条形图（表格样式在共用基元里）。
@@ -29,13 +35,10 @@ dsh-usage-stats/
 │   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴 （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用； 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）+ 扫描页脚。
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab（SessionsTab）：展开/收起切换链接（表格样式在共用基元里）。
 │   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表（标题/cwd/最近活跃，默认 8 条可展开）。
-│   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
-│   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
 │   │   │   ├── SettingsTab.module.css ← 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、 抓取间隔数字输入。
 │   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置（OpenCode Go 抓取相关三项）+ 重建账本（最底部， 危险操作，点击后需二次确认：RiskConfirmation 复选「我已了解」+ 确认）。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
 │   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格（列 = 周，行 = 周一..周日， 4 档强度 + 月份标签 + 今日高亮）。
-│   │   │   ├── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层（宽列与 56px rail 两种形态），几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。
 │   │   │   ├── UsageStatsFooter.tsx ← 用量统计的侧边栏底部动作：渲染在 `sidebar.footer.action` 列表插槽 （设置按钮上方）的今日统计触发器。
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳（UsageStatsPanel）：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。

@@ -13,7 +13,7 @@ import {
   IconSparkle16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './OverviewTab.module.css'
-import shared from './UsageStatsCommon.module.css'
+import shared from '../components/UsageStatsCommon.module.css'
 import type { UsageSnapshot } from '../useSnapshot.ts'
 import type { GoQuota } from '../useGoQuota.ts'
 import { dayTotal, fmtFull, todayOf } from '../stats.ts'

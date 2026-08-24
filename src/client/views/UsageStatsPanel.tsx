@@ -26,7 +26,7 @@ import {
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './UsageStatsPanel.module.css'
-import shared from './UsageStatsCommon.module.css'
+import shared from '../components/UsageStatsCommon.module.css'
 import type { UsageSnapshot } from '../useSnapshot.ts'
 import type { GoQuota } from '../useGoQuota.ts'
 import type { UsageSettings } from '../settings.ts'
