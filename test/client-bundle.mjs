@@ -7,7 +7,8 @@
  *   3. CSS Modules 内联注入：每个 *.module.css 注入一个 data-plugin-css 的
  *      <style>（UsageStatsFooter / UsageStatsPanel / UsageStatsCommon /
  *      OverviewTab / HeroTile / UsageHeatmap / DatesTab / SessionsTab /
- *      ModelsTab / SettingsTab / SettingsSwitch），且样式文本含 scoped 类名。
+ *      ModelsTab / SettingsTab / SettingsSwitch / Tooltip），且样式文本含
+ *      scoped 类名。
  */
 
 import { createRequire } from 'node:module'
@@ -103,6 +104,7 @@ try {
     'dsh-usage-stats/ModelsTab',
     'dsh-usage-stats/SettingsTab',
     'dsh-usage-stats/SettingsSwitch',
+    'dsh-usage-stats/Tooltip',
   ]
   for (const tag of expectedTags) {
     assert(cssTags.includes(tag), `缺少 ${tag} 的 style 标签`)
