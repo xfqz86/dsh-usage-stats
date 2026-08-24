@@ -39,8 +39,7 @@ const sessionQuery = {
   async listSessions() { return [{ header: { id: SESSION_ID } }, { header: { id: OTHER_ID } }] },
   async readSession(id) { return { events: id === SESSION_ID ? events : [] } },
 }
-// persistence 后端 mock：声明支持原始工件（readRaw），解码/输出来自预提取的
-// 真实事件 —— 冒烟应走 RAW 优先路径（persistence.readRaw），不再需要 zstd CLI。
+// persistence 后端 mock：声明支持原始工件（readRaw），解码/输出来自预提取的真实事件。
 const sessionPersistence = {
   async list() { return [{ id: SESSION_ID }, { id: OTHER_ID }] },
   async readFrom(id) { return { events: id === SESSION_ID ? events : [] } },
@@ -161,6 +160,40 @@ if (snap3.all.calls !== snap.all.calls) {
 const out3 = await callRoute({ sessionId: null })
 const snap3raw = JSON.parse(out3.payload)
 console.log('loopback ok:', snap3raw.ok === true)
+
+// 回环围栏拒绝分支（非回环 host 应返回 403）
+function callRouteWithHost(body, host, url = '/usage-stats/api/snapshot') {
+  return new Promise((resolve, reject) => {
+    const handlers = {}
+    const req = {
+      url,
+      method: 'POST',
+      headers: { host, 'content-type': 'application/json' },
+      on(ev, fn) { (handlers[ev] ||= []).push(fn) },
+      destroy() {},
+    }
+    const res = {
+      writeHead(status, headers) { res.status = status; res.headers = headers },
+      end(payload) { resolve({ status: res.status, payload }) },
+    }
+    if (body !== undefined) {
+      queueMicrotask(() => {
+        for (const fn of handlers.data || []) fn(Buffer.from(JSON.stringify(body)))
+        for (const fn of handlers.end || []) fn()
+      })
+    } else {
+      queueMicrotask(() => { for (const fn of handlers.end || []) fn() })
+    }
+    route.handler(req, res).catch(reject)
+  })
+}
+const forbiddenOut = await callRouteWithHost({}, 'evil.com', '/usage-stats/api/snapshot')
+const forbiddenBody = JSON.parse(forbiddenOut.payload)
+console.log('loopback forbidden ok:', forbiddenOut.status === 403 && forbiddenBody.ok === false)
+if (forbiddenOut.status !== 403 || forbiddenBody.ok !== false) {
+  console.error('FAIL: 回环围栏未拒绝非回环 host')
+  process.exit(1)
+}
 
 // OpenCode Go 额度路由：queryGoQuota 永不抛错（结构化状态）
 const goOut = await callRoute({}, '/usage-stats/api/go-quota')

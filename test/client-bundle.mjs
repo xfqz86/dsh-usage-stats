@@ -2,7 +2,7 @@
  * 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
  *
  * 加载 lib/client.js（CJS 形态的插件 bundle），验证：
- *   1. 顶层通过 window.__ModuleLoader__.load 注册，id 为 dsh-usage-stats；
+ *   1. 顶层通过 window.__ModuleLoader__.load 注册，id 为 @xfqz86/dsh-usage-stats；
  *   2. factory(require) 可执行，exports.inject 含必需服务、exports.apply 为函数；
  *   3. CSS Modules 内联注入：每个 *.module.css 注入一个 data-plugin-css 的
  *      <style>（UsageStatsFooter / UsageStatsPanel / UsageStatsCommon /
@@ -79,7 +79,7 @@ try {
   nodeRequire(bundlePath)
 
   assert(registered !== null, 'bundle 未通过 window.__ModuleLoader__.load 注册')
-  assert(registered.id === 'dsh-usage-stats', `注册 id 应为 dsh-usage-stats，实际为 ${registered.id}`)
+  assert(registered.id === '@xfqz86/dsh-usage-stats', `注册 id 应为 @xfqz86/dsh-usage-stats，实际为 ${registered.id}`)
 
   const exports = registered.factory(requireStub)
 
