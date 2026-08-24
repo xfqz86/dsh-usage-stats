@@ -171,7 +171,12 @@ export function apply(ctx: Context): void {
             return
           }
           if (method === 'seal') {
-            // 手动密封：物化当前聚合至预统计（针对不会再变动的历史数据）
+            // 手动密封：物化当前聚合至预统计（针对不会再变动的历史数据）。
+            // 并发保护：与 rebuild/clear 一致，已有扫描/重建进行中返回 409
+            if (store.running) {
+              writeJson(res, 409, { ok: false, error: { code: 'busy', message: 'seal already in progress' } })
+              return
+            }
             sealAggregates(store, ledger)
             writeOk(res, { sealed: true, sealedUntil: ledger.getSealedUntil(), foldedEvents: store.foldedEvents })
             return
