@@ -3,19 +3,21 @@
  *
  * 数据流（账本为唯一事实来源，聚合为派生缓存）：
  *   - 打开自管理 sqlite 账本（ledger.ts，`$DSH_HOME/storages/
- *     dsh-usage-stats/ledger.sqlite`）→ events / session_meta 两表；
+ *     dsh-usage-stats/ledger.sqlite`）→ events / session_meta / agg_* 预统计表；
  *   - 首启/重建：扫描会话日志 → 经 foldRecord 写入账本（同步落盘）并折
- *     叠聚合缓存；
+ *     叠聚合缓存，批量物化预统计；
  *   - 实时：session/event 监听逐条入账本 + 折叠（seq 水位去重，与扫描共享
- *     foldRecord 路径，保证账本内事件唯一）；
+ *     foldRecord 路径，保证账本内事件唯一），并增量更新预统计；
+ *   - 预统计加速：重启时优先从 agg_* 物化表加载聚合，仅重放少量未密封事件
+ *     （通常仅今日），无需全量重放，显著降低冷启动时间；
  *   - 每次写入即写即持久（sqlite 自动提交），进程崩溃后重启从介质恢复，
  *     不需要周期性对账；
  *   - 快照 API 从聚合缓存 + 账本 meta 读取。
  * 账本 schema 版本不兼容时自动清库重建（下次启动全量重扫）。
  *
  * 职责编排：utils.ts（跨端共用纯函数与协议类型）/ agg.ts（口径）/
- * store.ts（聚合折叠）/ ledger.ts（自管理 sqlite 账本）/ scan.ts（日志导入
- * 与重建）/ snapshot.ts（快照构建）/ goquota.ts（Go 额度）/ http.ts（HTTP
+ * store.ts（聚合折叠）/ ledger.ts（自管理 sqlite 账本 + 预统计）/ scan.ts（日志导入
+ * 与重建 + 预统计物化）/ snapshot.ts（快照构建）/ goquota.ts（Go 额度）/ http.ts（HTTP
  * 辅助与回环围栏）。
  *
  * 类型全部来自 harness 包（cordis Context 已合并注入服务表面）；运行时
@@ -32,13 +34,13 @@ import type {} from '@deepseek-ai/dsh-session-title'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { createStore, foldRecord } from './store.ts'
-import { scanOnce, rebuildFromEvents, resetStore } from './scan.ts'
+import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregates } from './scan.ts'
 import { Ledger } from './ledger.ts'
 import { snapshot } from './snapshot.ts'
 import { queryGoQuota } from './goquota.ts'
 import { readJsonBody, writeJson, writeOk, writeError, isLoopbackHost } from './http.ts'
 
-export const name = 'dsh-usage-stats'
+export const name = '@xfqz86/dsh-usage-stats'
 
 /** 挂载前必需的服务（cordis fiber inject）。 */
 export const inject = ['webServer', 'sessionQuery', 'sessionPersistence']
@@ -69,16 +71,25 @@ export function apply(ctx: Context): void {
     }
   })
 
-  // ---- 初始化：账本无事件 → 扫描历史会话日志导入；有事件 → 直接重建聚合 ----
+  // ---- 初始化：优先从预统计加载（快速），回退到事件重放或全量扫描 ----
   const bootstrap = async () => {
+    // 1) 预统计快速路径：已物化 agg_* → 直接加载 + 少量增量重放（通常仅今日）
+    if (ledger.hasAggregates()) {
+      const ok = rebuildWithDelta(store, ledger)
+      if (ok) {
+        store.scans += 1
+        store.lastScanAt = Date.now()
+        return
+      }
+    }
+    // 2) 兼容旧库：有 events 但无预统计 → 全量重放并物化（一次迁移）
     if (ledger.hasEvents()) {
-      // 重启场景：账本已存在，从事件流重建聚合缓存（无需重扫日志）。
       rebuildFromEvents(store, ledger)
       store.scans += 1
       store.lastScanAt = Date.now()
       return
     }
-    // 首启场景：全量扫描日志写入账本并折叠聚合。
+    // 3) 首启：无数据 → 全量扫描日志并物化
     await scanOnce(ctx, store, ledger, { initial: true })
   }
   void bootstrap().catch((e) => console.error('[usage-stats] 初始化失败', e))
@@ -112,22 +123,51 @@ export function apply(ctx: Context): void {
           if (method === 'snapshot') {
             const raw = payload.sessionId
             const sessionId = (typeof raw === 'string' && raw.length > 0) ? raw : null
-            writeOk(res, snapshot(store, ledger, sessionId))
+            const rawLimit = (payload as { limit?: unknown; sessionsLimit?: unknown }).limit ?? (payload as { sessionsLimit?: unknown }).sessionsLimit
+            const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? rawLimit : undefined
+            writeOk(res, snapshot(store, ledger, sessionId, limit !== undefined ? { limit } : undefined))
             return
           }
           if (method === 'rebuild') {
-            // 重建账本：清空 sqlite 事件与 meta → 复位聚合缓存 → 重新扫描日志导入。
-            ledger.clear()
-            resetStore(store)
-            await scanOnce(ctx, store, ledger, { initial: true })
+            // 重建账本：清空 sqlite 事件与 meta（含预统计）→ 复位聚合缓存 → 重新扫描日志导入。
+            // 并发保护：已有扫描/重建正在进行时返回 409，避免交错清库与扫描
+            if (store.running) {
+              writeJson(res, 409, { ok: false, error: { code: 'busy', message: 'rebuild already in progress' } })
+              return
+            }
+            store.running = true
+            try {
+              ledger.clear()
+              resetStore(store)
+              // 持锁调用 scanOnce
+              await scanOnce(ctx, store, ledger, { initial: true, force: true })
+            } finally {
+              store.running = false
+              store.scanning = false
+            }
             writeOk(res, { rebuilt: true, foldedEvents: store.foldedEvents })
             return
           }
           if (method === 'clear') {
-            // 清零账本：清空 sqlite 事件与 meta → 复位聚合缓存，不重扫（与重建的区别）。
-            ledger.clear()
-            resetStore(store)
+            // 清零账本：清空 sqlite 事件与 meta（含预统计）→ 复位聚合缓存，不重扫（与重建的区别）。
+            if (store.running) {
+              writeJson(res, 409, { ok: false, error: { code: 'busy', message: 'clear already in progress' } })
+              return
+            }
+            store.running = true
+            try {
+              ledger.clear()
+              resetStore(store)
+            } finally {
+              store.running = false
+            }
             writeOk(res, { cleared: true, foldedEvents: store.foldedEvents })
+            return
+          }
+          if (method === 'seal') {
+            // 手动密封：物化当前聚合至预统计（针对不会再变动的历史数据）
+            sealAggregates(store, ledger)
+            writeOk(res, { sealed: true, sealedUntil: ledger.getSealedUntil(), foldedEvents: store.foldedEvents })
             return
           }
           if (method === 'go-quota') {

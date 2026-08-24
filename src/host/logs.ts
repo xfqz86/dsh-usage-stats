@@ -11,9 +11,9 @@ import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 export function getDshHome(): string {
   return process.env.DSH_HOME || join(process.env.HOME || '', '.dsh')
 }
-/** DSH 数据主目录；SESSIONS_ROOT 是其下的会话目录（兼容旧常量，内部已改用动态函数）。 */
+/** DSH 数据主目录；SESSIONS_ROOT 是其下的会话目录。 */
 export const DSH_HOME = getDshHome()
-/** 会话根目录（兼容旧常量，新代码请用 getSessionsRoot()）。 */
+/** 会话根目录。 */
 export const SESSIONS_ROOT = join(DSH_HOME, 'sessions')
 /** 动态获取会话根目录。 */
 export function getSessionsRoot(): string {

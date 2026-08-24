@@ -1,8 +1,7 @@
 /**
  * 快照构建：把聚合缓存（UsageStore）+ 账本会话元数据整理成
  * /usage-stats/api/snapshot 的响应 value（纯函数，不触碰 HTTP / ctx）。
- * 类型（SeriesPoint / UsageAgg）来自 types.ts；splitModelKey 来自 utils.ts
- * （dim 与 client 共用）。
+ * 类型（SeriesPoint / UsageAgg）来自 types.ts；splitModelKey 来自 utils.ts（host 与 client 共用）。
  */
 import type { Agg } from './agg.ts'
 import type { UsageStore } from './store.ts'
@@ -40,7 +39,7 @@ export function usageOf(agg: Agg): UsageAgg {
 export const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 }
 
 /** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。 */
-export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | null): unknown {
+export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | null, opts?: { limit?: number }): unknown {
   let sessionsWithUsage = 0
   const sessionsList: Array<Record<string, unknown>> = []
   for (const [id, info] of store.sessions) {
@@ -57,6 +56,11 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
     })
   }
   sessionsList.sort((a, b) => (b.lastActive as number) - (a.lastActive as number))
+  const sessionsListTotal = sessionsList.length
+  // 分页截断：避免上千会话时每 4 秒全量序列化开销；默认 200，可由客户端 limit 显式覆盖
+  const rawLimit = opts?.limit
+  const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? Math.max(1, Math.min(1000, Math.floor(rawLimit))) : 200
+  const truncatedList = sessionsList.length > limit ? sessionsList.slice(0, limit) : sessionsList
 
   const models: Array<Record<string, unknown>> = []
   for (const [key, agg] of store.models) {
@@ -97,6 +101,7 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
     all: { calls: allAgg.calls, usage: usageOf(allAgg) },
     series: { all: allSeries, current: currentSeries },
     models,
-    sessionsList,
+    sessionsList: truncatedList,
+    sessionsListTotal,
   }
 }

@@ -5,7 +5,9 @@
  * 只做折叠与聚合，是快照 API 的读取面。折叠路径：
  *   - 启动/重建：从账本事件全量折叠（scan.ts 的 rebuildFromEvents）；
  *   - 实时：session/event 监听逐条折叠（foldRecord，与账本追加共用）。
- * 账本写入同步落盘（sqlite 自动提交，即写即持久），不再需要周期性对账。
+ * 账本写入同步落盘（sqlite 自动提交，即写即持久）。
+ * 预统计：对不会再变动的历史数据做物化聚合，启动时优先从 agg_* 表加载，
+ * 仅少量未密封事件需重放，显著降低冷启动时间；实时路径增量更新预统计。
  * 所有操作以 store 为首参的纯函数或接受 ledger 参数的折叠助手，可独立测试。
  */
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -97,8 +99,9 @@ export function foldUsage(store: UsageStore, info: SessionInfo, timeMs: number, 
  * session+seq 键 upsert，重开账本时每键只折一次）。返回是否真正折叠
  * （事件无用量时 false）。顺带推进该会话的 maxSeq 水位，使重启恢复后
  * 实时路径同样能去重历史事件。
+ * 若提供 ledger，则同步增量更新预统计物化表（挂起时跳过，由批量 persist 覆盖）。
  */
-export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent): boolean {
+export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent, ledger?: Ledger): boolean {
   if (ev.input + ev.output + ev.cacheRead + ev.cacheWrite + ev.reasoning <= 0) return false
   const usage: TokenUsage = {
     inputTokens: ev.input,
@@ -112,6 +115,10 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent): boolean {
   foldUsage(store, info, ev.t, usage)
   ink(ensureModel(store, ev.provider + '\u0000' + ev.model), usage)
   store.foldedEvents += 1
+  // 同步物化到预统计表（实时路径增量，批量导入时挂起）
+  if (ledger) {
+    try { ledger.incrementAgg(ev) } catch {}
+  }
   return true
 }
 
@@ -120,6 +127,7 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent): boolean {
  * 元数据写账本 meta；usable 事件按 per-session seq 水位去重后追加进账本
  * 并折叠进聚合缓存。初始化扫描与实时监听共用此路径，保证账本内事件唯一。
  * 全部同步（sqlite 即写即持久，无需等待落盘）。
+ * 预统计增量在此路径自动完成（挂起时跳过）。
  */
 export function foldRecord(
   store: UsageStore,
@@ -146,7 +154,13 @@ export function foldRecord(
   }
   const event = record as SessionEvent
   if (!usable(event)) return
-  const ev = toLedgerEvent(id, event)
+  let ev: LedgerEvent | null
+  try {
+    ev = toLedgerEvent(id, event)
+  } catch {
+    // 畸形事件（如缺 message.source）不影响会话其余事件
+    return
+  }
   if (ev === null) return
   const info = ensureSession(store, id)
   // seq 水位去重：防止初始化扫描与实时监听（或重扫）双记同一事件。
@@ -154,10 +168,19 @@ export function foldRecord(
     store.dedupSkipped += 1
     return
   }
-  ledger.append(ev)
+  // seq=-1 等未知序事件无法靠水位去重，用主键存在性校验（t+session+seq 幂等）
+  if (ev.seq < 0 && ledger.hasEventAt(ev.t, id, ev.seq)) {
+    store.dedupSkipped += 1
+    return
+  }
+  const isNew = ledger.append(ev)
+  if (!isNew) {
+    store.dedupSkipped += 1
+    return
+  }
   // 同步更新会话元数据的 lastActive（事件时间），保证 session_meta 不为空
   ledger.setMeta(id, { lastActive: ev.t })
-  foldLedgerEvent(store, ev)
+  foldLedgerEvent(store, ev, ledger)
 }
 
 /** 取会话 meta（缺省用空元数据,避免 snapshot 层判空）。 */

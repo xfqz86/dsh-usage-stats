@@ -2,10 +2,8 @@
  * 跨端共用的纯函数（host 与 client 两个 bundle 各自内联所需子集）。
  *
  * 本模块只放纯函数；协议类型（GoWindow / GoQuota / UsageAgg / Agg /
- * SeriesPoint）已拆到 types.ts，避免一个文件里类型与逻辑混杂。这里是插件
- * 自有逻辑中「多文件共用」部分的单一事实来源：host 端与 client 端此前各自
- * 维护着同一批方法的镜像副本（本地日划分、NDJSON 行解析、错误消息提取、
- * 模型键拆分、Go 额度档位），统一收拢到这里，避免同一逻辑在两处定义后漂移。
+ * SeriesPoint）定义在 types.ts。这里是插件
+ * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、NDJSON 行解析、错误消息提取、模型键拆分、Go 额度档位等。
  *
  * 设计约束：
  *   - 只允许纯 JS 运行时能力（Date / Math / JSON / String），禁止 import

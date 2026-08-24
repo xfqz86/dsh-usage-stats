@@ -8,6 +8,8 @@
  *
  * 语义：只在账本需要初始化（首启无事件）或显式重建时运行；平时数据来自
  * 实时 session/event 监听（每次写入同步落盘，无需周期性对账）。
+ * 预统计：批量导入期间挂起逐条物化，完成后一次 bulk 物化 agg_* 表，
+ * 后续启动可直接从预统计加载，仅重放少量未密封事件，显著加速冷启动。
  * 扫描报告（rawSessions / harnessSessions / failed）记录最近一次导入结果。
  */
 import type { Context } from '@deepseek-ai/cordis'
@@ -18,6 +20,7 @@ import { foldLedgerEvent, foldRecord } from './store.ts'
 import type { Ledger } from './ledger.ts'
 import { newAgg } from './agg.ts'
 import { errorMessage } from '../utils.ts'
+import { startOfDay } from '../utils.ts'
 
 /** 复位聚合缓存（重建账本前调用）：清空会话/模型/全量/日桶与去重水位与计数。 */
 export function resetStore(store: UsageStore): void {
@@ -38,17 +41,49 @@ export function resetStore(store: UsageStore): void {
 const shortOf = (id: string): string =>
   typeof id === 'string' && id.length > 12 ? id.slice(0, 12) + '…' : String(id)
 
+/**
+ * 尝试从预统计物化表加载聚合（快速启动路径）。
+ * 成功返回 true（已填充 store），无预统计返回 false（调用方需回退到事件重放或扫描）。
+ */
+export function tryLoadAggregates(store: UsageStore, ledger: Ledger): boolean {
+  if (!ledger.hasAggregates()) return false
+  const ok = ledger.loadAggregates(store)
+  if (ok) {
+    // 预统计已包含会话的 maxSeq 与 lastActive，去重水位已恢复，实时路径可直接去重
+    store.dedupSkipped = 0
+  }
+  return ok
+}
+
+/**
+ * 密封历史预统计：将当前内存聚合全量物化至 DB，并将密封边界推进至今日零点。
+ * 供 scanOnce 完成或显式 seal 调用。
+ */
+export function sealAggregates(store: UsageStore, ledger: Ledger): void {
+  try {
+    ledger.persistAggregates(store)
+  } catch (e) {
+    console.error('[usage-stats] 物化预统计失败', e)
+    return
+  }
+  try {
+    ledger.sealUntil(startOfDay(Date.now()))
+  } catch {}
+}
+
 /** 扫描一轮全部会话并将其写入账本（初始 / 重建共用；防重入由 store.running 保证）。
- *  整轮无失败会话时清除历史错误标记（自愈：日志可读性恢复后自动消失）。 */
+ *  整轮无失败会话时清除历史错误标记（自愈：日志可读性恢复后自动消失）。
+ *  批量导入期间挂起逐条预统计增量，完成后一次 bulk 物化，兼顾写入吞吐与启动加速。 */
 export async function scanOnce(
   ctx: Context,
   store: UsageStore,
   ledger: Ledger,
-  options: { initial?: boolean },
+  options: { initial?: boolean; force?: boolean },
 ): Promise<void> {
   const initial = !!(options && options.initial)
-  // 防重入：扫描永不重叠（检查在 scanning 标记之前，避免早返回时 scanning 卡死）。
-  if (store.running) return
+  const force = !!(options && options.force)
+  // 防重入：扫描永不重叠（force 允许持锁重入）。
+  if (store.running && !force) return
   if (initial) store.scanning = true
   store.running = true
   store.scans += 1
@@ -57,6 +92,10 @@ export async function scanOnce(
   store.failed = 0
   store.rawSessions = 0
   store.harnessSessions = 0
+  // 挂起逐条预统计，批量阶段仅写 events 表，最后统一物化
+  const prevSuspend = ledger.isAggSuspended()
+  ledger.setAggSuspended(true)
+  let didScan = false
   try {
     const query = ctx.sessionQuery
     const persist = ctx.sessionPersistence
@@ -131,8 +170,13 @@ export async function scanOnce(
             }
           }
           if (rawContent !== null) {
-            for (const record of parseLogLines(rawContent)) foldRecord(store, ledger, id, record)
+            for (const record of parseLogLines(rawContent)) {
+              try { foldRecord(store, ledger, id, record) } catch (e) {
+                store.lastError = 'record ' + shortOf(id) + ': ' + errorMessage(e)
+              }
+            }
             store.rawSessions += 1
+            didScan = true
             continue
           }
           // 2b) harness 兜底：sessionQuery.readSession / persistence.readFrom
@@ -156,8 +200,13 @@ export async function scanOnce(
             }
           }
           if (events && events.length) {
-            for (const event of events) foldRecord(store, ledger, id, event)
+            for (const event of events) {
+              try { foldRecord(store, ledger, id, event) } catch (e) {
+                store.lastError = 'record ' + shortOf(id) + ': ' + errorMessage(e)
+              }
+            }
             store.harnessSessions += 1
+            didScan = true
           } else if (events === null) {
             // 只有 RAW 与 harness 都报错才算失败；空会话（events=[]）不算。
             store.failed += 1
@@ -173,7 +222,15 @@ export async function scanOnce(
     const workers: Promise<void>[] = []
     for (let k = 0; k < n; k += 1) workers.push(worker())
     await Promise.all(workers.map((w) => w.catch((e) => { store.lastError = 'worker: ' + errorMessage(e); store.failed += 1 })))
+    didScan = didScan || idList.length > 0
   } finally {
+    // 批量物化时保持挂起，避免与实时增量竞争；物化完成后再恢复
+    if (didScan && store.foldedEvents > 0) {
+      try {
+        sealAggregates(store, ledger)
+      } catch {}
+    }
+    ledger.setAggSuspended(prevSuspend)
     // 整轮无失败会话则清除历史错误标记（自愈：日志可读性恢复后自动消失）。
     if (store.failed === 0) { store.lastError = null; store.scanError = null }
     if (initial) store.scanning = false
@@ -183,13 +240,64 @@ export async function scanOnce(
 
 /** 从账本事件流重建聚合缓存（启动加载账本已有事件时用；元数据已在 ledger）。
  *  清空现有聚合后按事件流全量重折；maxSeq 水位在 foldLedgerEvent 内重建，
- *  实时路径随后可对历史事件去重。 */
+ *  实时路径随后可对历史事件去重。
+ *  批量重建期间挂起逐条预统计，结束后统一物化以加速后续启动。 */
 export function rebuildFromEvents(store: UsageStore, ledger: Ledger): void {
-  store.sessions.clear()
-  store.models.clear()
-  store.allAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 }
-  store.allDaily.clear()
-  store.foldedEvents = 0
-  store.dedupSkipped = 0
-  for (const ev of ledger.allEvents()) foldLedgerEvent(store, ev)
+  const prev = ledger.isAggSuspended()
+  ledger.setAggSuspended(true)
+  try {
+    store.sessions.clear()
+    store.models.clear()
+    store.allAgg = newAgg()
+    store.allDaily.clear()
+    store.foldedEvents = 0
+    store.dedupSkipped = 0
+    for (const ev of ledger.allEvents()) foldLedgerEvent(store, ev)
+    // 重建后物化预统计，供下次快速启动（保持挂起期间完成 bulk）
+    if (store.foldedEvents > 0) {
+      try { sealAggregates(store, ledger) } catch {}
+    }
+  } finally {
+    ledger.setAggSuspended(prev)
+  }
+}
+
+/** 增量重建：优先从预统计加载聚合，仅重放密封边界外的增量事件。
+ *  预统计路径加载聚合表（O(天数+会话+模型)），密封边界外的增量按会话水位对比补齐，补齐后推进密封边界。 */
+export function rebuildWithDelta(store: UsageStore, ledger: Ledger): boolean {
+  // 优先尝试预统计快速路径：直接从物化表加载，跳过全量事件重放
+  if (tryLoadAggregates(store, ledger)) {
+    // 检查密封边界外的增量事件并按水位补齐
+    const sealedUntil = ledger.getSealedUntil()
+    if (sealedUntil > 0) {
+      const todayStart = startOfDay(Date.now())
+      // 仅在跨日且存在未密封事件时查询增量
+      if (sealedUntil < todayStart) {
+        const delta = ledger.allEventsSince(sealedUntil)
+        if (delta.length > 0) {
+          // 按会话水位对比，增量补齐缺失事件
+          const missing: typeof delta = []
+          for (const ev of delta) {
+            const info = store.sessions.get(ev.sessionId)
+            if (!info) {
+              missing.push(ev)
+              continue
+            }
+            if (ev.seq >= 0) {
+              if (ev.seq > info.maxSeq) missing.push(ev)
+            } else {
+              // seq=-1 无法靠水位，用 lastActive 判定
+              if (ev.t > info.lastActive) missing.push(ev)
+            }
+          }
+          if (missing.length > 0) {
+            for (const ev of missing) foldLedgerEvent(store, ev, ledger)
+          }
+        }
+        try { ledger.sealUntil(todayStart) } catch {}
+      }
+    }
+    return true
+  }
+  return false
 }

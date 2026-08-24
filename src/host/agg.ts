@@ -54,8 +54,8 @@ export function usable(
 
 /** assistant/message 事件的模型身份：provider + model（\0 分隔），缺失记 unknown。 */
 export function modelKeyOf(event: SessionEvent<'assistant/message'>): string {
-  const source = event.data.message.source
-  const provider = typeof source.provider === 'string' && source.provider ? source.provider : 'unknown'
-  const model = typeof source.model === 'string' && source.model ? source.model : 'unknown'
+  const source = (event as { data?: { message?: { source?: { provider?: unknown; model?: unknown } } } })?.data?.message?.source
+  const provider = typeof (source as { provider?: unknown })?.provider === 'string' && (source as { provider: string }).provider ? (source as { provider: string }).provider : 'unknown'
+  const model = typeof (source as { model?: unknown })?.model === 'string' && (source as { model: string }).model ? (source as { model: string }).model : 'unknown'
   return provider + '\u0000' + model
 }
