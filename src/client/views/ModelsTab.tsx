@@ -16,12 +16,30 @@ export function ModelsTab({
   models: ModelStat[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
-  const maxModel = models.length
-    ? Math.max(1, ...models.map((m) => usageTotal(m.usage)))
-    : 1
-
   if (models.length === 0) {
     return <div className={shared.empty}>{t('state.noUsage')}</div>
+  }
+
+  // 占比分母应为全量总和（非最大值），并用最大余数法修正 1 位小数舍入误差，保证总和为 100%
+  const sumTotal = models.reduce((s, m) => s + usageTotal(m.usage), 0)
+  let shares: number[] = []
+  if (sumTotal > 0) {
+    const raws = models.map((m) => (usageTotal(m.usage) / sumTotal) * 100)
+    const floors = raws.map((v) => Math.floor(v * 10) / 10)
+    const sumFloorsTenths = floors.reduce((a, b) => a + Math.round(b * 10), 0)
+    let remainingTenths = 1000 - sumFloorsTenths
+    // 按小数余数降序，把剩余的 0.1% 单位分给余数最大的项
+    const order = raws
+      .map((v, i) => ({ i, frac: v * 10 - Math.floor(v * 10) }))
+      .sort((a, b) => b.frac - a.frac)
+    const result = [...floors]
+    for (let k = 0; k < remainingTenths && k < order.length; k += 1) {
+      const idx = order[k].i
+      result[idx] = Math.round((result[idx] + 0.1) * 10) / 10
+    }
+    shares = result
+  } else {
+    shares = models.map(() => 0)
   }
 
   return (
@@ -42,9 +60,9 @@ export function ModelsTab({
           </tr>
         </thead>
         <tbody>
-          {models.map((m) => {
+          {models.map((m, idx) => {
             const total = usageTotal(m.usage)
-            const share = Math.round((total / maxModel) * 1000) / 10
+            const share = shares[idx] ?? 0
             return (
               <tr key={m.provider + '\u0000' + m.model}>
                 <td className={shared.cellText}>
