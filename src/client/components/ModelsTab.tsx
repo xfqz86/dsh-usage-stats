@@ -38,6 +38,7 @@ export function ModelsTab({
             <th>{t('table.output')}</th>
             <th>{t('table.cacheRead')}</th>
             <th>{t('table.total')}</th>
+            <th>{t('table.share')}</th>
           </tr>
         </thead>
         <tbody>

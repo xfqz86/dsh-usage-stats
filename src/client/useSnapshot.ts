@@ -52,6 +52,7 @@ export interface UsageSnapshot {
   series: { all: SeriesPoint[]; current: SeriesPoint[] }
   models: ModelStat[]
   sessionsList: SessionStat[]
+  sessionsListTotal?: number
 }
 
 /** 每 `intervalMs` 轮询一次服务端快照；返回 [快照, 是否出错, 手动刷新]。 */
@@ -69,7 +70,7 @@ export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean, 
         const response = await fetch('/usage-stats/api/snapshot', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ sessionId: null }),
+          body: JSON.stringify({ sessionId: null, limit: 200 }),
         })
         parsed = await response.json().catch(() => ({}))
       } catch (e) {
@@ -81,7 +82,7 @@ export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean, 
         setErr(false)
       } else {
         setErr(true)
-        setData(null)
+        // 保留旧数据，仅标记错误，避免 4s 轮询抖动导致界面闪烁
       }
     }
     load()

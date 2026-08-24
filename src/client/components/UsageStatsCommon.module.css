@@ -56,7 +56,7 @@
   min-width: 0;
 }
 
-/* 磁贴悬浮：加深阴影（移除 translateY，避免 fixed tooltip 被 transform 创建的 containing block 捕获而漂移/撑出滚动条） */
+/* 磁贴悬浮：加深阴影与边框高亮 */
 .cell:hover {
   border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, var(--dsw-alias-border-l2));
   box-shadow: var(--dsw-shadow-lv2);

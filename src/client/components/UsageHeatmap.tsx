@@ -58,11 +58,21 @@ export function UsageHeatmap({
   return (
     <div className={shared.section}>
       <div className={shared.sectionHead}>
-        <span className={shared.sectionLabel}>{t('heat.title')}</span>
+        <span className={css.heatTitle}>
+          {t('heat.total', { tokens: fmtFull(totalTokens), calls: fmtFull(totalCalls) })}
+        </span>
+        <span className={css.heatLegend} aria-hidden="true">
+          <span className={css.heatLegendLabel}>{t('heat.legendLess')}</span>
+          <span className={css.heatLegendSwatches}>
+            <i className={css.hcellLegend} />
+            <i className={`${css.hcellLegend} ${css.hl1}`} />
+            <i className={`${css.hcellLegend} ${css.hl2}`} />
+            <i className={`${css.hcellLegend} ${css.hl3}`} />
+            <i className={`${css.hcellLegend} ${css.hl4}`} />
+          </span>
+          <span className={css.heatLegendLabel}>{t('heat.legendMore')}</span>
+        </span>
       </div>
-      <span className={css.heatTotal}>
-        {t('heat.total', { tokens: fmtFull(totalTokens), calls: fmtFull(totalCalls) })}
-      </span>
       {hasUsage ? (
         <>
           <div className={css.heatGrid} style={{ gridTemplateColumns: `repeat(${grid.cols},1fr)` }}>

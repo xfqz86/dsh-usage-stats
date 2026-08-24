@@ -48,7 +48,10 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   useEffect(() => {
     const root = rootRef.current
     const footerActionsDiv = root?.parentElement?.parentElement as HTMLElement | null
-    if (!footerActionsDiv) return
+    if (!footerActionsDiv) {
+      console.warn('[usage-stats] 未找到 footerActions 容器，flex 布局调整跳过（harness DOM 可能已变更）')
+      return
+    }
     const prev = footerActionsDiv.style.flexDirection
     footerActionsDiv.style.flexDirection = 'column'
     return () => {

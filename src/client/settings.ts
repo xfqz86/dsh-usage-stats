@@ -15,7 +15,7 @@ export const GO_FETCH_MIN_MINUTES = 3
 /** 抓取间隔默认值（分钟）。 */
 export const GO_FETCH_DEFAULT_MINUTES = 5
 
-/** 插件偏好设置（当前仅 OpenCode Go 抓取相关，后续可扩展）。 */
+/** 插件偏好设置（OpenCode Go 抓取相关三项）。 */
 export interface UsageSettings {
   /** 是否启用 OpenCode Go 额度抓取（关闭后不再请求官方额度接口）。 */
   goEnabled: boolean

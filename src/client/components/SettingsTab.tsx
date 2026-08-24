@@ -23,7 +23,7 @@ import { SettingsSwitch } from './SettingsSwitch.tsx'
 export function SettingsTab({
   onRefresh, settings, onUpdateSettings, t,
 }: {
-  /** 重建/清零完成后立即重新拉取快照（不再暴露"手动刷新"按钮）。 */
+  /** 重建/清零完成后立即重新拉取快照。 */
   onRefresh: () => void
   settings: UsageSettings
   onUpdateSettings: (patch: Partial<UsageSettings>) => void
@@ -46,11 +46,13 @@ export function SettingsTab({
     if (rebuildState === 'busy') return
     setRebuildState('busy')
     try {
-      await fetch('/usage-stats/api/rebuild', {
+      const response = await fetch('/usage-stats/api/rebuild', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
       })
+      const json = await response.json().catch(() => null) as { ok?: boolean } | null
+      if (!response.ok || json?.ok !== true) throw new Error('rebuild failed')
       setRebuildState('done')
       onRefresh()
       window.setTimeout(() => setRebuildState('idle'), 1500)
@@ -78,11 +80,13 @@ export function SettingsTab({
     if (clearState === 'busy') return
     setClearState('busy')
     try {
-      await fetch('/usage-stats/api/clear', {
+      const response = await fetch('/usage-stats/api/clear', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
       })
+      const json = await response.json().catch(() => null) as { ok?: boolean } | null
+      if (!response.ok || json?.ok !== true) throw new Error('clear failed')
       setClearState('done')
       onRefresh()
       window.setTimeout(() => setClearState('idle'), 1500)

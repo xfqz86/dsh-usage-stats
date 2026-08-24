@@ -7,7 +7,7 @@
  * 返回 [settings, update]：update 接受 Partial 局部合并并做夹取与持久化。
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   clampGoFetchMinutes,
   loadUsageSettings,
@@ -18,18 +18,21 @@ import {
 /** 偏好设置 hook：读取即持久（localStorage）。 */
 export function useGoSettings(): [UsageSettings, (patch: Partial<UsageSettings>) => void] {
   const [settings, setSettings] = useState<UsageSettings>(() => loadUsageSettings())
+  const isFirstRef = useRef(true)
+
+  // 副作用移出 setState updater，避免 StrictMode 双写；通过 effect 持久化
+  useEffect(() => {
+    if (isFirstRef.current) { isFirstRef.current = false; return }
+    saveUsageSettings(settings)
+  }, [settings])
 
   /** 局部合并更新：间隔夹到下限后写入存储。 */
   const update = useCallback((patch: Partial<UsageSettings>) => {
-    setSettings((prev) => {
-      const next: UsageSettings = {
-        ...prev,
-        ...patch,
-        goFetchMinutes: clampGoFetchMinutes(patch.goFetchMinutes ?? prev.goFetchMinutes),
-      }
-      saveUsageSettings(next)
-      return next
-    })
+    setSettings((prev) => ({
+      ...prev,
+      ...patch,
+      goFetchMinutes: clampGoFetchMinutes(patch.goFetchMinutes ?? prev.goFetchMinutes),
+    }))
   }, [])
 
   return [settings, update]

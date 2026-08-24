@@ -127,7 +127,7 @@ export function DatesTab({
             style={{ left: (tipPos ? tipPos.left : 0) + 'px', top: (tipPos ? tipPos.top : 0) + 'px', opacity: tipPos ? 1 : 0 }}
           >
             <div>{tip.label}</div>
-            <div>总 <b>{fmtFull(tip.total)}</b> tokens · 调 {fmtFull(tip.calls)}</div>
+            <div>{t('dates.tooltipPrefix')}<b>{fmtFull(tip.total)}</b>{t('dates.tooltipSuffix', { calls: fmtFull(tip.calls) })}</div>
           </div>
         )}
       </div>

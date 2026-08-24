@@ -45,8 +45,8 @@ export function OverviewTab({
     ? { input: todayPoint.input, output: todayPoint.output, cacheRead: todayPoint.cacheRead, cacheWrite: todayPoint.cacheWrite, reasoning: todayPoint.reasoning, total: dayTotal(todayPoint) }
     : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 }
   const todayCalls = todayPoint?.calls ?? 0
-  // 会话数已并入总计标题右侧，首行今日 2 + 总计 2 已占满 4 列；
-  // 第二行：有 Go 时 Go 1 + 热力 3，无 Go 时热力整行
+  // 总计标题右侧显示会话数，首行今日 2 列 + 总计 2 列占满 4 列；
+  // 第二行：有 Go 时 Go 1 列 + 热力 3 列，无 Go 时热力整行
   const heatCls = go === null ? css.tileHeatFull : go.status === 'ok' ? css.tileHeat : css.tileHeatFull
   const totalSide = `${fmtFull(value.sessions)} ${t('panel.summary.sessions')}`
 

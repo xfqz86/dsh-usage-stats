@@ -12,14 +12,16 @@ import { fmt, fmtFull, fullDayLabel, shortId, usageTotal } from '../stats.ts'
 
 /** 会话 Tab：按会话表（默认 8 条，可展开全部）。 */
 export function SessionsTab({
-  sessionsList, t,
+  sessionsList, sessionsListTotal, t,
 }: {
   sessionsList: SessionStat[]
+  sessionsListTotal?: number
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
+  const total = typeof sessionsListTotal === 'number' ? sessionsListTotal : sessionsList.length
   const [showAllSessions, setShowAllSessions] = useState(false)
-  const hasMoreSessions = sessionsList.length > 8
-  const shownSessions = showAllSessions ? sessionsList.slice(0, 50) : sessionsList.slice(0, 8)
+  const hasMoreSessions = total > 8
+  const shownSessions = showAllSessions ? sessionsList : sessionsList.slice(0, 8)
 
   if (sessionsList.length === 0) {
     return <div className={shared.empty}>{t('state.noUsage')}</div>
@@ -31,7 +33,7 @@ export function SessionsTab({
         <span className={shared.sectionLabel}>{t('panel.sessions')}</span>
         {hasMoreSessions && (
           <button className={css.toggle} onClick={() => setShowAllSessions(v => !v)}>
-            {t(showAllSessions ? 'sessions.collapseAll' : 'sessions.showAll', { n: sessionsList.length })}
+            {t(showAllSessions ? 'sessions.collapseAll' : 'sessions.showAll', { n: total })}
           </button>
         )}
       </div>

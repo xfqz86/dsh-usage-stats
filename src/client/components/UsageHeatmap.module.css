@@ -2,11 +2,57 @@
    月份标签、今日外框高亮。颜色全部使用设计 token。 */
 /* .section* / .empty 等基元见 UsageStatsCommon.module.css。 */
 
+.heatTitle {
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* 兼容旧类名（如有外部引用），与 heatTitle 同款 */
 .heatTotal {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+/* 右上角图例：Less [5 档色块] More */
+.heatLegend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.heatLegendLabel {
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.heatLegendSwatches {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.hcellLegend {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  box-sizing: border-box;
+  flex: none;
+  background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent);
+  border: 1px solid var(--dsw-alias-border-l1);
 }
 
 /* Codex 风格 26 周热力图（列 = 周，行 = 周一..周日）。 */
