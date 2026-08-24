@@ -32,9 +32,11 @@ export interface SessionStat {
   usage: UsageAgg
 }
 
-/** 服务端 API 路由返回的快照体。 */
+/**
+ * 快照业务体：路由响应为 { ok, value } 外层包装（ok 由围栏与处理结果给出），
+ * 此处类型对应其中的 value 部分，不再含内层 ok 字段。
+ */
 export interface UsageSnapshot {
-  ok: true
   scanning: boolean
   scans: number
   failed: number

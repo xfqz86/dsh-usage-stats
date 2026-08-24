@@ -84,7 +84,6 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
     }
   }
   return {
-    ok: true,
     scanning: store.scanning,
     scans: store.scans,
     failed: store.failed,
