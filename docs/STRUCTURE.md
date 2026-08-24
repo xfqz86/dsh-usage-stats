@@ -43,6 +43,7 @@ dsh-usage-stats/
 │   │   │   ├── UsageStatsFooter.tsx ← 用量统计的侧边栏底部动作：渲染在 `sidebar.footer.action` 列表插槽 （设置按钮上方）的今日统计触发器。
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳（UsageStatsPanel）：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。
 │   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗（Tab 化）。
+│   │   ├── api.ts ← /usage-stats/api/* 的浏览器端调用约定：全部 POST 必须携带的请求头。
 │   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标）+ 模态窗详情。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── settings.ts ← 插件偏好设置（浏览器端）：当前是 OpenCode Go 抓取相关三项设置。
@@ -53,7 +54,7 @@ dsh-usage-stats/
 │   ├── host/
 │   │   ├── agg.ts ← 聚合口径与纯函数：Agg / SessionInfo 结构、折叠原子操作（newAgg / ink）、 事件守卫（usable / modelKeyOf）。
 │   │   ├── goquota.ts ← OpenCode Go 订阅额度查询：滚动 5 小时 / 本周 / 本月三档用量百分比 与重置时间（`GET https://opencode.ai/zen/go/v1/usage`）。
-│   │   ├── http.ts ← JSON API 的 HTTP 辅助：请求体读取、JSON 响应写出、回环信任围栏。
+│   │   ├── http.ts ← JSON API 的 HTTP 辅助：请求体读取、JSON 响应写出、回环信任围栏与 CSRF 自定义头围栏。
 │   │   ├── index.ts ← 用量统计的服务端（Host）插件入口：账本模式装配（自管理 sqlite 介质）。
 │   │   ├── ledger.ts ← 原始事件流账本（Ledger）：用量事件的唯一事实来源 —— 自管理 SQLite。
 │   │   ├── logs.ts ← 会话日志的目录发现与 NDJSON 解析。

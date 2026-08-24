@@ -1,14 +1,16 @@
 /**
  * 用量统计浏览器端（Client）的快照轮询。
  *
- * 服务端（Host）提供 POST /usage-stats/api/snapshot（回环围栏）。本 hook
- * 维持一个 4s 轮询，底部角标与模态窗共用同一份数据。
+ * 服务端（Host）提供 POST /usage-stats/api/snapshot（回环围栏 + CSRF 围栏：
+ * 所有 /usage-stats/api/* POST 必须携带 x-dsh-usage-stats 请求头，否则 403）。
+ * 本 hook 维持一个 4s 轮询，底部角标与模态窗共用同一份数据。
  * UsageAgg / SeriesPoint 协议类型定义在 types.ts（与 host 端 Agg /
  * SeriesPoint 统一，避免两端镜像漂移）。
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UsageAgg, SeriesPoint } from '../types.ts'
+import { API_HEADERS } from './api.ts'
 
 /** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
 export type { UsageAgg, SeriesPoint } from '../types.ts'
@@ -62,23 +64,27 @@ export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean, 
   const [data, setData] = useState<UsageSnapshot | null>(null)
   const [err, setErr] = useState(false)
   const [tick, setTick] = useState(0)
+  // 乱序守卫：每次发起请求取递增序号，响应返回时若已有更新的请求发出
+  // （自身序号不再是最新），丢弃本次结果，防止旧响应覆盖新数据。
+  const seqRef = useRef(0)
 
   useEffect(() => {
     let live = true
     setErr(false)
     const load = async () => {
+      const mine = ++seqRef.current
       let parsed: { ok?: boolean; value?: UsageSnapshot } = {}
       try {
         const response = await fetch('/usage-stats/api/snapshot', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: API_HEADERS,
           body: JSON.stringify({ sessionId: null, limit: 200 }),
         })
         parsed = await response.json().catch(() => ({}))
       } catch (e) {
         parsed = {}
       }
-      if (!live) return
+      if (!live || mine !== seqRef.current) return
       if (parsed.ok === true && parsed.value) {
         setData(parsed.value)
         setErr(false)
