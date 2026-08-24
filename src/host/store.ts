@@ -17,6 +17,7 @@ import { newAgg, ink, usable } from './agg.ts'
 import { startOfDay } from '../utils.ts'
 import type { Ledger, LedgerEvent } from './ledger.ts'
 import { toLedgerEvent } from './ledger.ts'
+import { errorMessage } from '../utils.ts'
 
 /** 会话级状态（数值聚合 + 去重水位；title/cwd/createdAt 在账本 meta）。 */
 export interface UsageStore {
@@ -115,9 +116,16 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent, ledger?: Led
   foldUsage(store, info, ev.t, usage)
   ink(ensureModel(store, ev.provider + '\u0000' + ev.model), usage)
   store.foldedEvents += 1
-  // 同步物化到预统计表（实时路径增量，批量导入时挂起）
+  // 同步物化到预统计表（实时路径增量，批量导入时挂起）。失败不抛错、
+  // 不打断折叠（内存聚合仍是正确事实），仅记录日志与 lastError 供快照
+  // 暴露；预统计缺失部分由下次启动的加载/重放路径自愈。
   if (ledger) {
-    try { ledger.incrementAgg(ev) } catch {}
+    try {
+      ledger.incrementAgg(ev)
+    } catch (e) {
+      console.error('[usage-stats] 预统计增量写入失败', e)
+      store.lastError = errorMessage(e)
+    }
   }
   return true
 }
