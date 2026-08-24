@@ -10,7 +10,9 @@
  *   - SettingsTab（设置：刷新 / 重建账本）
  *
  * 数据与底部按钮共用 /usage-stats/api/snapshot 与 /usage-stats/api/go-quota
- * 的轮询结果；Tab 内视图状态（范围 / 曲线视图 / 会话展开）在切换时保留。
+ * 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
+ * （DatesTab 的曲线范围、SessionsTab 的会话展开等）不跨切换保留，
+ * 重新进入对应 Tab 即重置为默认值。
  */
 
 import { useState, type ComponentType } from 'react'

@@ -4,7 +4,7 @@
  *   模块（含 node:sqlite）+ 本地代码；DSH 服务（webServer / sessionQuery /
  *   sessionPersistence）由 cordis 注入，从不直接 import。
  * - lib/client.js —— 浏览器端 bundle（CJS 闭包工厂），以包名 id
- *   `dsh-usage-stats` 通过 window.__ModuleLoader__.load({ id, factory })
+ *   `@xfqz86/dsh-usage-stats` 通过 window.__ModuleLoader__.load({ id, factory })
  *   注册。
  *
  * 浏览器端 externals 复刻 shell 的冻结模块表；bundle 运行时只 require

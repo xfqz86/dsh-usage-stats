@@ -3,8 +3,9 @@
  *
  * - 注册到 `sidebar.footer.action` 列表插槽（属主为
  *   @deepseek-ai/dsh-client-ui-sidebar），cell id `dsh-usage-stats`。
- * - 底部角标在宽列与 56px rail 两种形态下都显示今日 tokens/调用数；
- *   点击打开模态窗详情（汇总、模型拆分、会话列表、每日趋势曲线/热力图）。
+ * - 底部角标在宽列形态显示今日 tokens/调用数与三色比例条；56px rail 态
+ *   收窄为仅圆形图标按钮，今日数字明细移入按钮 Tooltip；点击打开模态窗
+ *   详情（汇总、模型拆分、会话列表、每日趋势曲线/热力图）。
  * - 数据来自服务端 POST /usage-stats/api/snapshot。
  *
  * 所有类型均为 harness 自带：ClientContext 来自客户端运行时，插槽表由
