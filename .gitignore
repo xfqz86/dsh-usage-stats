@@ -7,3 +7,6 @@ lib/
 # 本机私有 / 强时效的指令补充，不入库（dsh 会自动注入）
 AGENTS.local.md
 CLAUDE.local.md
+
+# dsh-agent-teams 插件生成的文件
+.agent-teams
