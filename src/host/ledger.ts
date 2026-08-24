@@ -8,6 +8,8 @@
  *   - `events` 表：一行一条用量事件，PRIMARY KEY (t, session_id, seq) 天然
  *     幂等（同一条事件重复写入收敛，重开账本时每行只折一次；seq=-1 的未知
  *     序事件再按毫秒时间戳区分）。结构化列主键，列顺序为 t、session_id、seq。
+ *     无 time 的畸形事件以"当天内确定性毫秒偏移"入账：同日重放幂等，
+ *     跨日重放理论上可能重复——防御路径罕见可接受。
  *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/
  *     lastActive（初始化扫描抄录、实时 session/title 事件更新）。
  *   - `agg_*` 预统计表：派生聚合的物化视图（见 §5 预统计），与 events 同库
@@ -226,13 +228,16 @@ export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/
   if (typeof rawT === 'number' && Number.isFinite(rawT) && rawT > 0) {
     t = rawT
   } else {
-    // 无 time 时用内容哈希生成确定性 t，保证同一事件重写幂等且不同事件仍可区分
+    // 无 time 时用内容哈希生成"当天内确定性毫秒偏移"：落在今天 [1s, 当日末]
+    // 区间内，保证同一事件同日重放幂等（主键 upsert 收敛）且不同事件仍可
+    // 区分；避免旧方案落入 1970 年附近，把客户端 'all' 日桶拉长到两万天。
+    // 幂等边界：跨日重放理论上会另落一日产生重复——该分支仅防御畸形事件
+    // （真实事件均带 time），罕见可接受。
     let hashStr = ''
     try { hashStr = JSON.stringify((event as { data?: unknown }).data ?? '') } catch { hashStr = String((event as { data?: unknown }).data) }
     let h = 0
     for (let i = 0; i < hashStr.length; i += 1) h = ((h * 31) + hashStr.charCodeAt(i)) >>> 0
-    // 映射到 0..1e9 范围的小时间戳，避免与真实毫秒时间戳冲突且保持稳定
-    t = h % 1_000_000_000
+    t = startOfDay(Date.now()) + 1000 + (h % 83_998_999)
   }
   return {
     t,
