@@ -32,7 +32,7 @@ import { startOfDay } from '../utils.ts'
 import type { UsageStore } from './store.ts'
 
 /** 账本 schema 版本（PRAGMA user_version）：结构不兼容时自动清库重建。 */
-export const LEDGER_VERSION = 3
+export const LEDGER_VERSION = 4
 /** 归属目录名（storages 下，与插件同名）。 */
 export const LEDGER_DIR_NAME = 'dsh-usage-stats'
 /** 旧版目录名（兼容迁移：v0.1.0 前为 dsh-usage-statistics）。 */
@@ -70,6 +70,9 @@ export interface SessionMeta {
   cwd: string
   createdAt: number
   lastActive: number
+  parentSession: string
+  origin: string
+  delegationDepth: number
 }
 
 /** events 表 DDL（列名 snake_case，读回时映射回 camelCase）。 */
@@ -91,11 +94,14 @@ CREATE TABLE IF NOT EXISTS events (
 /** session_meta 表 DDL。 */
 const META_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS session_meta (
-  session_id  TEXT    PRIMARY KEY,
-  title       TEXT    NOT NULL DEFAULT '',
-  cwd         TEXT    NOT NULL DEFAULT '',
-  created_at  INTEGER NOT NULL DEFAULT 0,
-  last_active INTEGER NOT NULL DEFAULT 0
+  session_id       TEXT    PRIMARY KEY,
+  title            TEXT    NOT NULL DEFAULT '',
+  cwd              TEXT    NOT NULL DEFAULT '',
+  created_at       INTEGER NOT NULL DEFAULT 0,
+  last_active      INTEGER NOT NULL DEFAULT 0,
+  parent_session   TEXT    NOT NULL DEFAULT '',
+  origin           TEXT    NOT NULL DEFAULT '',
+  delegation_depth INTEGER NOT NULL DEFAULT 0
 )`
 
 /** 预统计：全量总表（单行，id=0）。 */
@@ -209,7 +215,7 @@ interface LedgerStatements {
 
 /** 新建空会话元数据（字段可增量补齐）。 */
 export function emptySessionMeta(): SessionMeta {
-  return { title: '', cwd: '', createdAt: 0, lastActive: 0 }
+  return { title: '', cwd: '', createdAt: 0, lastActive: 0, parentSession: '', origin: '', delegationDepth: 0 }
 }
 
 /** 会话事件 → 账本事件（无 usage 时返回 null）。 */
@@ -315,9 +321,18 @@ export class Ledger {
     const row = this.db.prepare('PRAGMA user_version').get() as { user_version?: unknown }
     const version = typeof row?.user_version === 'number' ? row.user_version : 0
     if (version !== LEDGER_VERSION) {
-      if (version === 2) {
-        // 2 -> 3 增量迁移：保留 events / session_meta，仅新增 agg_* 表
-        // 已通过 IF NOT EXISTS 建表，只需更新版本号，后续启动走 agg 回填
+      if (version === 3) {
+        // 3 -> 4 增量迁移：session_meta 新增 parent_session / origin / delegation_depth 三列
+        try { this.db.exec("ALTER TABLE session_meta ADD COLUMN parent_session TEXT NOT NULL DEFAULT ''") } catch {}
+        try { this.db.exec("ALTER TABLE session_meta ADD COLUMN origin TEXT NOT NULL DEFAULT ''") } catch {}
+        try { this.db.exec('ALTER TABLE session_meta ADD COLUMN delegation_depth INTEGER NOT NULL DEFAULT 0') } catch {}
+        console.warn(`[usage-stats] 账本 schema 升级 ${String(version)} -> ${String(LEDGER_VERSION)}，保留历史事件`)
+        this.db.exec(`PRAGMA user_version = ${LEDGER_VERSION}`)
+      } else if (version === 2) {
+        // 2 -> 4：2->3 为 agg 表增量（已通过 IF NOT EXISTS 完成） + 3->4 为 meta 三列增量
+        try { this.db.exec("ALTER TABLE session_meta ADD COLUMN parent_session TEXT NOT NULL DEFAULT ''") } catch {}
+        try { this.db.exec("ALTER TABLE session_meta ADD COLUMN origin TEXT NOT NULL DEFAULT ''") } catch {}
+        try { this.db.exec('ALTER TABLE session_meta ADD COLUMN delegation_depth INTEGER NOT NULL DEFAULT 0') } catch {}
         console.warn(`[usage-stats] 账本 schema 升级 ${String(version)} -> ${String(LEDGER_VERSION)}，保留历史事件`)
         this.db.exec(`PRAGMA user_version = ${LEDGER_VERSION}`)
       } else if (version === 0) {
@@ -354,13 +369,14 @@ export class Ledger {
       'SELECT t, session_id, seq, provider, model, input, output, cache_read, cache_write, reasoning FROM events',
     )
     const upsertMeta = this.db.prepare(
-      `INSERT INTO session_meta (session_id, title, cwd, created_at, last_active)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO session_meta (session_id, title, cwd, created_at, last_active, parent_session, origin, delegation_depth)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
          title = excluded.title, cwd = excluded.cwd,
-         created_at = excluded.created_at, last_active = excluded.last_active`,
+         created_at = excluded.created_at, last_active = excluded.last_active,
+         parent_session = excluded.parent_session, origin = excluded.origin, delegation_depth = excluded.delegation_depth`,
     )
-    const allMeta = this.db.prepare('SELECT session_id, title, cwd, created_at, last_active FROM session_meta')
+    const allMeta = this.db.prepare('SELECT session_id, title, cwd, created_at, last_active, parent_session, origin, delegation_depth FROM session_meta')
     // 预统计语句
     const hasAgg = this.db.prepare('SELECT 1 AS x FROM agg_total LIMIT 1')
     const getAggTotal = this.db.prepare('SELECT input, output, cache_read, cache_write, reasoning, total, calls, folded_events FROM agg_total WHERE id = 0')
@@ -473,6 +489,9 @@ export class Ledger {
         cwd: String(row.cwd ?? ''),
         createdAt: Number(row.created_at) || 0,
         lastActive: Number(row.last_active) || 0,
+        parentSession: String(row.parent_session ?? ''),
+        origin: String(row.origin ?? ''),
+        delegationDepth: Number(row.delegation_depth) || 0,
       })
     }
   }
@@ -513,9 +532,12 @@ export class Ledger {
       lastActive: typeof patch.lastActive === 'number' && Number.isFinite(patch.lastActive) && patch.lastActive > 0
         ? Math.max(current.lastActive, patch.lastActive)
         : current.lastActive,
+      parentSession: typeof patch.parentSession === 'string' ? patch.parentSession : current.parentSession,
+      origin: typeof patch.origin === 'string' ? patch.origin : current.origin,
+      delegationDepth: typeof patch.delegationDepth === 'number' && Number.isFinite(patch.delegationDepth) && patch.delegationDepth >= 0 ? patch.delegationDepth : current.delegationDepth,
     }
     this.metaCache.set(id, next)
-    this.stmts.upsertMeta.run(id, next.title, next.cwd, next.createdAt, next.lastActive)
+    this.stmts.upsertMeta.run(id, next.title, next.cwd, next.createdAt, next.lastActive, next.parentSession, next.origin, next.delegationDepth)
   }
 
   /** 取会话元数据（无则 null）。 */

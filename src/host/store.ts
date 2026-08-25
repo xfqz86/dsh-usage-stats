@@ -141,16 +141,22 @@ export function foldRecord(
   store: UsageStore,
   ledger: Ledger,
   id: string,
-  record: SessionEvent | { type: string; cwd?: unknown; createdAt?: unknown; data?: { title?: unknown; usage?: unknown } },
+  record: SessionEvent | { type: string; cwd?: unknown; createdAt?: unknown; parentSession?: unknown; origin?: unknown; delegationDepth?: unknown; data?: { title?: unknown; usage?: unknown } },
 ): void {
   if (record.type === 'session') {
-    // 会话种子记录：cwd / createdAt 在顶层（SessionHeader 字段）。
-    const rec = record as { cwd?: unknown; createdAt?: unknown }
+    // 会话种子记录：cwd / createdAt / parentSession 等在顶层（SessionHeader 字段）。
+    const rec = record as { cwd?: unknown; createdAt?: unknown; parentSession?: unknown; origin?: unknown; delegationDepth?: unknown }
     const createdAt = typeof rec.createdAt === 'number' ? rec.createdAt : undefined
+    const parentSession = typeof rec.parentSession === 'string' ? rec.parentSession : undefined
+    const origin = typeof rec.origin === 'string' ? rec.origin : undefined
+    const delegationDepth = typeof rec.delegationDepth === 'number' && Number.isFinite(rec.delegationDepth) ? rec.delegationDepth : undefined
     ledger.setMeta(id, {
       cwd: typeof rec.cwd === 'string' ? rec.cwd : undefined,
       createdAt,
       lastActive: createdAt,
+      parentSession,
+      origin,
+      delegationDepth,
     })
     return
   }
@@ -192,7 +198,7 @@ export function foldRecord(
 }
 
 /** 取会话 meta（缺省用空元数据,避免 snapshot 层判空）。 */
-export function metaOf(ledger: Ledger, id: string): { title: string; cwd: string; createdAt: number; lastActive: number } {
+export function metaOf(ledger: Ledger, id: string): { title: string; cwd: string; createdAt: number; lastActive: number; parentSession: string; origin: string; delegationDepth: number } {
   const meta = ledger.getMeta(id)
-  return meta ?? { title: '', cwd: '', createdAt: 0, lastActive: 0 }
+  return meta ?? { title: '', cwd: '', createdAt: 0, lastActive: 0, parentSession: '', origin: '', delegationDepth: 0 }
 }

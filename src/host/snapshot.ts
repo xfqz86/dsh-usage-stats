@@ -51,6 +51,9 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
       cwd: meta.cwd,
       createdAt: meta.createdAt,
       lastActive: Math.max(meta.lastActive, info.lastActive),
+      parentSession: meta.parentSession || null,
+      origin: meta.origin || null,
+      delegationDepth: meta.delegationDepth || 0,
       calls: info.allAgg.calls,
       usage: usageOf(info.allAgg),
     })

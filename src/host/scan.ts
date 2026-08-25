@@ -104,7 +104,7 @@ export async function scanOnce(
     const logPaths = new Map<string, string>()
     findSessionLogs(getSessionsRoot(), 0, logPaths)
     const ids = new Set<string>(logPaths.keys())
-    const headerMap = new Map<string, { cwd?: string; createdAt?: number }>()
+    const headerMap = new Map<string, { cwd?: string; createdAt?: number; parentSession?: string; origin?: string; delegationDepth?: number }>()
 
     if (query) {
       try {
@@ -113,9 +113,9 @@ export async function scanOnce(
           for (const rec of listed) {
             if (rec.header && typeof rec.header.id === 'string') {
               ids.add(rec.header.id)
-              const h = rec.header as { cwd?: unknown; createdAt?: unknown }
-              if (typeof h.cwd === 'string' || typeof h.createdAt === 'number') {
-                headerMap.set(rec.header.id, { cwd: typeof h.cwd === 'string' ? h.cwd : undefined, createdAt: typeof h.createdAt === 'number' ? h.createdAt : undefined })
+              const h = rec.header as { cwd?: unknown; createdAt?: unknown; parentSession?: unknown; origin?: unknown; delegationDepth?: unknown }
+              if (typeof h.cwd === 'string' || typeof h.createdAt === 'number' || typeof h.parentSession === 'string' || typeof h.origin === 'string' || typeof h.delegationDepth === 'number') {
+                headerMap.set(rec.header.id, { cwd: typeof h.cwd === 'string' ? h.cwd : undefined, createdAt: typeof h.createdAt === 'number' ? h.createdAt : undefined, parentSession: typeof h.parentSession === 'string' ? h.parentSession : undefined, origin: typeof h.origin === 'string' ? h.origin : undefined, delegationDepth: typeof h.delegationDepth === 'number' ? h.delegationDepth : undefined })
               }
             }
           }
@@ -131,9 +131,9 @@ export async function scanOnce(
           for (const header of headers) {
             if (header && typeof header.id === 'string') {
               ids.add(header.id)
-              const h = header as { cwd?: unknown; createdAt?: unknown }
-              if (typeof h.cwd === 'string' || typeof h.createdAt === 'number') {
-                if (!headerMap.has(header.id)) headerMap.set(header.id, { cwd: typeof h.cwd === 'string' ? h.cwd : undefined, createdAt: typeof h.createdAt === 'number' ? h.createdAt : undefined })
+              const h = header as { cwd?: unknown; createdAt?: unknown; parentSession?: unknown; origin?: unknown; delegationDepth?: unknown }
+              if (typeof h.cwd === 'string' || typeof h.createdAt === 'number' || typeof h.parentSession === 'string' || typeof h.origin === 'string' || typeof h.delegationDepth === 'number') {
+                if (!headerMap.has(header.id)) headerMap.set(header.id, { cwd: typeof h.cwd === 'string' ? h.cwd : undefined, createdAt: typeof h.createdAt === 'number' ? h.createdAt : undefined, parentSession: typeof h.parentSession === 'string' ? h.parentSession : undefined, origin: typeof h.origin === 'string' ? h.origin : undefined, delegationDepth: typeof h.delegationDepth === 'number' ? h.delegationDepth : undefined })
               }
             }
           }
@@ -153,8 +153,8 @@ export async function scanOnce(
         const id = idList[i]; i += 1
         // 预填充 header 元数据（若有），保证即使无 RAW/无 seed 记录时也不为空
         const hdr = headerMap.get(id)
-        if (hdr && (hdr.cwd !== undefined || hdr.createdAt !== undefined)) {
-          ledger.setMeta(id, { cwd: hdr.cwd, createdAt: hdr.createdAt, lastActive: hdr.createdAt })
+        if (hdr && (hdr.cwd !== undefined || hdr.createdAt !== undefined || hdr.parentSession !== undefined || hdr.origin !== undefined || hdr.delegationDepth !== undefined)) {
+          ledger.setMeta(id, { cwd: hdr.cwd, createdAt: hdr.createdAt, lastActive: hdr.createdAt, parentSession: hdr.parentSession, origin: hdr.origin, delegationDepth: hdr.delegationDepth })
         }
         try {
           // 2a) RAW 优先：后端原样工件（readRaw 返回解码后的完整 JSONL

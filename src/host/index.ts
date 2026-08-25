@@ -64,6 +64,17 @@ export function apply(ctx: Context): void {
     const id = session && typeof session.id === 'string' ? session.id : undefined
     if (!id) return
     try {
+      // 实时补齐会话 header 的 parentSession / origin / delegationDepth（子代理归属）
+      const hdr = (session as unknown as { header?: { parentSession?: unknown; origin?: unknown; delegationDepth?: unknown; cwd?: unknown; createdAt?: unknown } })?.header
+      if (hdr) {
+        const patch: Record<string, unknown> = {}
+        if (typeof hdr.parentSession === 'string') (patch as { parentSession?: string }).parentSession = hdr.parentSession
+        if (typeof hdr.origin === 'string') (patch as { origin?: string }).origin = hdr.origin
+        if (typeof hdr.delegationDepth === 'number' && Number.isFinite(hdr.delegationDepth)) (patch as { delegationDepth?: number }).delegationDepth = hdr.delegationDepth
+        if (typeof hdr.cwd === 'string') (patch as { cwd?: string }).cwd = hdr.cwd
+        if (typeof hdr.createdAt === 'number' && Number.isFinite(hdr.createdAt)) (patch as { createdAt?: number }).createdAt = hdr.createdAt
+        if (Object.keys(patch).length > 0) ledger.setMeta(id, patch as Parameters<typeof ledger.setMeta>[1])
+      }
       foldRecord(store, ledger, id, event)
     } catch (e) {
       // 写账本失败记日志，不打断事件循环；账本/内存保持上次成功点。
