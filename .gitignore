@@ -10,3 +10,4 @@ CLAUDE.local.md
 
 # dsh-agent-teams 插件生成的文件
 .agent-teams
+docs/sessions-*.md

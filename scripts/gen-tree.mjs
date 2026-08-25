@@ -10,7 +10,8 @@
  * 的独立结构文档。
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 /** 仓库根（脚本位于 <root>/scripts/）。 */
@@ -21,6 +22,9 @@ const EXCLUDED = new Set([
   'node_modules', 'lib', '.git', '.DS_Store',
   'AGENTS.local.md', 'CLAUDE.local.md', 'pnpm-debug.log',
 ])
+
+/** .gitignore 路径（用于尊重 git 忽略规则）。 */
+const GITIGNORE_PATH = join(ROOT, '.gitignore')
 
 /** 需提取头注的扩展名白名单（其余扩展名走固定备注或留空）。 */
 const HEADER_EXTS = new Set(['.ts', '.tsx', '.js', '.mjs', '.css'])
@@ -38,6 +42,199 @@ const NOTES = {
   'pnpm-workspace.yaml': 'pnpm 工作区（含版本保鲜期白名单）',
   'tsconfig.json': 'TS 编译配置（严格模式）',
   'tsdown.config.ts': '双 bundle 构建配置（host ESM + client CJS）',
+}
+
+// ——— .gitignore 尊重逻辑（优先 git check-ignore，无依赖；失败回退到解析 .gitignore） ———
+
+/** 将相对路径统一转为 POSIX 形式（/ 分隔）。 */
+function toPosix(p) {
+  return p.split(sep).join('/')
+}
+
+/** glob 转正则核心（处理 *、?、**、[]）。 */
+function globToRegexCore(glob) {
+  let re = ''
+  let i = 0
+  while (i < glob.length) {
+    const c = glob[i]
+    if (c === '*') {
+      if (glob[i + 1] === '*') {
+        if (glob[i + 2] === '/') {
+          re += '(?:.*\\/)?'
+          i += 3
+        } else {
+          re += '.*'
+          i += 2
+        }
+      } else {
+        re += '[^/]*'
+        i += 1
+      }
+    } else if (c === '?') {
+      re += '[^/]'
+      i += 1
+    } else if (c === '[') {
+      let j = i + 1
+      while (j < glob.length && glob[j] !== ']') j += 1
+      if (j < glob.length) {
+        re += glob.slice(i, j + 1)
+        i = j + 1
+      } else {
+        re += '\\['
+        i += 1
+      }
+    } else {
+      if ('+.^$()|{}[]\\'.includes(c)) re += '\\' + c
+      else re += c
+      i += 1
+    }
+  }
+  return re
+}
+
+/** fallback 解析缓存。 */
+let fallbackPatterns = null
+/** git 可用性缓存：null 未探测，true/false 已探测。 */
+let gitAvailable = null
+/** 已计算的忽略集合（相对 POSIX 路径）。 */
+let ignoreSet = null
+
+/** 加载并解析 .gitignore 为模式对象数组（按出现顺序，后者覆盖前者）。 */
+function loadFallbackPatterns() {
+  if (fallbackPatterns !== null) return fallbackPatterns
+  fallbackPatterns = []
+  let content = ''
+  try {
+    content = readFileSync(GITIGNORE_PATH, 'utf8')
+  } catch {
+    return fallbackPatterns
+  }
+  const lines = content.split(/\r?\n/)
+  for (let raw of lines) {
+    // 去除首尾空白（git 会 trim 未转义的空格）
+    const trimmed = raw.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    // 处理转义的前导 # / !
+    if (raw.trimStart().startsWith('\\#') || raw.trimStart().startsWith('\\!')) {
+      raw = raw.trimStart().slice(1)
+    }
+    let line = trimmed
+    let negated = false
+    if (line.startsWith('!')) {
+      negated = true
+      line = line.slice(1).trim()
+      if (!line) continue
+    }
+    if (line.startsWith('\\#') || line.startsWith('\\!')) line = line.slice(1)
+    const dirOnly = line.endsWith('/')
+    let patternBody = dirOnly ? line.slice(0, -1) : line
+    const anchored = patternBody.startsWith('/')
+    if (anchored) patternBody = patternBody.slice(1)
+    const containsSlash = patternBody.includes('/')
+    const isBasename = !anchored && !containsSlash
+    const core = globToRegexCore(patternBody)
+    let regex
+    if (isBasename) {
+      // 基名模式：匹配任意层级的段（git 无斜杠时匹配任意层）
+      regex = new RegExp('^' + core + '$')
+    } else if (dirOnly) {
+      regex = new RegExp('^' + core + '(?:/.*)?$')
+    } else {
+      regex = new RegExp('^' + core + '$')
+    }
+    fallbackPatterns.push({ negated, regex, isBasename, dirOnly, patternBody })
+  }
+  return fallbackPatterns
+}
+
+/** 回退：用解析的 .gitignore 模式判断单个相对路径是否被忽略。 */
+function isIgnoredByFallback(relPosix) {
+  const patterns = loadFallbackPatterns()
+  if (patterns.length === 0) return false
+  let ignored = false
+  const segments = relPosix.split('/')
+  for (const p of patterns) {
+    let matched = false
+    if (p.isBasename) {
+      // 无斜杠模式匹配任意层级的段（目录忽略则其后代亦忽略，段匹配即代表忽略）
+      matched = segments.some((seg) => p.regex.test(seg))
+    } else {
+      matched = p.regex.test(relPosix)
+    }
+    if (matched) ignored = !p.negated
+  }
+  return ignored
+}
+
+/** 探测 git 是否可用。 */
+function ensureGitAvailable() {
+  if (gitAvailable !== null) return gitAvailable
+  try {
+    const probe = spawnSync('git', ['--version'], { encoding: 'utf8' })
+    gitAvailable = probe.status === 0 && !probe.error
+  } catch {
+    gitAvailable = false
+  }
+  return gitAvailable
+}
+
+/** 构建忽略集合（单次批量 git check-ignore；失败回退到解析）。 */
+function ensureIgnoreSet() {
+  if (ignoreSet !== null) return ignoreSet
+  ignoreSet = new Set()
+  // 收集候选相对路径（沿用 EXCLUDED + 隐藏文件过滤，避免遍历巨大的被排除目录）
+  const allRels = []
+  function collect(abs) {
+    let entries
+    try {
+      entries = readdirSync(abs, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const ent of entries) {
+      const name = ent.name
+      if (EXCLUDED.has(name) || name.startsWith('.')) continue
+      const full = join(abs, name)
+      const rel = toPosix(full.slice(ROOT.length + 1))
+      allRels.push(rel)
+      if (ent.isDirectory()) collect(full)
+    }
+  }
+  try {
+    collect(ROOT)
+  } catch {}
+  if (allRels.length === 0) return ignoreSet
+
+  if (ensureGitAvailable()) {
+    try {
+      const input = Buffer.from(allRels.join('\0') + '\0')
+      const result = spawnSync('git', ['check-ignore', '--no-index', '--stdin', '-z'], {
+        cwd: ROOT,
+        input,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+      if (!result.error && (result.status === 0 || result.status === 1)) {
+        const out = result.stdout ? result.stdout.toString('utf8') : ''
+        const ignored = out.split('\0').filter(Boolean).map((p) => toPosix(p))
+        for (const p of ignored) ignoreSet.add(p)
+        return ignoreSet
+      }
+    } catch {
+      // 回退到解析
+    }
+  }
+  // git 不可用或失败：逐一用 fallback 判断
+  for (const rel of allRels) {
+    if (isIgnoredByFallback(rel)) ignoreSet.add(rel)
+  }
+  return ignoreSet
+}
+
+/** 判断相对 POSIX 路径是否被 git 忽略（基于缓存的 ignoreSet）。 */
+function isGitIgnored(relPosix) {
+  if (!relPosix) return false
+  const set = ensureIgnoreSet()
+  return set.has(relPosix)
 }
 
 /** 取一段文本中首个块注释的首句（到中文句号为止）。 */
@@ -66,16 +263,20 @@ function annotationOf(rel, file) {
   }
 }
 
-/** 目录项按「目录在前、文件在后，各自按字典序」排列。 */
+/** 目录项按「目录在前、文件在后，各自按字典序」排列，并过滤 .gitignore 忽略项。 */
 function list(dir) {
-  return readdirSync(dir)
-    .filter((name) => !EXCLUDED.has(name) && !name.startsWith('.'))
-    .sort((a, b) => {
-      const aDir = statSync(join(dir, a)).isDirectory()
-      const bDir = statSync(join(dir, b)).isDirectory()
-      if (aDir !== bDir) return aDir ? -1 : 1
-      return a.localeCompare(b, 'zh-CN')
-    })
+  const raw = readdirSync(dir).filter((name) => !EXCLUDED.has(name) && !name.startsWith('.'))
+  // 叠加 .gitignore 过滤（基于相对 POSIX 路径）
+  const filtered = raw.filter((name) => {
+    const rel = toPosix(join(dir, name).slice(ROOT.length + 1))
+    return !isGitIgnored(rel)
+  })
+  return filtered.sort((a, b) => {
+    const aDir = statSync(join(dir, a)).isDirectory()
+    const bDir = statSync(join(dir, b)).isDirectory()
+    if (aDir !== bDir) return aDir ? -1 : 1
+    return a.localeCompare(b, 'zh-CN')
+  })
 }
 
 /**
@@ -90,7 +291,7 @@ function renderTree(abs, prefix) {
     const branch = isLast ? '└── ' : '├── '
     const line = prefix + branch + name + (isDir ? '/' : '')
     if (!isDir) {
-      const rel = join(abs, name).slice(ROOT.length + 1)
+      const rel = toPosix(join(abs, name).slice(ROOT.length + 1))
       const ann = annotationOf(rel, full)
       return [line + (ann ? ` ← ${ann}` : '')]
     }
