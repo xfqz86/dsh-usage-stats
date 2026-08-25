@@ -108,7 +108,9 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* ---- 表格（会话 / 模型两个 Tab 共用）---- */
+/* ---- 表格（会话 / 模型两个 Tab 共用）----
+   1366x768 适配：表头 12px、行高 32（td 6px 垂直内边距 + 20px 行高）、
+   单元格 12px，头部与体对齐，保持 --dsw-alias-* token 与横向滚动。 */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -117,12 +119,14 @@
 }
 
 .table th {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
+  line-height: 16px;
   color: var(--dsw-alias-label-caption);
   text-align: right;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
+  white-space: nowrap;
 }
 
 .table th:first-child,
@@ -131,10 +135,12 @@
 }
 
 .table td {
-  padding: 5px 6px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
 }
 
 .table tr:last-child td {
@@ -153,7 +159,7 @@
 
 .cellText {
   min-width: 0;
-  max-width: 190px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

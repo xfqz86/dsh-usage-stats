@@ -19,6 +19,8 @@ dsh-usage-stats/
 ├── src/
 │   ├── client/
 │   │   ├── components/
+│   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
+│   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
@@ -33,8 +35,8 @@ dsh-usage-stats/
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表（含占比条）。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 + 标题刷新按钮）、扫描页脚。
 │   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴 （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用； 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）+ 扫描页脚。
-│   │   │   ├── SessionsTab.module.css ← 会话 Tab（SessionsTab）：展开/收起切换链接（表格样式在共用基元里）。
-│   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表（标题/cwd/最近活跃，默认 8 条可展开）。
+│   │   │   ├── SessionsTab.module.css ← 会话 Tab（SessionsTab）：主会话折叠按钮、子行与徽标、横向滚动容器（表格样式在共用基元里）。
+│   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表（分页 20/页，子代理折叠到主会话，带加号展开；数据完整展示）。
 │   │   │   ├── SettingsTab.module.css ← 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、 抓取间隔数字输入。
 │   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置（OpenCode Go 抓取相关三项）+ 重建账本（最底部， 危险操作，点击后需二次确认：RiskConfirmation 复选「我已了解」+ 确认）。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。

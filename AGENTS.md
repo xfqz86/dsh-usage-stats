@@ -70,6 +70,7 @@ export function apply(ctx: ClientContext): void {
 - **tsx 一个组件一个文件**：不将多个组件置于同一 tsx（如模态窗各 Tab 独立为 `OverviewTab.tsx` / `DatesTab.tsx` / `SessionsTab.tsx` / `ModelsTab.tsx` / `SettingsTab.tsx`，统计格与热力图亦各占一个文件）。
 - **协议类型集中于 `src/types.ts`**（仅类型声明、零运行时，host / client 各自 re-export）；`src/utils.ts` 仅包含纯函数。类型与逻辑分离，避免单一文件混杂。
 - **样式使用 CSS Modules**（`*.module.css`，`import css from './X.module.css'`），写法与 harness 的 ui-sidebar / ui-primitives 一致；颜色一律使用设计 token（`--dsw-alias-*` / `--dsw-shadow-*`）。禁止将 CSS 写为字符串常量。独立插件 bundle 无法直接携带 .css 资产，由 `scripts/css-modules-inline.mjs` 在构建时将 .module.css 编译并内联为 JS 注入的 `<style>`（源码仍为真实 CSS Modules，仅构建产物单文件化）。
+- **组件归属**：可复用的通用组件必须置于 `src/client/components`，`src/client/views` 仅保留 Tab 级页面视图（如 `OverviewTab`/`SessionsTab` 等），禁止将通用组件置于 `views`（如 `SessionsPagination` 必须归 `components`）。
 - **注释使用中文**（代码注释、文件头注释、CSS 注释、测试注释、构建脚本注释）；标识符、类型名、错误消息使用英文。文档（README / AGENTS）使用中文。
 
 ## 4. 项目结构与模块职责

@@ -23,7 +23,7 @@ export interface ModelStat {
   usage: UsageAgg
 }
 
-/** 按会话的拆分条目。 */
+/** 按会话的拆分条目（已含子代理归属字段，复用 SessionHeader 语义，序列化为 string|null）。 */
 export interface SessionStat {
   id: string
   title: string
@@ -32,6 +32,9 @@ export interface SessionStat {
   lastActive: number
   calls: number
   usage: UsageAgg
+  parentSession: string | null
+  origin: string | null
+  delegationDepth: number
 }
 
 /**
@@ -78,7 +81,7 @@ export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean, 
         const response = await fetch('/usage-stats/api/snapshot', {
           method: 'POST',
           headers: API_HEADERS,
-          body: JSON.stringify({ sessionId: null, limit: 200 }),
+          body: JSON.stringify({ sessionId: null, limit: 500 }),
         })
         parsed = await response.json().catch(() => ({}))
       } catch (e) {

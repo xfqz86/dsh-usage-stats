@@ -6,6 +6,7 @@
  */
 
 import type { SeriesPoint, UsageAgg } from '../types.ts'
+import type { SessionStat } from './useSnapshot.ts'
 import { dateKeyOf, startOfDay } from '../utils.ts'
 
 /** 紧凑 token 格式化：1.2万 / 3.4亿 / 万以下原样。 */
@@ -41,6 +42,118 @@ export function usageTotal(u: UsageAgg): number {
 
 export function pctOf(v: number | null | undefined): string {
   return v === null || v === undefined || isNaN(v) ? '--' : v + '%'
+}
+
+/** 按会话分组：主会话 + 其子代理（子代理折叠到主会话，孤儿回落顶层，多级展平到根）。 */
+export interface SessionGroup {
+  main: SessionStat
+  children: SessionStat[]
+  agg: { calls: number; usage: UsageAgg }
+  childCount: number
+}
+
+/** 将用量聚合相加（纯函数，返回新 UsageAgg）。 */
+function addUsage(a: UsageAgg, b: UsageAgg): UsageAgg {
+  return {
+    input: (a.input || 0) + (b.input || 0),
+    output: (a.output || 0) + (b.output || 0),
+    cacheRead: (a.cacheRead || 0) + (b.cacheRead || 0),
+    cacheWrite: (a.cacheWrite || 0) + (b.cacheWrite || 0),
+    reasoning: (a.reasoning || 0) + (b.reasoning || 0),
+    total: (a.total || 0) + (b.total || 0),
+  }
+}
+
+/** 按会话 id 分组：子代理（origin==='subagent' 且 parentSession 指向存在会话）折叠到根主会话，孤儿回落顶层，多级展平。 */
+export function groupSessions(list: SessionStat[]): SessionGroup[] {
+  if (!list || list.length === 0) return []
+  const byId = new Map<string, SessionStat>()
+  for (const s of list) byId.set(s.id, s)
+
+  // 判定是否为子代理（需 parent 存在）
+  const isChild = (s: SessionStat): boolean =>
+    s.origin === 'subagent' && typeof s.parentSession === 'string' && s.parentSession !== '' && byId.has(s.parentSession)
+
+  // 找根主会话：从 parent 出发沿链上溯至不再是子代理的节点（多级展平），防环
+  const findRoot = (parentId: string): string => {
+    let cur = parentId
+    const seen = new Set<string>()
+    while (true) {
+      if (seen.has(cur)) break
+      seen.add(cur)
+      const node = byId.get(cur)
+      if (!node) break
+      if (node.origin !== 'subagent' || !node.parentSession || !byId.has(node.parentSession)) break
+      cur = node.parentSession!
+    }
+    return cur
+  }
+
+  const childrenMap = new Map<string, SessionStat[]>()
+  const mains = new Set<string>()
+
+  for (const s of list) {
+    if (isChild(s)) {
+      const rootId = findRoot(s.parentSession!)
+      if (byId.has(rootId)) {
+        const arr = childrenMap.get(rootId)
+        if (arr) arr.push(s)
+        else childrenMap.set(rootId, [s])
+      } else {
+        // 根不存在（理论上 isChild 已保证 parent 存在，此分支仅防御并发或环）
+        mains.add(s.id)
+      }
+    } else {
+      mains.add(s.id)
+    }
+  }
+
+  // 构建分组：每个主会话对应一个桶，子列表为归入该主的全部子代理
+  const groups: SessionGroup[] = []
+  for (const mainId of mains) {
+    const main = byId.get(mainId)
+    if (!main) continue
+    const children = childrenMap.get(mainId) ?? []
+    // 子按 lastActive 降序
+    children.sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0))
+    let calls = main.calls
+    let usage = { ...main.usage }
+    for (const ch of children) {
+      calls += ch.calls
+      usage = addUsage(usage, ch.usage)
+    }
+    groups.push({ main, children, agg: { calls, usage }, childCount: children.length })
+  }
+
+  // 若某个 childrenMap 的 key 未在 mains 中（如根本身是子代理但被展平到更高根，此情况已处理；剩余未覆盖的根可能是因主被归类为 child 却仍有子，需补漏）
+  for (const [rootId, children] of childrenMap) {
+    if (mains.has(rootId)) continue
+    const main = byId.get(rootId)
+    if (!main) continue
+    // root 本身是子代理但因链展平未被视为 main，仍需为其创建分组（兜底）
+    children.sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0))
+    let calls = main.calls
+    let usage = { ...main.usage }
+    for (const ch of children) {
+      calls += ch.calls
+      usage = addUsage(usage, ch.usage)
+    }
+    groups.push({ main, children, agg: { calls, usage }, childCount: children.length })
+  }
+
+  // 主会话按 lastActive 降序（与 snapshot 保持一致）
+  groups.sort((a, b) => (b.main.lastActive || 0) - (a.main.lastActive || 0))
+  return groups
+}
+
+/** 按主会话分组分页（子代理不占页位）。 */
+export function paginateGroups(groups: SessionGroup[], page: number, pageSize: number): SessionGroup[] {
+  if (!groups || groups.length === 0) return []
+  const p = Math.max(1, Math.floor(page))
+  const size = Math.max(1, Math.floor(pageSize))
+  const start = (p - 1) * size
+  if (start >= groups.length) return []
+  return groups.slice(start, start + size)
 }
 
 /** 全角字符（CJK 表意文字、假名、谚文、全角标点）在视觉上占 2 个半角单位。 */
