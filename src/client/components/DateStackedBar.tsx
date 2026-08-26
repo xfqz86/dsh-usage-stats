@@ -134,7 +134,7 @@ export function DateStackedBar({
             className={css.tip}
             style={{ left: (tipPos ? tipPos.left : 0) + 'px', top: (tipPos ? tipPos.top : 0) + 'px', opacity: tipPos ? 1 : 0 }}
           >
-            <div className={css.tipDate}>{new Date(tipDay.t).toLocaleDateString()} · {fmtFull(tipDay.total)} tokens · {fmtFull(tipDay.calls)} 次</div>
+            <div className={css.tipDate}>{t('dates.tipFull', { date: new Date(tipDay.t).toLocaleDateString(), total: fmtFull(tipDay.total), calls: fmtFull(tipDay.calls) })}</div>
             {tipDay.segments.length === 0 ? (
               <div style={{ color: 'var(--dsw-alias-label-tertiary)', fontSize: 11 }}>—</div>
             ) : (
