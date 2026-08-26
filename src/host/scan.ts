@@ -264,40 +264,44 @@ export function rebuildFromEvents(store: UsageStore, ledger: Ledger): void {
   }
 }
 
-/** 增量重建：优先从预统计加载聚合，仅重放密封边界外的增量事件。
- *  预统计路径加载聚合表（O(天数+会话+模型)），密封边界外的增量按会话水位对比补齐，补齐后推进密封边界。 */
+/**
+ * 增量重建：优先从预统计加载聚合，并对密封边界之后的账本事件无条件按
+ * 会话水位比对补齐，补齐后推进密封边界。
+ *
+ * 对账必须无条件执行（不设跨日前置条件）：实时路径 ledger.append 与
+ * incrementAgg 是两个独立提交，中间崩溃会在 events 表留下「已入账但聚合
+ * 缺失」的事件；旧实现仅跨日才对账，这部分用量当日不可见。启动时始终
+ * 重放 sealedUntil 之后的窗口（即上次密封以来的增量，量级约为当日事件数），
+ * 水位之下的事件一律跳过 —— 重复调用不翻倍，rebuildFromEvents 路径不受影响，
+ * agg_checkpoint 密封语义保持一致（边界之前的 events 与聚合已核对收敛）。
+ */
 export function rebuildWithDelta(store: UsageStore, ledger: Ledger): boolean {
   // 优先尝试预统计快速路径：直接从物化表加载，跳过全量事件重放
   if (tryLoadAggregates(store, ledger)) {
-    // 检查密封边界外的增量事件并按水位补齐
+    // 无条件对账密封边界外的增量事件并按水位补齐
     const sealedUntil = ledger.getSealedUntil()
     if (sealedUntil > 0) {
-      const todayStart = startOfDay(Date.now())
-      // 仅在跨日且存在未密封事件时查询增量
-      if (sealedUntil < todayStart) {
-        const delta = ledger.allEventsSince(sealedUntil)
-        if (delta.length > 0) {
-          // 按会话水位对比，增量补齐缺失事件
-          const missing: typeof delta = []
-          for (const ev of delta) {
-            const info = store.sessions.get(ev.sessionId)
-            if (!info) {
-              missing.push(ev)
-              continue
-            }
-            if (ev.seq >= 0) {
-              if (ev.seq > info.maxSeq) missing.push(ev)
-            } else {
-              // seq=-1 无法靠水位，用 lastActive 判定
-              if (ev.t > info.lastActive) missing.push(ev)
-            }
+      const delta = ledger.allEventsSince(sealedUntil)
+      if (delta.length > 0) {
+        // 按会话水位对比，增量补齐缺失事件（含实时写入的崩溃窗口）
+        const missing: typeof delta = []
+        for (const ev of delta) {
+          const info = store.sessions.get(ev.sessionId)
+          if (!info) {
+            missing.push(ev)
+            continue
           }
-          if (missing.length > 0) {
-            for (const ev of missing) foldLedgerEvent(store, ev, ledger)
+          if (ev.seq >= 0) {
+            if (ev.seq > info.maxSeq) missing.push(ev)
+          } else {
+            // seq=-1 无法靠水位，用 lastActive 判定
+            if (ev.t > info.lastActive) missing.push(ev)
           }
         }
-        try { ledger.sealUntil(todayStart) } catch {}
+        for (const ev of missing) foldLedgerEvent(store, ev, ledger)
       }
+      // 补齐后推进密封边界至今日零点；单调推进，不回退已核对边界。
+      try { ledger.sealUntil(Math.max(sealedUntil, startOfDay(Date.now()))) } catch {}
     }
     return true
   }
