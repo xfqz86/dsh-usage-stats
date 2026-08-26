@@ -59,6 +59,13 @@ export function apply(ctx: Context): void {
   const store = createStore()
   const ledger = openLedger()
 
+  // 插件卸载时关闭账本数据库连接（Ledger.close 幂等）。先注册故最后释放：
+  // 卸载时路由与事件监听先拆除，账本最后关库。mock cordis 可能未实现
+  // effect，存在性守卫与下方 webServer 注册一致。
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => () => ledger.close(), 'dsh-usage-stats: 关闭账本数据库连接')
+  }
+
   // ---- 先挂实时监听（初始扫描期间不漏事件）----
   ctx.on('session/event', (session: Session, event: SessionEvent) => {
     const id = session && typeof session.id === 'string' ? session.id : undefined
