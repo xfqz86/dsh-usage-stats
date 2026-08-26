@@ -29,6 +29,8 @@ dsh-usage-stats/
 │   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
+│   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
+│   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
 │   │   │   ├── Tooltip.tsx ← 自实现的 Tooltip（Tips）：基于 dsh 自带 `@deepseek-ai/dsh-client-ui-primitives/Tooltip` 的轻量修改版， 并已合并原 `FollowTooltip` 的鼠标跟随能力（通过 `follow` 参数控制）。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
