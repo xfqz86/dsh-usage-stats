@@ -28,6 +28,7 @@ const DATE_RANGES: Array<[DateRange, string]> = [
   ['30d', 'range.30d'],
   ['90d', 'range.90d'],
   ['180d', 'range.180d'],
+  ['365d', 'range.365d'],
   ['all', 'range.all'],
 ]
 

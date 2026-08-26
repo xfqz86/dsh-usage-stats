@@ -28,6 +28,7 @@ const MODEL_RANGES: Array<[ModelRange, string]> = [
   ['30d', 'modelRange.30d'],
   ['90d', 'modelRange.90d'],
   ['180d', 'modelRange.180d'],
+  ['365d', 'modelRange.365d'],
   ['all', 'modelRange.all'],
 ]
 

@@ -393,8 +393,8 @@ export function heatGridOf(series: SeriesPoint[], weeks = 26): HeatGrid {
   return { cols: weeks, cells, months }
 }
 
-/** 模型汇总时间范围：全部/半年/3个月/1个月/14天/7天（默认全部）。 */
-export type ModelRange = '7d' | '14d' | '30d' | '90d' | '180d' | 'all'
+/** 模型汇总时间范围：全部/1年/半年/3个月/1个月/14天/7天（默认全部）。 */
+export type ModelRange = '7d' | '14d' | '30d' | '90d' | '180d' | '365d' | 'all'
 
 /** 模型范围对应的天数（all 返回 null）。 */
 export function modelRangeToDays(range: ModelRange): number | null {
@@ -404,6 +404,7 @@ export function modelRangeToDays(range: ModelRange): number | null {
     case '30d': return 30
     case '90d': return 90
     case '180d': return 180
+    case '365d': return 365
     case 'all': return null
     default: return null
   }
@@ -567,8 +568,8 @@ export function buildModelStack(models: import('./useSnapshot.ts').ModelStat[], 
   return { days: stackDays, maxTotal, models: modelOrder }
 }
 
-/** 日期范围（与模型范围同款枚举，日期 Tab 对齐 ModelsTab 的 6 档）。 */
-export type DateRange = '7d' | '14d' | '30d' | '90d' | '180d' | 'all'
+/** 日期范围（与模型范围同款枚举，日期 Tab 对齐 ModelsTab 的 7 档，含 1年）。 */
+export type DateRange = '7d' | '14d' | '30d' | '90d' | '180d' | '365d' | 'all'
 
 /** 日期范围对应的天数（all 返回 null，复用模型范围逻辑保持一致）。 */
 export function dateRangeToDays(range: DateRange): number | null {
