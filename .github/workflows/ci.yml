@@ -19,9 +19,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # 版本取自 package.json 的 packageManager，避免双重声明冲突
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:
