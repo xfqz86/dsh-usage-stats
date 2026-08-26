@@ -1,0 +1,194 @@
+# 发布到 npm 与交付 tarball
+# 触发：推送 v* 标签（v0.1.0、v0.2.0-rc.1 等）或手动 workflow_dispatch
+# 产物：
+#   - npmjs：@xfqz86/dsh-usage-stats（预构建 lib，无 prepare，避免安装时 build 脚本授权）
+#   - tarball：GitHub Release 附件 + workflow artifact（pnpm pack 产物）
+#   - GitHub 安装：依赖 prepare + release 分支（见 release-branch.yml），此处仅校验
+#
+# npm 发布方式（择一）：
+#   1) OIDC trusted publishing（推荐，无 token）—— 在 npmjs.com 为包配置 trusted publisher：
+#        指向本仓库、本 workflow（release.yml）、environment npm
+#      参考 dsh-tui/dsh-tui 的 release.yml
+#   2) NPM_TOKEN secret —— 在仓库 Settings → Secrets 中配置 NPM_TOKEN
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build npm package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # 版本取自 package.json 的 packageManager，避免双重声明冲突
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Validate tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          echo "tag: $tag_version  package: $package_version"
+          if [[ "$tag_version" != "$package_version" ]]; then
+            echo "::error::Tag version $tag_version does not match package.json $package_version"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (production, minified, no map)
+        run: NODE_ENV=production pnpm build
+
+      - name: Smoke tests
+        run: |
+          node test/smoke.mjs
+          node test/client-bundle.mjs
+
+      - name: Verify tag version (workflow_dispatch guard)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "workflow_dispatch build at $(node -p "require('./package.json').version") — will pack but not publish"
+
+      - name: Create package tarball (pruned, without prepare/scripts/devDeps)
+        shell: bash
+        run: |
+          # git 安装需要 prepare（tsdown），但 npm 发布的预构建包不应携带任何开发态字段
+          # 仅保留 name/version/description/type/main/exports/files/engines/dsh/license
+          # 其余（scripts、devDependencies、packageManager、repository 等）全部剥离
+          echo "before keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
+          echo "before prepare: $(node -p "require('./package.json').scripts.prepare || 'none'")"
+          node scripts/prune-package.mjs
+          echo "after keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
+          echo "after prepare: $(node -p "require('./package.json').scripts?.prepare || 'none (deleted)'")"
+          cat package.json
+          mkdir -p package
+          # 使用 NPM_CONFIG_CACHE 隔离，避免宿主缓存权限问题（本地 npm 缓存可能为 root 拥有）
+          NPM_CONFIG_CACHE="$RUNNER_TEMP/npm-cache" npm pack --pack-destination "$GITHUB_WORKSPACE/package"
+          echo "tarball:"
+          ls -lh package/
+          echo "--- contents ---"
+          tar -tzf package/*.tgz | sort
+          echo "--- verify ONLY allowed files (lib + package.json + cordis.patch.yml + README.md, no map) ---"
+          # 期望仅 5 条目：lib/index.js, lib/client.js, package.json, cordis.patch.yml, README.md
+          count=$(tar -tzf package/*.tgz | wc -l)
+          echo "file count: $count"
+          if [ "$count" -ne 5 ]; then
+            echo "::error::unexpected file count $count, expected 5"
+            exit 1
+          fi
+          tar -tzf package/*.tgz | grep -q "package/lib/index.js" || (echo "::error::lib/index.js missing" && exit 1)
+          tar -tzf package/*.tgz | grep -q "package/lib/client.js" || (echo "::error::lib/client.js missing" && exit 1)
+          if tar -tzf package/*.tgz | grep -q "package/lib/client.js.map"; then
+            echo "::error::client.js.map should not be in tarball"
+            exit 1
+          fi
+          tar -tzf package/*.tgz | grep -q "package/cordis.patch.yml" || (echo "::error::cordis.patch.yml missing" && exit 1)
+          tar -tzf package/*.tgz | grep -q "package/README.md" || (echo "::error::README.md missing" && exit 1)
+          tar -tzf package/*.tgz | grep -q "package/package.json" || (echo "::error::package.json missing" && exit 1)
+          if tar -tzf package/*.tgz | grep -Eq "package/(src/|tsconfig|tsdown|scripts/|test/|docs/|\.github/)"; then
+            echo "::error::tarball contains unwanted src/tsconfig/scripts/test files"
+            exit 1
+          fi
+          echo "--- verify package.json is pruned ---"
+          if tar -xzOf package/*.tgz package/package.json | grep -q '"prepare"'; then
+            echo "::error::prepare still in packed package.json"
+            exit 1
+          fi
+          if tar -xzOf package/*.tgz package/package.json | grep -q '"devDependencies"'; then
+            echo "::error::devDependencies still in packed package.json — should be pruned"
+            exit 1
+          fi
+          if tar -xzOf package/*.tgz package/package.json | grep -q '"scripts"'; then
+            echo "::error::scripts still in packed package.json — should be pruned"
+            exit 1
+          fi
+          if tar -xzOf package/*.tgz package/package.json | grep -q '"packageManager"'; then
+            echo "::error::packageManager still in packed package.json — should be pruned"
+            exit 1
+          fi
+          echo "--- verify packed package.json keys ---"
+          tar -xzOf package/*.tgz package/package.json | node -e "
+            const j = JSON.parse(require('fs').readFileSync(0,'utf-8'));
+            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
+            const extra = Object.keys(j).filter(k => !allow.includes(k));
+            if (extra.length) { console.error('unexpected keys:', extra.join(', ')); process.exit(1); }
+            console.log('allowed keys only:', Object.keys(j).join(', '));
+          "
+          echo "pack ok — only lib + package.json(c pruned) + cordis.patch.yml + README.md"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: package/*.tgz
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish to npm & GitHub Release
+    needs: build
+    # 仅标签推送才发布；workflow_dispatch 仅构建产物，不发布
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@xfqz86/dsh-usage-stats
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # 版本取自 package.json 的 packageManager，避免双重声明冲突
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Use OIDC-capable npm CLI
+        run: npm install --global npm@11
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: package
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          ls -lh package/
+          # 优先 OIDC（trusted publishing，需在 npmjs 配置 publisher 指向本仓库 workflow=release.yml + environment=npm）
+          # 若提供 NPM_TOKEN secret，则回退到 token 方式（兼容旧流程）
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            echo "Publishing with NPM_TOKEN..."
+            npm publish ./package/*.tgz --access public
+          else
+            echo "Publishing with OIDC (trusted publishing)..."
+            npm publish ./package/*.tgz --access public --provenance
+          fi
+
+      - name: Create GitHub Release with tarball
+        uses: softprops/action-gh-release@v2
+        with:
+          files: package/*.tgz
+          generate_release_notes: true
+          # tag 已由 push 事件创建，release 标题与正文基于 tag 自动生成

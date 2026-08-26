@@ -1,0 +1,112 @@
+/* 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。 */
+
+.root {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.svgWrap {
+  position: relative;
+  flex: none;
+  width: 120px;
+  height: 120px;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.slice {
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform-origin: 60px 60px;
+}
+
+.slice:hover {
+  opacity: 0.85;
+  /* 轻微外扩由 stroke 模拟，避免 transform 导致重叠判定复杂 */
+}
+
+.legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.legendDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legendText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legendPct {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+/* 饼图中心空心（可选甜甜圈效果，若需实心可隐藏） */
+.center {
+  fill: var(--dsw-alias-bg-base);
+}
+
+/* 提示气泡（复用 DatesTab 的 tip 风格，但此组件自绘定位） */
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-shadow-lv2);
+  z-index: 31;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.tipTitle {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tipMeta {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+}

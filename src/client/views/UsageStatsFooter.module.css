@@ -1,0 +1,327 @@
+/* 侧边栏底部动作层（宽列与 56px rail 两种形态），几何与 harness 的
+   CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。 */
+
+.root {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 8px 0 0;
+}
+
+/* rail（56px 折叠列）：36px 圆形图标按钮，高度随竖排 Go 芯片自适应。 */
+.rail {
+  width: 36px;
+  margin: 0;
+}
+
+.rail .badge {
+  justify-content: center;
+  gap: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.rail .badgeMeta,
+.rail .badgeLabel,
+.rail .barRow {
+  display: none;
+}
+
+/* ---- OpenCode Go 额度芯片行（宽列，位于今日用量 badge 上方）---- */
+.goRow {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 20px;
+  margin: 0 0 2px;
+  padding: 0 8px 0 6px;
+  box-sizing: border-box;
+}
+
+.rail .goRow {
+  display: none;
+}
+
+/* 额度行前置标签：说明这一排芯片是 OpenCode Go 订阅额度。 */
+.goLabel {
+  flex: none;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+/* rail 折叠态：滚动 5 小时额度芯片，位于圆形按钮上方。 */
+.goRailChip {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  margin: 0 0 4px;
+}
+
+/* 两行布局（短标签在上、百分比在下），整体水平居中，避免单行文字换行错位。
+   折叠态芯片背景为正方形（36×36），避免被合一按钮的 flex 布局压扁。 */
+.goRailChipBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  height: 36px;
+  aspect-ratio: 1 / 1;
+  padding: 4px 0;
+  box-sizing: border-box;
+  border-radius: 8px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+  cursor: default;
+}
+
+/* 上行：窗口短标签（如 5h） */
+.goRailChipLabel {
+  font-size: 9px;
+  line-height: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 下行：用量百分比（如 99%） */
+.goRailChipPct {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.goChip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+  cursor: default;
+}
+
+.goChipWarn {
+  color: var(--dsw-alias-state-warning-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-warning-primary) 14%, transparent);
+}
+
+.goChipOver {
+  color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
+}
+
+/* 兼容保留：旧的独立 badge 按钮（现已被合一按钮取代，保留以防回退） */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 49px;
+  padding: 0 8px 0 6px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.badge:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.badge[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* ---- 合一按钮（宽列）：Go 额度行 + 今日用量行在同一按钮内，任意位置点击均打开弹窗 ---- */
+.unified {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 6px 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.unified:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.unified[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.unifiedGoRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 20px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+/* Go 芯片在合一按钮的上行中均分剩余宽度，使上行视觉铺满与下行（今日+比例条）一致 */
+.unifiedGoRow .goChip {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.unifiedMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+/* 折叠 rail 的合一按钮：Go 芯片（若有）在上，圆形图标在下，整块可点
+   芯片为正方形，按钮 stretch 保证芯片铺满 36px 宽度不被压扁。 */
+.railUnified {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 36px;
+  padding: 4px 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.railUnified:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.railUnified[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.railUnified .goRailChip {
+  width: 100%;
+  margin: 0;
+  justify-content: center;
+}
+
+.railUnifiedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.badgeIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.badgeLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: none;
+}
+
+.badgeMeta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.badgeTokens {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.badgeCalls {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.badgeErr {
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* ---- 三色比例条 ---- */
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barSeg {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  cursor: default;
+  transition: opacity 0.15s ease;
+}
+
+.barSeg:hover {
+  opacity: 0.8;
+}
+
+.barCache {
+  background: var(--dsw-alias-state-warning-primary, #f5a623);
+  border-radius: 3px 0 0 3px;
+}
+
+.barInput {
+  background: var(--dsw-alias-brand-primary, #4d6bfe);
+}
+
+.barOutput {
+  background: var(--dsw-alias-state-success-primary, #34c759);
+  border-radius: 0 3px 3px 0;
+}

@@ -1,0 +1,6 @@
+# Mounts the usage-stats card into the profile's plugin tree.
+# 存储为自管理 sqlite（node:sqlite，$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite），
+# 不依赖 harness 的 storage 家族，无需额外的行或后端路由。
+- insert:
+    - id: usage-stats
+      name: '@xfqz86/dsh-usage-stats'

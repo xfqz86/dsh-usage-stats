@@ -1,0 +1,170 @@
+/* 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 +
+   标题刷新按钮）。颜色全部使用设计 token。 */
+/* .section* / .goHint 等跨组件基元见 UsageStatsCommon.module.css。 */
+
+/* ---- 视口 ≤ 800px 时 Bento 变 2 列，Go/热力磁贴整行 ---- */
+@media (max-width: 800px) {
+  .bento {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tileGo {
+    grid-column: span 2;
+  }
+
+  .tileGoWide,
+  .tileHeat,
+  .tileHeatFull {
+    grid-column: span 2;
+  }
+}
+
+/* ---- 概览 Bento 磁贴网格 ---- */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+/* 汇总磁贴组：display:contents 让子磁贴直接参与 bento 网格（今日 2+总计 2 占首行）。 */
+.summary {
+  display: contents;
+}
+
+/* 通用磁贴卡片：Go 额度 / 热力图收纳进统一卡片（与 .cell 同款外观）。 */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv1);
+}
+
+.tileGo {
+  grid-column: span 1;
+}
+
+/* 未配置 / 查询失败提示：整行磁贴（占满 4 列）。 */
+.tileGoWide {
+  grid-column: span 4;
+}
+
+.tileHeat {
+  grid-column: span 3;
+}
+
+/* 无 Go 磁贴时热力图整行铺满。 */
+.tileHeatFull {
+  grid-column: span 4;
+}
+
+/* ---- OpenCode Go 额度磁贴（窄列：纵向堆叠三档窗口）---- */
+.goTileRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.goTileRow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.goTileTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Go 磁贴标题右侧的立即刷新按钮（点击即触发额度重拉，不受抓取间隔控制）。 */
+.goRefresh {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.goRefresh:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.goRefresh:active svg {
+  transform: rotate(180deg);
+}
+
+.goLabel {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.goBar {
+  flex: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--dsw-alias-bg-fill-2, var(--dsw-alias-interactive-bg-hover));
+  overflow: hidden;
+}
+
+.goBarFill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-state-success-primary, #34c759);
+}
+
+.goFillWarn {
+  background: var(--dsw-alias-state-warning-primary, #f5a623);
+}
+
+.goFillOver {
+  background: var(--dsw-alias-state-error-primary, #e5484d);
+}
+
+.goPct {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+}
+
+.goPctWarn {
+  color: var(--dsw-alias-state-warning-primary);
+}
+
+.goPctOver {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.goReset {
+  min-width: 0;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* （页脚已迁移至设置 Tab；此处不再定义 .footer） */

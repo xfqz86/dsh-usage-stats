@@ -1,0 +1,166 @@
+/* 日期堆叠柱状图（DateStackedBar）：每日为一柱，按 token 类型堆叠，横向滚动。 */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 70%;
+  justify-content: flex-end;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.grid {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: max-content;
+  height: 120px;
+  padding: 0 4px;
+  position: relative;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.barCol {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  width: 18px;
+  height: 100px;
+  gap: 0;
+  position: relative;
+  cursor: default;
+}
+
+.barSeg {
+  width: 100%;
+  min-height: 1px;
+  transition: opacity 0.15s ease;
+}
+
+.barCol:hover .barSeg {
+  opacity: 0.92;
+}
+
+.axis {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px;
+  min-width: max-content;
+}
+
+.axisLabel {
+  width: 18px;
+  font-size: 9px;
+  line-height: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* 提示气泡（与饼图一致，绝对定位于 scroll 容器内） */
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--dsw-alias-bg-base);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-primary);
+  box-shadow: var(--dsw-shadow-lv2);
+  z-index: 31;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.tipDate {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.tipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.tipModel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.tipVal {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+}
+
+.empty {
+  padding: 12px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}

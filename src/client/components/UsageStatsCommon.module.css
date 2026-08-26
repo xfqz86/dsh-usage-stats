@@ -1,0 +1,188 @@
+/* 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、
+   表格、通用提示等。颜色全部使用设计 token。 */
+/* 每个组件各自的专属样式见对应 *.module.css（如 OverviewTab.module.css）。 */
+
+/* ---- 分区（各 Tab 的通用纵向容器：头部 + 内容）---- */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- 统计磁贴 / 单元格（HeroTile 等通用磁贴基元）---- */
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv1);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+/* 磁贴标题行：图标 + 说明（说明由底部移至标题图标后） */
+.cellHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cellHead .cellIcon {
+  margin-bottom: 0;
+}
+
+.cellHead .cellK {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 磁贴悬浮：加深阴影与边框高亮 */
+.cell:hover {
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, var(--dsw-alias-border-l2));
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.cellIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+}
+
+.cellV {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+}
+
+.cellK {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- 空态（无数据 / 加载中 / 不可用）---- */
+.empty {
+  padding: 12px 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* ---- 通用提示（Go 未配置 / 重建说明等）---- */
+.goHint {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* ---- 表格（会话 / 模型两个 Tab 共用）----
+   1366x768 适配：表头 12px、行高 32（td 6px 垂直内边距 + 20px 行高）、
+   单元格 12px，头部与体对齐，保持 --dsw-alias-* token 与横向滚动。 */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+  text-align: right;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  white-space: nowrap;
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.num {
+  text-align: right;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.strong {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.cellText {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+/* ---- 视口 ≤ 800px 时表格紧凑化 ---- */
+@media (max-width: 800px) {
+  .cellText {
+    max-width: 120px;
+  }
+
+  .table {
+    font-size: 11px;
+  }
+
+  .table th,
+  .table td {
+    padding: 4px 4px;
+  }
+}

@@ -1,0 +1,107 @@
+/* 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴样式。
+   占 2 列，大数 + 命中率 + 调用 + 三色比例条（缓存 / 输入 / 输出）。
+   颜色全部使用设计 token。 */
+/* .cell / .cellIcon 等基元见 UsageStatsCommon.module.css。 */
+
+.cellHero {
+  grid-column: span 2;
+  gap: 4px;
+}
+
+.cellHero .cellIcon {
+  margin-bottom: 0;
+}
+
+.heroHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.heroLabel {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.heroSide {
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.heroMain {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.heroValue {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 24px;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+}
+
+.heroHitRate {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.heroCallsRight {
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 三色比例条：缓存 / 输入 / 输出（与侧边栏同款配色与 tooltip 口径）。 */
+.heroBar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  height: 6px;
+  margin-top: 2px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.heroBarSeg {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  cursor: default;
+  transition: opacity 0.15s ease;
+}
+
+.heroBarSeg:hover {
+  opacity: 0.8;
+}
+
+.heroBarCache {
+  background: var(--dsw-alias-state-warning-primary, #f5a623);
+  border-radius: 3px 0 0 3px;
+}
+
+.heroBarInput {
+  background: var(--dsw-alias-brand-primary, #4d6bfe);
+}
+
+.heroBarOutput {
+  background: var(--dsw-alias-state-success-primary, #34c759);
+  border-radius: 0 3px 3px 0;
+}

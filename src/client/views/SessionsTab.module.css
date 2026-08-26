@@ -1,0 +1,137 @@
+/* 会话 Tab（SessionsTab）：主会话折叠按钮、子行与徽标、横向滚动容器（表格样式在共用基元里）。 */
+
+/* 会话 Tab 根容器：占满外层 bodySessions，纵向 flex 仅中间滚动 */
+.root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0 !important;
+}
+
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  /* 表格在宽弹窗内保持可读最小宽度，避免列挤压 */
+  min-width: 0;
+}
+
+/* 列宽优化：自适应布局，第一列撑满剩余，其余按内容自适应，避免过宽 */
+.tableWrap table {
+  table-layout: auto;
+  width: 100%;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tableWrap th {
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dsw-alias-bg-base);
+  /* 固定表头底部细线，避免滚动时内容透出 */
+  box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
+}
+
+/* 首列（会话）吃掉全部剩余空间、其余列按内容自适应（table-layout: auto；max-width: none 覆盖共用 cellText 的宽度钳制；顺序：缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃） */
+.tableWrap th:nth-child(1),
+.tableWrap td:nth-child(1) {
+  width: 100%;
+  min-width: 180px;
+  max-width: none;
+}
+
+.tableWrap th:not(:first-child),
+.tableWrap td:not(:first-child) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* 长表头（命中率/平均）保持单行不换行：经 ThSortable 的 className 附加类注入（替代原 nth-child 选择器）；
+   以 .root 提升特异性，确保压过共享模块的 .thBtn 字号继承（与注入顺序无关） */
+.root .thSm {
+  white-space: nowrap;
+  line-height: 14px;
+  font-size: 11px;
+}
+
+/* 可排序表头按钮样式已提取至 components/ThSortable.module.css（与 DatesTab/ModelsTab 共用） */
+
+.expandBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+
+.expandBtn:hover {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent);
+}
+
+.expandBtn[aria-expanded="true"] {
+  background: var(--dsw-alias-brand-primary);
+  border-color: var(--dsw-alias-brand-primary);
+  color: #fff;
+}
+
+.badge {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-button-ghost-active-fill);
+  padding: 1px 5px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.childRow td {
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 96%, var(--dsw-alias-border-l1));
+}
+
+.childCell {
+  padding-left: 22px !important; /* 16px 按钮 + 6px 间距 */
+}
+
+.indent {
+  color: var(--dsw-alias-label-tertiary);
+  margin-right: 6px;
+}
+
+/* 翻页栏：固定在列表底部，不随数据滚动 */
+.paginationBar {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+}
+
+/* 已废弃：旧展开全部按钮保留空类以免旧 bundle 引用报错，已不再使用 */
+.toggle {
+  display: none;
+}
