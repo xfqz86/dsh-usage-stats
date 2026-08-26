@@ -26,6 +26,7 @@ import { startOfDay } from '../utils.ts'
 export function resetStore(store: UsageStore): void {
   store.sessions.clear()
   store.models.clear()
+  store.modelDaily.clear()
   store.allAgg = newAgg()
   store.allDaily.clear()
   store.foldedEvents = 0
@@ -248,6 +249,7 @@ export function rebuildFromEvents(store: UsageStore, ledger: Ledger): void {
   try {
     store.sessions.clear()
     store.models.clear()
+    store.modelDaily.clear()
     store.allAgg = newAgg()
     store.allDaily.clear()
     store.foldedEvents = 0

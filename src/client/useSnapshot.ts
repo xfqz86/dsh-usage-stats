@@ -21,6 +21,8 @@ export interface ModelStat {
   model: string
   calls: number
   usage: UsageAgg
+  /** 按日细分（用于时间范围筛选与堆叠柱），可能缺失于旧快照。 */
+  series?: SeriesPoint[]
 }
 
 /** 按会话的拆分条目（已含子代理归属字段，复用 SessionHeader 语义，序列化为 string|null）。 */

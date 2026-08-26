@@ -1,14 +1,144 @@
-/* 日期 Tab（DatesTab）：每日趋势曲线（SVG）+ 时间范围切换 chips +
-   悬停 tooltip。颜色全部使用设计 token。 */
-/* .section* / .empty 等基元见 UsageStatsCommon.module.css。 */
+/* 日期 Tab（DatesTab）：堆叠柱状图 + 范围 chips + 数据表格（与模型 Tab 对齐）。 */
 
+/* 根容器：占满外层 bodyDates，纵向 flex 仅中间表格滚动（与 SessionsTab/ModelsTab 一致） */
+.root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0 !important;
+}
+
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+}
+
+/* 列宽优化：固定布局，紧凑列宽，避免过宽（1024×768 下 960 弹窗 6 列清晰） */
+.tableWrap table {
+  table-layout: fixed;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tableWrap th {
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
+}
+
+/* 日期列自适应占满剩余，其余数值列固定紧凑宽度 */
+.tableWrap th:nth-child(1),
+.tableWrap td:nth-child(1) {
+  width: auto;
+  min-width: 120px;
+}
+
+.tableWrap th:nth-child(2),
+.tableWrap td:nth-child(2) {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+}
+
+.tableWrap th:nth-child(3),
+.tableWrap td:nth-child(3),
+.tableWrap th:nth-child(4),
+.tableWrap td:nth-child(4),
+.tableWrap th:nth-child(5),
+.tableWrap td:nth-child(5) {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+}
+
+.tableWrap th:nth-child(6),
+.tableWrap td:nth-child(6) {
+  width: 84px;
+  min-width: 84px;
+  max-width: 84px;
+}
+
+/* 可排序表头按钮：整列可点击，右对齐数值列，首列左对齐（与 SessionsTab/ModelsTab 一致） */
+.thBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.thBtnLeft {
+  justify-content: flex-start;
+}
+
+.thBtn:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.thBtnActive {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.sortIcon {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.35;
+  flex: none;
+  width: 10px;
+  text-align: center;
+}
+
+.sortIconActive {
+  opacity: 1;
+  color: var(--dsw-alias-brand-primary);
+}
+
+/* 时间范围 chips：文本不换行，小屏可横向滚动 */
 .chips {
   display: flex;
   gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
 }
 
 .chip {
-  flex: 1;
+  flex: none;
+  white-space: nowrap;
   text-align: center;
   padding: 5px 8px;
   border: 1px solid var(--dsw-alias-border-l2);
@@ -32,42 +162,56 @@
   border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
 }
 
-/* ---- 趋势图 ---- */
-.chart {
-  position: relative;
+/* 时间选择条：位于图表与表格中间，居中展示 chips，小屏可横向滚动 */
+.rangeBar {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
-.svg {
-  display: block;
-  width: 100%;
+.rangeBar::-webkit-scrollbar {
+  display: none;
 }
 
-.gridline {
-  stroke: var(--dsw-alias-border-l1);
-  stroke-dasharray: 3 4;
+/* 图表区：单卡片堆叠柱（超宽时横向滚动不撑爆） */
+.charts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  margin-bottom: 12px;
 }
 
-.axisLabel {
-  font-size: 10px;
-  fill: var(--dsw-alias-label-tertiary);
-}
-
-/* 曲线悬停 tooltip（与热力图的 values 不同，这里用自绘 div 定位）。 */
-.tip {
-  position: absolute;
-  pointer-events: none;
+.chartCard {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
   background: var(--dsw-alias-bg-base);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 8px;
-  padding: 6px 8px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-primary);
-  box-shadow: var(--dsw-shadow-lv2);
-  z-index: 31;
-  white-space: nowrap;
+  box-shadow: var(--dsw-shadow-lv1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.tip b {
-  font-variant-numeric: tabular-nums;
+.stackWrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+}
+
+/* 翻页栏：固定在列表底部，不随数据滚动（与 SessionsTab/ModelsTab 一致） */
+.paginationBar {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
 }

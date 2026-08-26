@@ -3,11 +3,11 @@
 /* 各 Tab 内容样式见对应 .module.css；跨组件共用基元见 UsageStatsCommon. */
 
 /* 模态卡片尺寸覆盖（primitives Modal 的 dialog 上叠加）。
-   1366x768 适配：四边各留 16px 边距（calc(100vw-32px) / calc(100vh-32px)），
-   最大 1240x720，兼顾 92vw/92vh 约束，美观清晰；圆角 20px、阴影 lv2。 */
+   1024x768 适配：四边各留 16px 边距（calc(100vw-32px) / calc(100vh-32px)），
+   最大 960x640，兼顾 92vw/92vh 约束，美观清晰；圆角 20px、阴影 lv2。 */
 .modal {
-  width: min(1240px, calc(100vw - 32px));
-  height: min(720px, calc(100vh - 32px));
+  width: min(960px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 32px));
   max-width: 92vw;
   max-height: 92vh;
   padding: 0;
@@ -153,8 +153,10 @@
   gap: 20px;
 }
 
-/* 会话 Tab 激活时：外层不再滚动，缩减上边距，仅内层数据滚动 */
-.bodySessions {
+/* 日期 / 会话 / 模型 Tab 激活时：外层不再滚动，缩减上边距，仅内层数据滚动 */
+.bodyDates,
+.bodySessions,
+.bodyModels {
   overflow: hidden;
   padding: 8px 16px 12px;
   gap: 0;

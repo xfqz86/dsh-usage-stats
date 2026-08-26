@@ -363,3 +363,376 @@ export function heatGridOf(series: SeriesPoint[], weeks = 26): HeatGrid {
   }
   return { cols: weeks, cells, months }
 }
+
+/** 模型汇总时间范围：全部/半年/3个月/1个月/14天/7天（默认全部）。 */
+export type ModelRange = '7d' | '14d' | '30d' | '90d' | '180d' | 'all'
+
+/** 模型范围对应的天数（all 返回 null）。 */
+export function modelRangeToDays(range: ModelRange): number | null {
+  switch (range) {
+    case '7d': return 7
+    case '14d': return 14
+    case '30d': return 30
+    case '90d': return 90
+    case '180d': return 180
+    case 'all': return null
+    default: return null
+  }
+}
+
+/** 模型范围的起始零点（all 返回 null）。 */
+export function modelRangeCutoff(range: ModelRange): number | null {
+  const days = modelRangeToDays(range)
+  if (days == null) return null
+  const todayStart = startOfDay(Date.now())
+  const d = new Date(todayStart)
+  d.setDate(d.getDate() - (days - 1))
+  return d.getTime()
+}
+
+/** 按时间范围过滤模型：基于各模型的 series（按日）聚合，返回排序后的切片。 */
+export function filterModelsByRange(models: import('./useSnapshot.ts').ModelStat[], range: ModelRange): import('./useSnapshot.ts').ModelStat[] {
+  if (range === 'all') {
+    return [...models].sort((a, b) => usageTotal(b.usage) - usageTotal(a.usage))
+  }
+  const cutoff = modelRangeCutoff(range)
+  if (cutoff == null) return [...models].sort((a, b) => usageTotal(b.usage) - usageTotal(a.usage))
+  const out: import('./useSnapshot.ts').ModelStat[] = []
+  for (const m of models) {
+    const series = (m as { series?: SeriesPoint[] }).series ?? []
+    // 无细分时（旧快照）该范围下置 0，避免误用全量
+    if (!series || series.length === 0) continue
+    let input = 0, output = 0, cacheRead = 0, cacheWrite = 0, reasoning = 0, total = 0, calls = 0
+    const filteredSeries: SeriesPoint[] = []
+    for (const pt of series) {
+      if ((pt.t ?? 0) >= cutoff) {
+        filteredSeries.push(pt)
+        input += pt.input || 0
+        output += pt.output || 0
+        cacheRead += pt.cacheRead || 0
+        cacheWrite += pt.cacheWrite || 0
+        reasoning += pt.reasoning || 0
+        total += (pt.input || 0) + (pt.output || 0) + (pt.cacheRead || 0) + (pt.cacheWrite || 0)
+        calls += pt.calls || 0
+      }
+    }
+    if (total <= 0 && calls <= 0) continue
+    out.push({
+      provider: m.provider,
+      model: m.model,
+      calls,
+      usage: { input, output, cacheRead, cacheWrite, reasoning, total },
+      series: filteredSeries,
+    })
+  }
+  out.sort((a, b) => usageTotal(b.usage) - usageTotal(a.usage))
+  return out
+}
+
+/** 模型堆叠柱：为给定范围生成按日堆叠数据（横向滚动）。 */
+export interface ModelStackDay {
+  t: number
+  label: string
+  total: number
+  segments: Array<{ provider: string; model: string; total: number; calls: number }>
+}
+export interface ModelStack {
+  days: ModelStackDay[]
+  maxTotal: number
+  models: Array<{ provider: string; model: string }>
+}
+export function buildModelStack(models: import('./useSnapshot.ts').ModelStat[], range: ModelRange): ModelStack {
+  const filtered = filterModelsByRange(models, range)
+  // 维持与饼图一致的模型顺序（按过滤后 total 降序），堆叠自底向上按此顺序
+  const modelOrder = filtered.map((m) => ({ provider: m.provider, model: m.model }))
+  const byKey = new Map<string, import('./useSnapshot.ts').ModelStat>()
+  for (const m of filtered) byKey.set(m.provider + '\u0000' + m.model, m)
+  // 生成日桶（与 buildSet 同款日历推进，避免 DST 漂移）
+  const days: number[] = []
+  const cutoff = modelRangeCutoff(range)
+  if (cutoff != null) {
+    const d = new Date(cutoff)
+    const todayStart = startOfDay(Date.now())
+    const n = modelRangeToDays(range) ?? 0
+    for (let i = 0; i < n; i += 1) {
+      days.push(d.getTime())
+      d.setDate(d.getDate() + 1)
+      if (d.getTime() > todayStart) break
+    }
+    // 保证包含今天
+    if (days.length > 0 && days[days.length - 1] !== todayStart) {
+      // 若 n 计算与 cutoff 略有偏差，补齐到今天（极少数 DST 边界）
+      const last = days[days.length - 1]
+      const diff = Math.round((todayStart - last) / 86400000)
+      if (diff > 0 && diff < 3) {
+        for (let k = 1; k <= diff; k += 1) {
+          const dd = new Date(last)
+          dd.setDate(dd.getDate() + k)
+          days.push(dd.getTime())
+        }
+      }
+    }
+  } else {
+    // all：从最早一天到今天
+    let earliest = Infinity
+    for (const m of filtered) {
+      const s = (m as { series?: SeriesPoint[] }).series ?? []
+      for (const pt of s) if (pt.t < earliest) earliest = pt.t
+    }
+    if (!Number.isFinite(earliest)) {
+      // 无过滤后数据时回落到全量最早日（或今天）
+      if (filtered.length === 0) return { days: [], maxTotal: 1, models: [] }
+      earliest = startOfDay(Date.now())
+    } else {
+      earliest = startOfDay(earliest)
+    }
+    const todayStart = startOfDay(Date.now())
+    let span = Math.max(1, Math.round((todayStart - earliest) / 86400000) + 1)
+    // 限制最多一年宽度（365 天，闰年 366 天），避免“全部”范围过宽
+    const MAX_DAYS = 366
+    if (span > MAX_DAYS) {
+      span = MAX_DAYS
+      const d0 = new Date(todayStart)
+      d0.setDate(d0.getDate() - (MAX_DAYS - 1))
+      earliest = d0.getTime()
+    }
+    const d = new Date(earliest)
+    for (let i = 0; i < span; i += 1) {
+      days.push(d.getTime())
+      d.setDate(d.getDate() + 1)
+    }
+  }
+  // 按日构建堆叠
+  const byModelDay = new Map<string, Map<number, number>>()
+  for (const m of filtered) {
+    const key = m.provider + '\u0000' + m.model
+    const mp = new Map<number, number>()
+    const s = (m as { series?: SeriesPoint[] }).series ?? []
+    for (const pt of s) mp.set(pt.t, dayTotal(pt))
+    byModelDay.set(key, mp)
+  }
+  const stackDays: ModelStackDay[] = []
+  let maxTotal = 1
+  for (const t of days) {
+    const segs: ModelStackDay['segments'] = []
+    let total = 0
+    for (const m of filtered) {
+      const key = m.provider + '\u0000' + m.model
+      const mp = byModelDay.get(key)
+      const v = mp?.get(t) ?? 0
+      if (v > 0) segs.push({ provider: m.provider, model: m.model, total: v, calls: 0 })
+      total += v
+    }
+    // 填充 calls（可选，tooltip 用）
+    for (const seg of segs) {
+      const key = seg.provider + '\u0000' + seg.model
+      const mm = byKey.get(key)
+      const s = (mm as { series?: SeriesPoint[] })?.series ?? []
+      const pt = s.find((p) => p.t === t)
+      seg.calls = pt?.calls ?? 0
+    }
+    // 自底向上保持 filtered 顺序
+    stackDays.push({ t, label: dayLabel(t), total, segments: segs })
+    if (total > maxTotal) maxTotal = total
+  }
+  return { days: stackDays, maxTotal, models: modelOrder }
+}
+
+/** 日期范围（与模型范围同款枚举，日期 Tab 对齐 ModelsTab 的 6 档）。 */
+export type DateRange = '7d' | '14d' | '30d' | '90d' | '180d' | 'all'
+
+/** 日期范围对应的天数（all 返回 null，复用模型范围逻辑保持一致）。 */
+export function dateRangeToDays(range: DateRange): number | null {
+  return modelRangeToDays(range as ModelRange)
+}
+
+/** 日期范围的起始零点（all 返回 null）。 */
+export function dateRangeCutoff(range: DateRange): number | null {
+  return modelRangeCutoff(range as ModelRange)
+}
+
+/** 日期堆叠柱的 token 类型与配色（与 total 分量对应，reasoning 单列也展示）。 */
+export const DATE_TOKEN_META = [
+  { key: 'input' as const, label: '输入', color: '#4d6bfe' },
+  { key: 'output' as const, label: '输出', color: '#00b894' },
+  { key: 'cacheRead' as const, label: '缓存', color: '#fdcb6e' },
+  { key: 'cacheWrite' as const, label: '缓存写入', color: '#e17055' },
+  { key: 'reasoning' as const, label: '推理', color: '#a29bfe' },
+] as const
+
+export type DateTokenKey = typeof DATE_TOKEN_META[number]['key']
+
+/** 日期堆叠柱：每日一柱，按 token 类型堆叠。 */
+export interface DateStackDay {
+  /** 当天 0 点时间戳。 */
+  t: number
+  /** 轴标签（月/日）。 */
+  label: string
+  /** 当天 total（input+output+cacheRead+cacheWrite，不含 reasoning） */
+  total: number
+  /** 当天调用次数 */
+  calls: number
+  /** 各分量（用于 tooltip / 表格） */
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  /** 按 token 类型的分段（仅值 >0 的段，避免渲染空层）。 */
+  segments: Array<{ key: DateTokenKey; label: string; value: number; color: string }>
+}
+
+export interface DateStack {
+  days: DateStackDay[]
+  maxTotal: number
+}
+
+/** 由日序列构建日期堆叠柱数据（横向滚动，复用 buildModelStack 的日历推进逻辑避免 DST 漂移）。 */
+export function buildDateStack(series: SeriesPoint[], range: DateRange): DateStack {
+  const byDate = new Map<number, SeriesPoint>()
+  for (const p of series) if (p && p.t != null) byDate.set(p.t, p)
+  const days: number[] = []
+  const cutoff = dateRangeCutoff(range)
+  if (cutoff != null) {
+    const d = new Date(cutoff)
+    const todayStart = startOfDay(Date.now())
+    const n = dateRangeToDays(range) ?? 0
+    for (let i = 0; i < n; i += 1) {
+      days.push(d.getTime())
+      d.setDate(d.getDate() + 1)
+      if (d.getTime() > todayStart) break
+    }
+    if (days.length > 0 && days[days.length - 1] !== todayStart) {
+      const last = days[days.length - 1]
+      const diff = Math.round((todayStart - last) / 86400000)
+      if (diff > 0 && diff < 3) {
+        for (let k = 1; k <= diff; k += 1) {
+          const dd = new Date(last)
+          dd.setDate(dd.getDate() + k)
+          days.push(dd.getTime())
+        }
+      }
+    }
+  } else {
+    // all：从最早一天到今天
+    let earliest = Infinity
+    for (const p of series) if (p.t != null && p.t < earliest) earliest = p.t
+    if (!Number.isFinite(earliest)) {
+      return { days: [], maxTotal: 1 }
+    }
+    earliest = startOfDay(earliest)
+    const todayStart = startOfDay(Date.now())
+    let span = Math.max(1, Math.round((todayStart - earliest) / 86400000) + 1)
+    const MAX_DAYS = 366
+    if (span > MAX_DAYS) {
+      span = MAX_DAYS
+      const d0 = new Date(todayStart)
+      d0.setDate(d0.getDate() - (MAX_DAYS - 1))
+      earliest = d0.getTime()
+    }
+    const d = new Date(earliest)
+    for (let i = 0; i < span; i += 1) {
+      days.push(d.getTime())
+      d.setDate(d.getDate() + 1)
+    }
+  }
+  const stackDays: DateStackDay[] = []
+  let maxTotal = 1
+  for (const t of days) {
+    const pt = byDate.get(t)
+    const input = pt?.input ?? 0
+    const output = pt?.output ?? 0
+    const cacheRead = pt?.cacheRead ?? 0
+    const cacheWrite = pt?.cacheWrite ?? 0
+    const reasoning = pt?.reasoning ?? 0
+    const calls = pt?.calls ?? 0
+    const total = dayTotal(pt ?? { input, output, cacheRead, cacheWrite, reasoning, calls, t })
+    const segs: DateStackDay['segments'] = []
+    for (const meta of DATE_TOKEN_META) {
+      const v = meta.key === 'input' ? input : meta.key === 'output' ? output : meta.key === 'cacheRead' ? cacheRead : meta.key === 'cacheWrite' ? cacheWrite : reasoning
+      if (v > 0) segs.push({ key: meta.key, label: meta.label, value: v, color: meta.color })
+    }
+    // 高度基准：堆叠总和（含 reasoning），保证各类型均可见
+    const stackSum = input + output + cacheRead + cacheWrite + reasoning
+    if (stackSum > maxTotal) maxTotal = stackSum
+    if (total > maxTotal) maxTotal = total
+    stackDays.push({ t, label: dayLabel(t), total, calls, input, output, cacheRead, cacheWrite, reasoning, segments: segs })
+  }
+  if (stackDays.length === 0) return { days: [], maxTotal: 1 }
+  return { days: stackDays, maxTotal: Math.max(1, maxTotal) }
+}
+
+/** 模型配色：10 色循环，与热力图/三色条区分。 */
+export const MODEL_PALETTE = [
+  '#4d6bfe',
+  '#00b894',
+  '#fdcb6e',
+  '#e17055',
+  '#a29bfe',
+  '#fd79a8',
+  '#00cec9',
+  '#e84393',
+  '#0984e3',
+  '#6c5ce7',
+] as const
+export function modelColorAt(index: number): string {
+  return MODEL_PALETTE[index % MODEL_PALETTE.length]
+}
+
+/** 饼图几何：输入过滤后模型列表，输出扇区路径与占比。 */
+export interface PieSlice {
+  provider: string
+  model: string
+  total: number
+  share: number
+  startAngle: number
+  endAngle: number
+  path: string
+  color: string
+}
+export function pieSlicesOf(models: import('./useSnapshot.ts').ModelStat[]): PieSlice[] {
+  const sum = models.reduce((s, m) => s + usageTotal(m.usage), 0)
+  if (sum <= 0 || models.length === 0) return []
+  // 与 ModelsTab 表格一致：最大余数法 1 位小数占比，保证总和 100%
+  const raws = models.map((m) => (usageTotal(m.usage) / sum) * 100)
+  const floors = raws.map((v) => Math.floor(v * 10) / 10)
+  const sumFloorsTenths = floors.reduce((a, b) => a + Math.round(b * 10), 0)
+  let remainingTenths = 1000 - sumFloorsTenths
+  const order = raws.map((v, i) => ({ i, frac: v * 10 - Math.floor(v * 10) })).sort((a, b) => b.frac - a.frac)
+  const shares = [...floors]
+  for (let k = 0; k < remainingTenths && k < order.length; k += 1) {
+    const idx = order[k].i
+    shares[idx] = Math.round((shares[idx] + 0.1) * 10) / 10
+  }
+  // 角度分配：按 raws 精确比例，避免 0.1% 舍入导致角度总和偏差
+  let angle = -Math.PI / 2 // 从 12 点钟开始
+  const slices: PieSlice[] = []
+  for (let i = 0; i < models.length; i += 1) {
+    const m = models[i]
+    const frac = usageTotal(m.usage) / sum
+    const sweep = frac * Math.PI * 2
+    const startAngle = angle
+    const endAngle = angle + sweep
+    // SVG 扇区路径（r=50，中心 60,60）
+    const r = 50
+    const cx = 60, cy = 60
+    const x1 = cx + r * Math.cos(startAngle)
+    const y1 = cy + r * Math.sin(startAngle)
+    const x2 = cx + r * Math.cos(endAngle)
+    const y2 = cy + r * Math.sin(endAngle)
+    const largeArc = sweep > Math.PI ? 1 : 0
+    const path = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
+    slices.push({
+      provider: m.provider,
+      model: m.model,
+      total: usageTotal(m.usage),
+      share: shares[i] ?? 0,
+      startAngle,
+      endAngle,
+      path,
+      color: modelColorAt(i),
+    })
+    angle = endAngle
+  }
+  return slices
+}

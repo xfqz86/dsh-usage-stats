@@ -2,13 +2,16 @@
  * 用量统计的侧边栏底部动作：渲染在 `sidebar.footer.action` 列表插槽
  * （设置按钮上方）的今日统计触发器。
  *
- * 宽列：上方一排带"Go 额度"标签的 OpenCode Go 订阅额度芯片（滚动 5 小时 /
- * 本周 / 本月用量百分比，≥80% 预警、≥100% 超支，hover 仅显示重置时间），
- * 下方是图标 + "今日" + 今日 tokens / 调用次数 + 三色比例条（缓存/输入/输出，
- * hover 显示各类别具体数值）。56px rail（折叠列）：圆形图标按钮上方显示滚动
- * 5 小时额度芯片（两行：短标签 + 百分比，居中），芯片 tooltip 给出三档窗口
- * 完整明细（百分比 + 重置时间）；按钮 Tooltip 只放今日数字明细，不含 Go 额度。
- * 点击打开模态窗详情（{@link UsageStatsPanel}）。
+ * 合一按钮（宽列 / 折叠 rail 共用）：Go 额度与今日用量在同一按钮内，
+ * 任意位置点击均打开模态窗详情（{@link UsageStatsPanel}）。
+ *
+ * 宽列：按钮内纵向两行——上行为带"Go 额度"标签的 OpenCode Go 订阅额度
+ * 芯片（滚动 5 小时 / 本周 / 本月用量百分比，≥80% 预警、≥100% 超支，
+ * hover 仅显示重置时间），下行为图标 + "今日" + 今日 tokens / 调用次数
+ * + 三色比例条（缓存/输入/输出，hover 显示各类别具体数值）。
+ * 56px rail（折叠列）：按钮内纵向堆叠——上方为滚动 5 小时额度芯片
+ * （两行：短标签 + 百分比，居中，tooltip 给出三档窗口完整明细），
+ * 下方为圆形图标（tooltip 放今日数字明细）。整块按钮任意位置可点。
  *
  * Go 额度抓取开关、侧边栏展示开关与抓取间隔来自偏好设置（useGoSettings /
  * settings.ts）：关闭抓取则不轮询（go 恒为 null，芯片自然不渲染）；侧边栏
@@ -181,6 +184,9 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     )
   })()
 
+  const toggle = () => setOpen((v) => !v)
+  const ariaLabel = t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) } as unknown as Record<string, unknown>)
+
   return (
     <div ref={rootRef} className={wide ? css.root : `${css.root} ${css.rail}`} data-usage-stats-footer>
       <UsageStatsPanel
@@ -195,104 +201,121 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         onRefreshGo={refreshQuota}
         t={t}
       />
-      {/* 宽列：Go 额度行在顶部（受「侧边栏展示」偏好门控），今日用量 badge 在其下方。
-          开启抓取后即使首请求失败也要显示（no-key / error 态同样渲染，避免“开启后看不到组件”） */}
-      {wide && settings.showGoInSidebar && go !== null && (
-        <div className={css.goRow}>
-          <span className={css.goLabel}>{t('go.label')}</span>
-          {go.status === 'ok' && goWindows.length > 0 && goWindows.map(goChip)}
-          {go.status === 'ok' && goWindows.length === 0 && <span className={css.goChip}>—</span>}
-          {go.status === 'no-key' && (
-            <Tooltip label={t('go.notConfigured')} side="top" delayMs={400}>
-              <span className={css.goChip}>—</span>
-            </Tooltip>
-          )}
-          {go.status === 'error' && (
-            <Tooltip label={t('go.unavailable')} side="top" delayMs={400}>
-              <span className={`${css.goChip} ${css.goChipOver}`}>!</span>
-            </Tooltip>
-          )}
-        </div>
-      )}
-      {/* rail 折叠态：圆形按钮上方显示 Go 芯片；ok 时为滚动 5h 百分比，失败态同样显示（保证可见） */}
-      {!wide && settings.showGoInSidebar && go !== null && (
-        <div className={css.goRailChip}>
-          {go.status === 'ok' && railRolling !== undefined ? (
-            <Tooltip content={railQuotaContent} side="top" delayMs={400}>
-              <span className={`${css.goRailChipBox} ${railCls}`}>
-                <span className={css.goRailChipLabel}>{railRolling.short}</span>
-                <span className={css.goRailChipPct}>{goPercent(railRolling.win)}%</span>
-              </span>
-            </Tooltip>
-          ) : go.status === 'no-key' ? (
-            <Tooltip label={t('go.notConfigured')} side="top" delayMs={400}>
-              <span className={`${css.goRailChipBox}`}>
-                <span className={css.goRailChipLabel}>{t('go.label')}</span>
-                <span className={css.goRailChipPct}>—</span>
-              </span>
-            </Tooltip>
-          ) : (
-            <Tooltip label={t('go.unavailable')} side="top" delayMs={400}>
-              <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
-                <span className={css.goRailChipLabel}>{t('go.label')}</span>
-                <span className={css.goRailChipPct}>!</span>
-              </span>
-            </Tooltip>
-          )}
-        </div>
-      )}
-      <Tooltip content={wide ? t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) }) : railContent} side="right" delayMs={500} disabled={wide}>
+      {wide ? (
+        // 宽列合一按钮：整块可点，含 Go 额度行 + 今日用量行 + 比例条
         <button
           type="button"
-          className={css.badge}
+          className={css.unified}
           data-active={open || undefined}
           aria-expanded={open}
-          onClick={() => setOpen(v => !v)}
+          aria-label={ariaLabel}
+          onClick={toggle}
         >
-          <span className={css.badgeIcon}><IconDataOutline16 size={wide ? 14 : 18} /></span>
-          {wide && (
-            <>
-              <span className={css.badgeLabel}>{t('footer.todayLabel')}</span>
-              <span className={css.badgeMeta}>
-                {err
-                  ? <span className={css.badgeErr}>--</span>
-                  : (
-                    <>
-                      <span className={css.badgeCalls}>{fmtFull(todayCalls)}{t('panel.summary.callsSuffix')}</span>
-                      <span className={css.badgeTokens}>· {fmt(todayTokens)}</span>
-                      {missing && <span className={css.badgeErr}>{fmtFull(data?.failed ?? 0)}</span>}
-                    </>
+          {settings.showGoInSidebar && go !== null && (
+            <span className={css.unifiedGoRow}>
+              <span className={css.goLabel}>{t('go.label')}</span>
+              {go.status === 'ok' && goWindows.length > 0 && goWindows.map(goChip)}
+              {go.status === 'ok' && goWindows.length === 0 && <span className={css.goChip}>—</span>}
+              {go.status === 'no-key' && (
+                <Tooltip label={t('go.notConfigured')} side="top" delayMs={400}>
+                  <span className={css.goChip}>—</span>
+                </Tooltip>
+              )}
+              {go.status === 'error' && (
+                <Tooltip label={t('go.unavailable')} side="top" delayMs={400}>
+                  <span className={`${css.goChip} ${css.goChipOver}`}>!</span>
+                </Tooltip>
+              )}
+            </span>
+          )}
+          <span className={css.unifiedMain}>
+            <span className={css.badgeIcon}><IconDataOutline16 size={14} /></span>
+            <span className={css.badgeLabel}>{t('footer.todayLabel')}</span>
+            <span className={css.badgeMeta}>
+              {err
+                ? <span className={css.badgeErr}>--</span>
+                : (
+                  <>
+                    <span className={css.badgeCalls}>{fmtFull(todayCalls)}{t('panel.summary.callsSuffix')}</span>
+                    <span className={css.badgeTokens}>· {fmt(todayTokens)}</span>
+                    {missing && <span className={css.badgeErr}>{fmtFull(data?.failed ?? 0)}</span>}
+                  </>
+                )}
+            </span>
+            {!err && todayTokens > 0 && (
+              <Tooltip follow content={barContent} side="top" delayMs={300}>
+                <span className={css.barRow}>
+                  {cacheTokens > 0 && (
+                    <span
+                      className={`${css.barSeg} ${css.barCache}`}
+                      style={{ flex: cacheTokens }}
+                    />
                   )}
-              </span>
-              {/* 三色比例条：缓存 / 输入 / 输出（跟随鼠标，富插槽；已合并为 Tooltip follow） */}
-              {!err && todayTokens > 0 && (
-                <Tooltip follow content={barContent} side="top" delayMs={300} disabled={!wide}>
-                  <span className={css.barRow}>
-                    {cacheTokens > 0 && (
-                      <span
-                        className={`${css.barSeg} ${css.barCache}`}
-                        style={{ flex: cacheTokens }}
-                      />
-                    )}
-                    {inputTokens > 0 && (
-                      <span
-                        className={`${css.barSeg} ${css.barInput}`}
-                        style={{ flex: inputTokens }}
-                      />
-                    )}
-                    {outputTokens > 0 && (
-                      <span
-                        className={`${css.barSeg} ${css.barOutput}`}
-                        style={{ flex: outputTokens }}
-                      />
-                    )}
+                  {inputTokens > 0 && (
+                    <span
+                      className={`${css.barSeg} ${css.barInput}`}
+                      style={{ flex: inputTokens }}
+                    />
+                  )}
+                  {outputTokens > 0 && (
+                    <span
+                      className={`${css.barSeg} ${css.barOutput}`}
+                      style={{ flex: outputTokens }}
+                    />
+                  )}
+                </span>
+              </Tooltip>
+            )}
+          </span>
+        </button>
+      ) : (
+        // 折叠 rail 合一按钮：Go 芯片在上、图标在下，整块可点
+        <button
+          type="button"
+          className={css.railUnified}
+          data-active={open || undefined}
+          aria-expanded={open}
+          aria-label={ariaLabel}
+          onClick={toggle}
+        >
+          {settings.showGoInSidebar && go !== null && (
+            <span className={css.goRailChip}>
+              {go.status === 'ok' && railRolling !== undefined ? (
+                <Tooltip content={railQuotaContent} side="top" delayMs={400}>
+                  <span className={`${css.goRailChipBox} ${railCls}`}>
+                    <span className={css.goRailChipLabel}>{railRolling.short}</span>
+                    <span className={css.goRailChipPct}>{goPercent(railRolling.win)}%</span>
+                  </span>
+                </Tooltip>
+              ) : go.status === 'no-key' ? (
+                <Tooltip label={t('go.notConfigured')} side="top" delayMs={400}>
+                  <span className={`${css.goRailChipBox}`}>
+                    <span className={css.goRailChipLabel}>{t('go.label')}</span>
+                    <span className={css.goRailChipPct}>—</span>
+                  </span>
+                </Tooltip>
+              ) : go.status === 'error' ? (
+                <Tooltip label={t('go.unavailable')} side="top" delayMs={400}>
+                  <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
+                    <span className={css.goRailChipLabel}>{t('go.label')}</span>
+                    <span className={css.goRailChipPct}>!</span>
+                  </span>
+                </Tooltip>
+              ) : (
+                <Tooltip content={railQuotaContent} side="top" delayMs={400}>
+                  <span className={`${css.goRailChipBox}`}>
+                    <span className={css.goRailChipLabel}>{t('go.label')}</span>
+                    <span className={css.goRailChipPct}>—</span>
                   </span>
                 </Tooltip>
               )}
-            </>
+            </span>
           )}
+          <Tooltip content={railContent} side="right" delayMs={500}>
+            <span className={css.railUnifiedIcon}><IconDataOutline16 size={18} /></span>
+          </Tooltip>
         </button>
-      </Tooltip>
+      )}
     </div>
   )
 }

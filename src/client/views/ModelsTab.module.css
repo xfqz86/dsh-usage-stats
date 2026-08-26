@@ -1,6 +1,226 @@
-/* 模型 Tab（ModelsTab）：占总比条形图（表格样式在共用基元里）。 */
-/* .table* / .empty / .section* 等基元见 UsageStatsCommon.module.css。 */
+/* 模型 Tab（ModelsTab）：占总比条形图 + 与会话 Tab 对齐的表格容器（表格样式在共用基元里）。 */
 
+/* 根容器：占满外层 bodyModels，纵向 flex 仅中间滚动（与 SessionsTab 一致） */
+.root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0 !important;
+}
+
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+}
+
+/* 列宽优化：固定布局，紧凑列宽，避免过宽（1366×768 下 1240 弹窗 7 列清晰） */
+.tableWrap table {
+  table-layout: fixed;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tableWrap th {
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
+}
+
+/* 模型列自适应占满剩余，其余数值列固定紧凑宽度 */
+.tableWrap th:nth-child(1),
+.tableWrap td:nth-child(1) {
+  width: auto;
+  min-width: 180px;
+}
+
+.tableWrap th:nth-child(2),
+.tableWrap td:nth-child(2) {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+}
+
+.tableWrap th:nth-child(3),
+.tableWrap td:nth-child(3),
+.tableWrap th:nth-child(4),
+.tableWrap td:nth-child(4),
+.tableWrap th:nth-child(5),
+.tableWrap td:nth-child(5) {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+}
+
+.tableWrap th:nth-child(6),
+.tableWrap td:nth-child(6) {
+  width: 84px;
+  min-width: 84px;
+  max-width: 84px;
+}
+
+.tableWrap th:nth-child(7),
+.tableWrap td:nth-child(7) {
+  width: 140px;
+  min-width: 120px;
+  max-width: 160px;
+}
+
+/* 可排序表头按钮：整列可点击，右对齐数值列，首列左对齐（与 SessionsTab 一致） */
+.thBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.thBtnLeft {
+  justify-content: flex-start;
+}
+
+.thBtn:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.thBtnActive {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.sortIcon {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.35;
+  flex: none;
+  width: 10px;
+  text-align: center;
+}
+
+.sortIconActive {
+  opacity: 1;
+  color: var(--dsw-alias-brand-primary);
+}
+
+/* 时间范围 chips：文本不换行，小屏可横向滚动 */
+.chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: none;
+  white-space: nowrap;
+  text-align: center;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chipOn {
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
+}
+
+/* 时间选择条：位于图表与表格中间，居中展示 chips，小屏可横向滚动 */
+.rangeBar {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.rangeBar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 图表区：左右饼图 + 堆叠柱（超宽时横向滚动不撑爆） */
+.charts {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 16px;
+  align-items: stretch;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 800px) {
+  .charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chartCard {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stackWrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+}
+
+/* 占比条（表格样式在共用基元里，此处仅条形图） */
 .barRow {
   display: flex;
   align-items: center;
@@ -13,6 +233,7 @@
   border-radius: 3px;
   background: var(--dsw-alias-bg-layer-1);
   overflow: hidden;
+  min-width: 40px;
 }
 
 .barFill {
@@ -26,4 +247,16 @@
   color: var(--dsw-alias-label-secondary);
   width: 40px;
   text-align: right;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 翻页栏：固定在列表底部，不随数据滚动（与 SessionsTab 一致） */
+.paginationBar {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
 }

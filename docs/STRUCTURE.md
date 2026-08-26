@@ -19,6 +19,12 @@ dsh-usage-stats/
 ├── src/
 │   ├── client/
 │   │   ├── components/
+│   │   │   ├── DateStackedBar.module.css ← 日期堆叠柱状图（DateStackedBar）：每日为一柱，按 token 类型堆叠，横向滚动。
+│   │   │   ├── DateStackedBar.tsx ← 日期堆叠柱状图（DateStackedBar）：每日一柱，按 token 类型堆叠，横向滚动。
+│   │   │   ├── ModelPieChart.module.css ← 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。
+│   │   │   ├── ModelPieChart.tsx ← 模型饼图（ModelPieChart）：按模型占比的饼图（纯 SVG）。
+│   │   │   ├── ModelStackedBar.module.css ← 模型堆叠柱状图（ModelStackedBar）：每日为一柱，按模型堆叠，横向滚动。
+│   │   │   ├── ModelStackedBar.tsx ← 模型堆叠柱状图（ModelStackedBar）：每日一柱，按模型堆叠，横向滚动。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
 │   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
@@ -27,12 +33,12 @@ dsh-usage-stats/
 │   │   │   ├── Tooltip.tsx ← 自实现的 Tooltip（Tips）：基于 dsh 自带 `@deepseek-ai/dsh-client-ui-primitives/Tooltip` 的轻量修改版， 并已合并原 `FollowTooltip` 的鼠标跟随能力（通过 `follow` 参数控制）。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
 │   │   ├── views/
-│   │   │   ├── DatesTab.module.css ← 日期 Tab（DatesTab）：每日趋势曲线（SVG）+ 时间范围切换 chips + 悬停 tooltip。
-│   │   │   ├── DatesTab.tsx ← 日期 Tab：每日趋势曲线 + 时间范围切换，悬停 tooltip 显示当日明细。
+│   │   │   ├── DatesTab.module.css ← 日期 Tab（DatesTab）：堆叠柱状图 + 范围 chips + 数据表格（与模型 Tab 对齐）。
+│   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型 Tab 对齐）。
 │   │   │   ├── HeroTile.module.css ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴样式。
 │   │   │   ├── HeroTile.tsx ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴。
-│   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：占总比条形图（表格样式在共用基元里）。
-│   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表（含占比条）。
+│   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：占总比条形图 + 与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
+│   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表（含占比条），布局与会话 Tab 对齐。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 + 标题刷新按钮）、扫描页脚。
 │   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴 （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用； 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）+ 扫描页脚。
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab（SessionsTab）：主会话折叠按钮、子行与徽标、横向滚动容器（表格样式在共用基元里）。

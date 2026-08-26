@@ -146,6 +146,23 @@ CREATE TABLE IF NOT EXISTS agg_model (
   PRIMARY KEY (provider, model)
 )`
 
+/** 预统计：按模型×日。 */
+const AGG_MODEL_DAILY_DDL = `
+CREATE TABLE IF NOT EXISTS agg_model_daily (
+  provider    TEXT    NOT NULL,
+  model       TEXT    NOT NULL,
+  day         INTEGER NOT NULL,
+  input       INTEGER NOT NULL DEFAULT 0,
+  output      INTEGER NOT NULL DEFAULT 0,
+  cache_read  INTEGER NOT NULL DEFAULT 0,
+  cache_write INTEGER NOT NULL DEFAULT 0,
+  reasoning   INTEGER NOT NULL DEFAULT 0,
+  total       INTEGER NOT NULL DEFAULT 0,
+  calls       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (provider, model, day)
+)`
+
+
 /** 预统计：按会话。 */
 const AGG_SESSION_DDL = `
 CREATE TABLE IF NOT EXISTS agg_session (
@@ -196,16 +213,19 @@ interface LedgerStatements {
   getAggTotal: ReturnType<DatabaseSync['prepare']>
   allAggDaily: ReturnType<DatabaseSync['prepare']>
   allAggModel: ReturnType<DatabaseSync['prepare']>
+  allAggModelDaily: ReturnType<DatabaseSync['prepare']>
   allAggSession: ReturnType<DatabaseSync['prepare']>
   allAggSessionDaily: ReturnType<DatabaseSync['prepare']>
   incAggTotal: ReturnType<DatabaseSync['prepare']>
   incAggDaily: ReturnType<DatabaseSync['prepare']>
   incAggModel: ReturnType<DatabaseSync['prepare']>
+  incAggModelDaily: ReturnType<DatabaseSync['prepare']>
   incAggSession: ReturnType<DatabaseSync['prepare']>
   incAggSessionDaily: ReturnType<DatabaseSync['prepare']>
   insertAggTotalBulk: ReturnType<DatabaseSync['prepare']>
   insertAggDailyBulk: ReturnType<DatabaseSync['prepare']>
   insertAggModelBulk: ReturnType<DatabaseSync['prepare']>
+  insertAggModelDailyBulk: ReturnType<DatabaseSync['prepare']>
   insertAggSessionBulk: ReturnType<DatabaseSync['prepare']>
   insertAggSessionDailyBulk: ReturnType<DatabaseSync['prepare']>
   getCheckpoint: ReturnType<DatabaseSync['prepare']>
@@ -297,6 +317,7 @@ export class Ledger {
     this.db.exec(AGG_TOTAL_DDL)
     this.db.exec(AGG_DAILY_DDL)
     this.db.exec(AGG_MODEL_DDL)
+    this.db.exec(AGG_MODEL_DAILY_DDL)
     this.db.exec(AGG_SESSION_DDL)
     this.db.exec(AGG_SESSION_DAILY_DDL)
     this.db.exec(AGG_CHECKPOINT_DDL)
@@ -306,6 +327,7 @@ export class Ledger {
       this.db.exec('DROP TABLE IF EXISTS agg_total')
       this.db.exec('DROP TABLE IF EXISTS agg_daily')
       this.db.exec('DROP TABLE IF EXISTS agg_model')
+      this.db.exec('DROP TABLE IF EXISTS agg_model_daily')
       this.db.exec('DROP TABLE IF EXISTS agg_session')
       this.db.exec('DROP TABLE IF EXISTS agg_session_daily')
       this.db.exec('DROP TABLE IF EXISTS agg_checkpoint')
@@ -314,6 +336,7 @@ export class Ledger {
       this.db.exec(AGG_TOTAL_DDL)
       this.db.exec(AGG_DAILY_DDL)
       this.db.exec(AGG_MODEL_DDL)
+      this.db.exec(AGG_MODEL_DAILY_DDL)
       this.db.exec(AGG_SESSION_DDL)
       this.db.exec(AGG_SESSION_DAILY_DDL)
       this.db.exec(AGG_CHECKPOINT_DDL)
@@ -382,6 +405,7 @@ export class Ledger {
     const getAggTotal = this.db.prepare('SELECT input, output, cache_read, cache_write, reasoning, total, calls, folded_events FROM agg_total WHERE id = 0')
     const allAggDaily = this.db.prepare('SELECT day, input, output, cache_read, cache_write, reasoning, total, calls FROM agg_daily')
     const allAggModel = this.db.prepare('SELECT provider, model, input, output, cache_read, cache_write, reasoning, total, calls FROM agg_model')
+    const allAggModelDaily = this.db.prepare('SELECT provider, model, day, input, output, cache_read, cache_write, reasoning, total, calls FROM agg_model_daily')
     const allAggSession = this.db.prepare('SELECT session_id, input, output, cache_read, cache_write, reasoning, total, calls, max_seq, last_active FROM agg_session')
     const allAggSessionDaily = this.db.prepare('SELECT session_id, day, input, output, cache_read, cache_write, reasoning, total, calls FROM agg_session_daily')
     const incAggTotal = this.db.prepare(
@@ -421,6 +445,18 @@ export class Ledger {
          total = agg_model.total + excluded.total,
          calls = agg_model.calls + excluded.calls`,
     )
+    const incAggModelDaily = this.db.prepare(
+      `INSERT INTO agg_model_daily(provider, model, day, input, output, cache_read, cache_write, reasoning, total, calls)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(provider, model, day) DO UPDATE SET
+          input = agg_model_daily.input + excluded.input,
+          output = agg_model_daily.output + excluded.output,
+          cache_read = agg_model_daily.cache_read + excluded.cache_read,
+          cache_write = agg_model_daily.cache_write + excluded.cache_write,
+          reasoning = agg_model_daily.reasoning + excluded.reasoning,
+          total = agg_model_daily.total + excluded.total,
+          calls = agg_model_daily.calls + excluded.calls`,
+    )
     const incAggSession = this.db.prepare(
       `INSERT INTO agg_session(session_id, input, output, cache_read, cache_write, reasoning, total, calls, max_seq, last_active)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -459,6 +495,10 @@ export class Ledger {
       `INSERT INTO agg_model(provider, model, input, output, cache_read, cache_write, reasoning, total, calls)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
+    const insertAggModelDailyBulk = this.db.prepare(
+      `INSERT INTO agg_model_daily(provider, model, day, input, output, cache_read, cache_write, reasoning, total, calls)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
     const insertAggSessionBulk = this.db.prepare(
       `INSERT INTO agg_session(session_id, input, output, cache_read, cache_write, reasoning, total, calls, max_seq, last_active)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -477,9 +517,9 @@ export class Ledger {
     )
     this.stmts = {
       hasEvent, hasEventByPK, insertEvent, allEvents, upsertMeta, allMeta,
-      hasAgg, getAggTotal, allAggDaily, allAggModel, allAggSession, allAggSessionDaily,
-      incAggTotal, incAggDaily, incAggModel, incAggSession, incAggSessionDaily,
-      insertAggTotalBulk, insertAggDailyBulk, insertAggModelBulk, insertAggSessionBulk, insertAggSessionDailyBulk,
+      hasAgg, getAggTotal, allAggDaily, allAggModel, allAggModelDaily, allAggSession, allAggSessionDaily,
+      incAggTotal, incAggDaily, incAggModel, incAggModelDaily, incAggSession, incAggSessionDaily,
+      insertAggTotalBulk, insertAggDailyBulk, insertAggModelBulk, insertAggModelDailyBulk, insertAggSessionBulk, insertAggSessionDailyBulk,
       getCheckpoint, upsertCheckpoint, allEventsSince,
     }
     for (const row of allMeta.all() as Array<Record<string, unknown>>) {
@@ -649,6 +689,7 @@ export class Ledger {
       this.stmts.incAggTotal.run(ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1, 1)
       this.stmts.incAggDaily.run(day, ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1)
       this.stmts.incAggModel.run(ev.provider, ev.model, ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1)
+      this.stmts.incAggModelDaily.run(ev.provider, ev.model, day, ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1)
       this.stmts.incAggSession.run(ev.sessionId, ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1, ev.seq, ev.t)
       this.stmts.incAggSessionDaily.run(ev.sessionId, day, ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1)
     }
@@ -666,6 +707,7 @@ export class Ledger {
       this.db.exec('DELETE FROM agg_total')
       this.db.exec('DELETE FROM agg_daily')
       this.db.exec('DELETE FROM agg_model')
+      this.db.exec('DELETE FROM agg_model_daily')
       this.db.exec('DELETE FROM agg_session')
       this.db.exec('DELETE FROM agg_session_daily')
       // 全量
@@ -679,6 +721,13 @@ export class Ledger {
       for (const [key, agg] of store.models) {
         const { provider, model } = splitModelKey(key)
         this.stmts.insertAggModelBulk.run(provider, model, agg.input, agg.output, agg.cacheRead, agg.cacheWrite, agg.reasoning, agg.total, agg.calls)
+      }
+      // 按模型×日
+      for (const [key, dailyMap] of store.modelDaily) {
+        const { provider, model } = splitModelKey(key)
+        for (const [day, agg] of dailyMap) {
+          this.stmts.insertAggModelDailyBulk.run(provider, model, day, agg.input, agg.output, agg.cacheRead, agg.cacheWrite, agg.reasoning, agg.total, agg.calls)
+        }
       }
       // 按会话
       for (const [sid, info] of store.sessions) {
@@ -707,6 +756,7 @@ export class Ledger {
     store.foldedEvents = Number(totalRow.folded_events) || store.allAgg.calls
     store.allDaily.clear()
     store.models.clear()
+    store.modelDaily.clear()
     store.sessions.clear()
     for (const r of this.stmts.allAggDaily.all() as Array<Record<string, unknown>>) {
       const day = Number(r.day) || 0
@@ -731,6 +781,55 @@ export class Ledger {
         total: Number(r.total) || 0,
         calls: Number(r.calls) || 0,
       })
+    }
+    for (const r of this.stmts.allAggModelDaily.all() as Array<Record<string, unknown>>) {
+      const key = String(r.provider) + '\u0000' + String(r.model)
+      const day = Number(r.day) || 0
+      let daily = store.modelDaily.get(key)
+      if (!daily) { daily = new Map(); store.modelDaily.set(key, daily) }
+      daily.set(day, {
+        input: Number(r.input) || 0,
+        output: Number(r.output) || 0,
+        cacheRead: Number(r.cache_read) || 0,
+        cacheWrite: Number(r.cache_write) || 0,
+        reasoning: Number(r.reasoning) || 0,
+        total: Number(r.total) || 0,
+        calls: Number(r.calls) || 0,
+      })
+    }
+    // 兼容旧库：若 modelDaily 为空但 models 已有数据（v4 升级），从 events 重建 modelDaily
+    if (store.modelDaily.size === 0 && store.models.size > 0) {
+      try {
+        const events = this.allEvents()
+        for (const ev of events) {
+          const day = startOfDay(ev.t)
+          const key = ev.provider + '\u0000' + ev.model
+          let daily = store.modelDaily.get(key)
+          if (!daily) { daily = new Map(); store.modelDaily.set(key, daily) }
+          let agg = daily.get(day)
+          if (!agg) { agg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 }; daily.set(day, agg) }
+          agg.input += ev.input
+          agg.output += ev.output
+          agg.cacheRead += ev.cacheRead
+          agg.cacheWrite += ev.cacheWrite
+          agg.reasoning += ev.reasoning
+          agg.total += ev.input + ev.output + ev.cacheRead + ev.cacheWrite
+          agg.calls += 1
+        }
+        if (store.modelDaily.size > 0) {
+          this.transaction(() => {
+            this.db.exec('DELETE FROM agg_model_daily')
+            for (const [key, dailyMap] of store.modelDaily) {
+              const { provider, model } = splitModelKey(key)
+              for (const [day, agg] of dailyMap) {
+                this.stmts.insertAggModelDailyBulk.run(provider, model, day, agg.input, agg.output, agg.cacheRead, agg.cacheWrite, agg.reasoning, agg.total, agg.calls)
+              }
+            }
+          })
+        }
+      } catch (e) {
+        console.error('[usage-stats] modelDaily 重建失败', e)
+      }
     }
     for (const r of this.stmts.allAggSession.all() as Array<Record<string, unknown>>) {
       const sid = String(r.session_id)
@@ -776,6 +875,7 @@ export class Ledger {
     this.db.exec('DELETE FROM agg_total')
     this.db.exec('DELETE FROM agg_daily')
     this.db.exec('DELETE FROM agg_model')
+    this.db.exec('DELETE FROM agg_model_daily')
     this.db.exec('DELETE FROM agg_session')
     this.db.exec('DELETE FROM agg_session_daily')
     this.db.exec('DELETE FROM agg_checkpoint')

@@ -23,6 +23,8 @@ import { errorMessage } from '../utils.ts'
 export interface UsageStore {
   sessions: Map<string, SessionInfo>
   models: Map<string, Agg>
+  /** 按模型×日的细分（用于模型汇总的时间范围筛选与堆叠柱）。 */
+  modelDaily: Map<string, Map<number, Agg>>
   allAgg: Agg
   allDaily: Map<number, Agg>
   /** 账本余额计数：事件总数与去重跳过数。 */
@@ -45,6 +47,7 @@ export function createStore(): UsageStore {
   return {
     sessions: new Map(),
     models: new Map(),
+    modelDaily: new Map(),
     allAgg: newAgg(),
     allDaily: new Map(),
     foldedEvents: 0,
@@ -85,6 +88,13 @@ export function ensureModel(store: UsageStore, key: string): Agg {
   return agg
 }
 
+/** 取（或建）某模型的按日分桶 Map。 */
+export function ensureModelDaily(store: UsageStore, key: string): Map<number, Agg> {
+  let m = store.modelDaily.get(key)
+  if (!m) { m = new Map(); store.modelDaily.set(key, m) }
+  return m
+}
+
 /** 把一次真实用量折进会话日桶 / 会话总桶 / 全量日桶 / 全量总桶。 */
 export function foldUsage(store: UsageStore, info: SessionInfo, timeMs: number, u: TokenUsage): void {
   const day = startOfDay(timeMs)
@@ -114,7 +124,9 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent, ledger?: Led
   const info = ensureSession(store, ev.sessionId)
   if (ev.seq >= 0 && ev.seq > info.maxSeq) info.maxSeq = ev.seq
   foldUsage(store, info, ev.t, usage)
-  ink(ensureModel(store, ev.provider + '\u0000' + ev.model), usage)
+  const modelKey = ev.provider + '\u0000' + ev.model
+  ink(ensureModel(store, modelKey), usage)
+  ink(dayAgg(ensureModelDaily(store, modelKey), startOfDay(ev.t)), usage)
   store.foldedEvents += 1
   // 同步物化到预统计表（实时路径增量，批量导入时挂起）。失败不抛错、
   // 不打断折叠（内存聚合仍是正确事实），仅记录日志与 lastError 供快照

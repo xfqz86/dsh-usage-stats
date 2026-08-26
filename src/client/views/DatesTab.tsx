@@ -1,136 +1,198 @@
 /**
- * 日期 Tab：每日趋势曲线 + 时间范围切换，悬停 tooltip 显示当日明细。
+ * 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型 Tab 对齐）。
+ * 顶部为按 token 类型堆叠的每日柱状图（DateStackedBar，横向滚动）；
+ * 中间为居中展示的范围 chips（7d/14d/30d/90d/180d/全部）；
+ * 底部为可排序分页的每日明细表格（日期 | 调用 | 输入 | 输出 | 缓存 | 总计）。
  * 独立成文件（一个组件一个文件）。
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SeriesPoint } from '../../types.ts'
 import css from './DatesTab.module.css'
 import shared from '../components/UsageStatsCommon.module.css'
-import { buildSet, curveOf, dayTotal, fmtFull, fullDayLabel } from '../stats.ts'
+import type { SeriesPoint } from '../../types.ts'
+import { fmt, fmtFull, fullDayLabel, buildDateStack, type DateRange } from '../stats.ts'
+import { DateStackedBar } from '../components/DateStackedBar.tsx'
+import { Pagination } from '../components/Pagination.tsx'
 
-/** 时间范围选项：值 + 对应文案键。 */
-const RANGE_KEYS = [
+const PAGE_SIZE = 20
+
+/** 排序键：与表头一一对应（日期 + 数值列）。 */
+type SortKey = 'date' | 'calls' | 'input' | 'output' | 'cacheRead' | 'total'
+type SortDir = 'asc' | 'desc'
+
+/** 时间范围选项：值 + 文案键（与 locales 的 range.* 对齐，默认 7 天）。 */
+const DATE_RANGES: Array<[DateRange, string]> = [
   ['7d', 'range.7d'],
   ['14d', 'range.14d'],
   ['30d', 'range.30d'],
+  ['90d', 'range.90d'],
+  ['180d', 'range.180d'],
   ['all', 'range.all'],
-] as const
-type RangeKey = typeof RANGE_KEYS[number][0]
+]
 
-/** 日期 Tab：每日趋势（曲线 + 时间范围），悬停 tooltip 显示当日明细。 */
+/** 日期 Tab：堆叠柱 + 范围切换 + 排序分页表格，容器与会话/模型 Tab 对齐。 */
 export function DatesTab({
   series, t,
 }: {
   series: SeriesPoint[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
-  const [range, setRange] = useState<RangeKey>('7d')
-  const [tip, setTip] = useState<{ x: number; y: number; label: string; total: number; calls: number } | null>(null)
-  const [tipPos, setTipPos] = useState<{ left: number; top: number } | null>(null)
-  const chartRef = useRef<HTMLDivElement>(null)
-  const tipRef = useRef<HTMLDivElement>(null)
+  const [range, setRange] = useState<DateRange>('7d')
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [page, setPage] = useState(1)
 
-  const buckets = useMemo(() => buildSet(series, range), [range, series])
-  const curve = useMemo(() => curveOf(buckets, 300, 130), [buckets])
-
-  // 把 tooltip 约束在图表区域内（按实际渲染尺寸，而非固定 viewBox）。
-  useEffect(() => {
-    if (!tip) { setTipPos(null); return }
-    const w = tipRef.current?.offsetWidth ?? 180
-    const h = tipRef.current?.offsetHeight ?? 40
-    const chartW = chartRef.current?.clientWidth ?? 300
-    const chartH = chartRef.current?.clientHeight ?? 130
-    let left = tip.x - w / 2
-    left = Math.max(6, Math.min(left, chartW - w - 6))
-    let top = tip.y - h - 10
-    top = Math.max(6, Math.min(top, chartH))
-    setTipPos({ left, top })
-  }, [tip])
-
-  /** 由鼠标事件换算图表内的坐标。 */
-  const tipFromEvent = (e: React.MouseEvent) => {
-    let x = 20, y = 20
-    const el = chartRef.current
-    if (el) {
-      const r = el.getBoundingClientRect()
-      x = e.clientX - r.left
-      y = e.clientY - r.top
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
     }
-    return { x, y }
+    setPage(1)
+  }
+
+  // 按范围构建堆叠数据（固定窗口按日历推进，all 时从最早日到今日、最多 366 天）
+  const stack = useMemo(() => buildDateStack(series, range), [series, range])
+
+  // 范围切换时分页回到首位
+  useEffect(() => {
+    setPage(1)
+  }, [range])
+
+  // 排序：基于堆叠后的日列表（已按 range 过滤且含零值补齐），稳定排序
+  const sortedDays = useMemo(() => {
+    if (stack.days.length === 0) return []
+    const withIdx = stack.days.map((d, i) => ({ d, i }))
+    withIdx.sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case 'date':
+          cmp = a.d.t - b.d.t
+          break
+        case 'calls':
+          cmp = (a.d.calls || 0) - (b.d.calls || 0)
+          break
+        case 'input':
+          cmp = (a.d.input || 0) - (b.d.input || 0)
+          break
+        case 'output':
+          cmp = (a.d.output || 0) - (b.d.output || 0)
+          break
+        case 'cacheRead':
+          cmp = (a.d.cacheRead || 0) - (b.d.cacheRead || 0)
+          break
+        case 'total':
+          cmp = (a.d.total || 0) - (b.d.total || 0)
+          break
+        default:
+          cmp = 0
+      }
+      if (cmp !== 0) return sortDir === 'asc' ? cmp : -cmp
+      return a.i - b.i
+    })
+    return withIdx.map((x) => x.d)
+  }, [stack.days, sortKey, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sortedDays.length / PAGE_SIZE))
+
+  useEffect(() => {
+    setPage((p) => Math.min(Math.max(1, p), totalPages))
+  }, [totalPages])
+
+  const pageDays = useMemo(
+    () => sortedDays.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sortedDays, page],
+  )
+
+  const ThSortable = ({
+    k, label, align = 'right',
+  }: {
+    k: SortKey
+    label: string
+    align?: 'left' | 'right'
+  }) => {
+    const active = sortKey === k
+    const ariaSort: 'ascending' | 'descending' | 'none' = active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+    return (
+      <th aria-sort={ariaSort} className={align === 'left' ? undefined : shared.num} style={align === 'left' ? { textAlign: 'left' } : undefined}>
+        <button
+          type="button"
+          className={`${css.thBtn} ${align === 'left' ? css.thBtnLeft : ''} ${active ? css.thBtnActive : ''}`}
+          onClick={() => handleSort(k)}
+          aria-label={label}
+        >
+          <span>{label}</span>
+          <span className={`${css.sortIcon} ${active ? css.sortIconActive : ''}`} aria-hidden>
+            {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+          </span>
+        </button>
+      </th>
+    )
+  }
+
+  // 完全无数据（历史为空）与过滤后无数据区分
+  if (series.length === 0) {
+    return <div className={shared.empty}>{t('state.noUsage')}</div>
+  }
+
+  if (stack.days.length === 0) {
+    return <div className={shared.empty}>{t('state.noUsage')}</div>
   }
 
   return (
-    <div className={shared.section}>
-      <div className={shared.sectionHead}>
-        <span className={shared.sectionLabel}>{t('panel.trend')}</span>
+    <div className={`${shared.section} ${css.root}`}>
+      <div className={css.charts}>
+        <div className={css.chartCard}>
+          <DateStackedBar series={series} range={range} t={t} />
+        </div>
+      </div>
+      <div className={css.rangeBar}>
         <span className={css.chips}>
-          {RANGE_KEYS.map(([value, label]) => (
+          {DATE_RANGES.map(([value, labelKey]) => (
             <button
               key={value}
               type="button"
               className={range === value ? `${css.chip} ${css.chipOn}` : css.chip}
               onClick={() => setRange(value)}
-            >{t(label)}</button>
+            >
+              {t(labelKey as never)}
+            </button>
           ))}
         </span>
       </div>
-      <div
-        className={css.chart}
-        ref={chartRef}
-        onMouseLeave={() => setTip(null)}
-      >
-        {!curve
-          ? <div className={shared.empty}>{t('state.noUsage')}</div>
-          : (
-            <svg className={css.svg} viewBox={`0 0 ${curve.W} ${curve.H}`}>
-                {[0.25, 0.5, 0.75].map(f => (
-                  <line key={'g' + f} x1={0} x2={curve.W} y1={curve.H * f} y2={curve.H * f} className={css.gridline} />
-                ))}
-                <defs>
-                  <linearGradient id="usu-area" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--dsw-alias-brand-primary,#4d6bfe)" stopOpacity=".25" />
-                    <stop offset="100%" stopColor="var(--dsw-alias-brand-primary,#4d6bfe)" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d={curve.area} fill="url(#usu-area)" stroke="none" />
-                <path d={curve.line} fill="none" stroke="var(--dsw-alias-brand-primary,#4d6bfe)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                {curve.hits.map((h, i) => (
-                  <g
-                    key={'h' + i}
-                    onMouseEnter={(e: React.MouseEvent) => {
-                      e.stopPropagation()
-                      const p = tipFromEvent(e)
-                      setTip({ x: p.x, y: p.y, label: fullDayLabel(h.b.t), total: dayTotal(h.b), calls: h.b.calls })
-                    }}
-                  >
-                    <circle cx={h.cx} cy={h.cy} r={7} fill="transparent" />
-                    <circle cx={h.cx} cy={h.cy} r={2.5} fill="var(--dsw-alias-brand-primary,#4d6bfe)" />
-                  </g>
-                ))}
-                {(function () {
-                  const n = curve.hits.length
-                  const idxs = n === 1 ? [0] : n === 2 ? [0, n - 1] : [0, Math.floor((n - 1) / 2), n - 1]
-                  return idxs.map((i, k) => (
-                    <text key={'l' + k} x={curve.hits[i].cx} y={curve.H - 3} className={css.axisLabel} textAnchor="middle">
-                      {curve.hits[i].label}
-                    </text>
-                  ))
-                })()}
-              </svg>
-          )}
-        {tip && (
-          <div
-            ref={tipRef}
-            className={css.tip}
-            style={{ left: (tipPos ? tipPos.left : 0) + 'px', top: (tipPos ? tipPos.top : 0) + 'px', opacity: tipPos ? 1 : 0 }}
-          >
-            <div>{tip.label}</div>
-            <div>{t('dates.tooltipPrefix')}<b>{fmtFull(tip.total)}</b>{t('dates.tooltipSuffix', { calls: fmtFull(tip.calls) })}</div>
-          </div>
-        )}
+      <div className={css.tableWrap}>
+        <table className={shared.table}>
+          <thead>
+            <tr>
+              <ThSortable k="date" label={t('tab.dates')} align="left" />
+              <ThSortable k="calls" label={t('table.calls')} />
+              <ThSortable k="input" label={t('table.input')} />
+              <ThSortable k="output" label={t('table.output')} />
+              <ThSortable k="cacheRead" label={t('table.cacheRead')} />
+              <ThSortable k="total" label={t('table.total')} />
+            </tr>
+          </thead>
+          <tbody>
+            {pageDays.map((d) => (
+              <tr key={d.t}>
+                <td className={shared.cellText}>{fullDayLabel(d.t)}</td>
+                <td className={shared.num}>{fmtFull(d.calls)}</td>
+                <td className={shared.num}>{fmt(d.input)}</td>
+                <td className={shared.num}>{fmt(d.output)}</td>
+                <td className={shared.num}>{fmt(d.cacheRead)}</td>
+                <td className={`${shared.num} ${shared.strong}`}>{fmt(d.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+      {totalPages > 1 && (
+        <div className={css.paginationBar}>
+          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} t={t} />
+        </div>
+      )}
     </div>
   )
 }

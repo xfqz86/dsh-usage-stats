@@ -68,7 +68,9 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
   const models: Array<Record<string, unknown>> = []
   for (const [key, agg] of store.models) {
     const { provider, model } = splitModelKey(key)
-    models.push({ provider, model, calls: agg.calls, usage: usageOf(agg) })
+    const dailyMap = store.modelDaily.get(key)
+    const series = dailyMap ? buildSeries(dailyMap) : []
+    models.push({ provider, model, calls: agg.calls, usage: usageOf(agg), series })
   }
   models.sort((a, b) => (b.usage as { total: number }).total - (a.usage as { total: number }).total)
 

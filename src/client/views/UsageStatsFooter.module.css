@@ -65,15 +65,19 @@
   margin: 0 0 4px;
 }
 
-/* 两行布局（短标签在上、百分比在下），整体水平居中，避免单行文字换行错位。 */
+/* 两行布局（短标签在上、百分比在下），整体水平居中，避免单行文字换行错位。
+   折叠态芯片背景为正方形（36×36），避免被合一按钮的 flex 布局压扁。 */
 .goRailChipBox {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 28px;
-  padding: 2px 0;
+  min-height: 36px;
+  height: 36px;
+  aspect-ratio: 1 / 1;
+  padding: 4px 0;
+  box-sizing: border-box;
   border-radius: 8px;
   color: var(--dsw-alias-label-secondary);
   background: var(--dsw-alias-interactive-bg-hover);
@@ -118,6 +122,7 @@
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
 }
 
+/* 兼容保留：旧的独立 badge 按钮（现已被合一按钮取代，保留以防回退） */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -141,6 +146,102 @@
 
 .badge[data-active] {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* ---- 合一按钮（宽列）：Go 额度行 + 今日用量行在同一按钮内，任意位置点击均打开弹窗 ---- */
+.unified {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 6px 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.unified:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.unified[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.unifiedGoRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 20px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+/* Go 芯片在合一按钮的上行中均分剩余宽度，使上行视觉铺满与下行（今日+比例条）一致 */
+.unifiedGoRow .goChip {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.unifiedMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+/* 折叠 rail 的合一按钮：Go 芯片（若有）在上，圆形图标在下，整块可点
+   芯片为正方形，按钮 stretch 保证芯片铺满 36px 宽度不被压扁。 */
+.railUnified {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 36px;
+  padding: 4px 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.railUnified:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid);
+}
+
+.railUnified[data-active] {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.railUnified .goRailChip {
+  width: 100%;
+  margin: 0;
+  justify-content: center;
+}
+
+.railUnifiedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
 }
 
 .badgeIcon {

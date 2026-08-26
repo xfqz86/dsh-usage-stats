@@ -129,7 +129,7 @@ export function UsageStatsPanel({ open, data, err, go, settings, onUpdateSetting
         ))}
       </div>
 
-      <div className={`${css.body} ${active === 'sessions' ? css.bodySessions : ''}`} role="tabpanel">
+      <div className={`${css.body} ${active === 'dates' ? css.bodyDates : active === 'sessions' ? css.bodySessions : active === 'models' ? css.bodyModels : ''}`} role="tabpanel">
         {err
           ? <div className={shared.empty}>{t('state.unavailable')}</div>
           : !value
