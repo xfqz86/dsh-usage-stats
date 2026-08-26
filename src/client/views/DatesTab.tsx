@@ -14,6 +14,7 @@ import type { SeriesPoint } from '../../types.ts'
 import { fmt, fmtFull, fullDayLabel, pctOf, buildDateStack, type DateRange } from '../stats.ts'
 import { DateStackedBar } from '../components/DateStackedBar.tsx'
 import { Pagination } from '../components/Pagination.tsx'
+import { ThSortable, type SortDir } from '../components/ThSortable.tsx'
 
 const PAGE_SIZE = 20
 
@@ -34,7 +35,6 @@ function avgOfDay(total: number, calls: number): number | null {
 
 /** 排序键：与表头一一对应（日期 + 数值列）。 */
 type SortKey = 'date' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg'
-type SortDir = 'asc' | 'desc'
 
 /** 时间范围选项：值 + 文案键（与 locales 的 range.* 对齐，默认全部）。 */
 const DATE_RANGES: Array<[DateRange, string]> = [
@@ -138,32 +138,6 @@ export function DatesTab({
     [sortedDays, page],
   )
 
-  const ThSortable = ({
-    k, label, align = 'right',
-  }: {
-    k: SortKey
-    label: string
-    align?: 'left' | 'right'
-  }) => {
-    const active = sortKey === k
-    const ariaSort: 'ascending' | 'descending' | 'none' = active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-    return (
-      <th aria-sort={ariaSort} className={align === 'left' ? undefined : shared.num} style={align === 'left' ? { textAlign: 'left' } : undefined}>
-        <button
-          type="button"
-          className={`${css.thBtn} ${align === 'left' ? css.thBtnLeft : ''} ${active ? css.thBtnActive : ''}`}
-          onClick={() => handleSort(k)}
-          aria-label={label}
-        >
-          <span>{label}</span>
-          <span className={`${css.sortIcon} ${active ? css.sortIconActive : ''}`} aria-hidden>
-            {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
-          </span>
-        </button>
-      </th>
-    )
-  }
-
   // 完全无数据（历史为空）与过滤后无数据区分
   if (series.length === 0) {
     return <div className={shared.empty}>{t('state.noUsage')}</div>
@@ -198,14 +172,14 @@ export function DatesTab({
         <table className={shared.table}>
           <thead>
             <tr>
-              <ThSortable k="date" label={t('tab.dates')} align="left" />
-              <ThSortable k="cacheRead" label={t('table.cacheRead')} />
-              <ThSortable k="input" label={t('table.input')} />
-              <ThSortable k="output" label={t('table.output')} />
-              <ThSortable k="total" label={t('table.total')} />
-              <ThSortable k="hitRate" label={t('table.hitRate')} />
-              <ThSortable k="calls" label={t('table.calls')} />
-              <ThSortable k="avg" label={t('table.avgPerCall')} />
+              <ThSortable k="date" label={t('tab.dates')} align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="cacheRead" label={t('table.cacheRead')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="input" label={t('table.input')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="output" label={t('table.output')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="total" label={t('table.total')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="hitRate" label={t('table.hitRate')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="calls" label={t('table.calls')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>

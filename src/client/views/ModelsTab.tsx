@@ -15,6 +15,7 @@ import { fmt, fmtFull, pctOf, usageTotal, filterModelsByRange, type ModelRange }
 import { Pagination } from '../components/Pagination.tsx'
 import { ModelPieChart } from '../components/ModelPieChart.tsx'
 import { ModelStackedBar } from '../components/ModelStackedBar.tsx'
+import { ThSortable, type SortDir } from '../components/ThSortable.tsx'
 
 const PAGE_SIZE = 20
 
@@ -35,7 +36,6 @@ function avgOfModel(total: number, calls: number): number | null {
 
 /** 排序键：与表头一一对应（模型文本 + 数值列 + 占比）。 */
 type SortKey = 'model' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg' | 'share'
-type SortDir = 'asc' | 'desc'
 
 /** 时间范围选项：值 + 文案键（与 locales 的 modelRange.* 对齐，默认全部）。 */
 const MODEL_RANGES: Array<[ModelRange, string]> = [
@@ -166,32 +166,6 @@ export function ModelsTab({
     [sortedModels, page],
   )
 
-  const ThSortable = ({
-    k, label, align = 'right',
-  }: {
-    k: SortKey
-    label: string
-    align?: 'left' | 'right'
-  }) => {
-    const active = sortKey === k
-    const ariaSort: 'ascending' | 'descending' | 'none' = active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-    return (
-      <th aria-sort={ariaSort} className={align === 'left' ? undefined : shared.num} style={align === 'left' ? { textAlign: 'left' } : undefined}>
-        <button
-          type="button"
-          className={`${css.thBtn} ${align === 'left' ? css.thBtnLeft : ''} ${active ? css.thBtnActive : ''}`}
-          onClick={() => handleSort(k)}
-          aria-label={label}
-        >
-          <span>{label}</span>
-          <span className={`${css.sortIcon} ${active ? css.sortIconActive : ''}`} aria-hidden>
-            {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
-          </span>
-        </button>
-      </th>
-    )
-  }
-
   // 完全无数据（历史为空）与过滤后无数据区分：后者提示范围无数据
   if (models.length === 0) {
     return <div className={shared.empty}>{t('state.noUsage')}</div>
@@ -229,15 +203,15 @@ export function ModelsTab({
             <table className={shared.table}>
               <thead>
                 <tr>
-                  <ThSortable k="model" label={t('table.model')} align="left" />
-                  <ThSortable k="cacheRead" label={t('table.cacheRead')} />
-                  <ThSortable k="input" label={t('table.input')} />
-                  <ThSortable k="output" label={t('table.output')} />
-                  <ThSortable k="total" label={t('table.total')} />
-                  <ThSortable k="hitRate" label={t('table.hitRate')} />
-                  <ThSortable k="calls" label={t('table.calls')} />
-                  <ThSortable k="avg" label={t('table.avgPerCall')} />
-                  <ThSortable k="share" label={t('table.share')} />
+                  <ThSortable k="model" label={t('table.model')} align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="cacheRead" label={t('table.cacheRead')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="input" label={t('table.input')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="output" label={t('table.output')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="total" label={t('table.total')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="hitRate" label={t('table.hitRate')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="calls" label={t('table.calls')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  <ThSortable k="share" label={t('table.share')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody>

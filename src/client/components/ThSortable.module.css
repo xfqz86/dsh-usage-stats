@@ -1,0 +1,51 @@
+/* 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
+   规则与提取前各 Tab 模块内的同名类保持一致；颜色全部使用设计 token。 */
+
+.thBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* 首列文本列左对齐 */
+.thBtnLeft {
+  justify-content: flex-start;
+}
+
+.thBtn:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* 激活列高亮为品牌色 */
+.thBtnActive {
+  color: var(--dsw-alias-brand-primary);
+}
+
+.sortIcon {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.35;
+  flex: none;
+  width: 10px;
+  text-align: center;
+}
+
+.sortIconActive {
+  opacity: 1;
+  color: var(--dsw-alias-brand-primary);
+}

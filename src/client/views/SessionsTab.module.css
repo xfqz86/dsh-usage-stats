@@ -59,62 +59,15 @@
   white-space: nowrap;
 }
 
-/* 长表头（命中率/平均）保持单行不换行，已通过加宽列宽避免撑宽与换行 */
-.tableWrap th:nth-child(6) .thBtn,
-.tableWrap th:nth-child(8) .thBtn {
+/* 长表头（命中率/平均）保持单行不换行：经 ThSortable 的 className 附加类注入（替代原 nth-child 选择器）；
+   以 .root 提升特异性，确保压过共享模块的 .thBtn 字号继承（与注入顺序无关） */
+.root .thSm {
   white-space: nowrap;
   line-height: 14px;
   font-size: 11px;
 }
 
-/* 可排序表头按钮：整列可点击，右对齐数值列，首列左对齐 */
-.thBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  width: 100%;
-  border: none;
-  background: transparent;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  font: inherit;
-  font-size: inherit;
-  font-weight: inherit;
-  color: inherit;
-  cursor: pointer;
-  border-radius: 4px;
-  white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-/* 首列会话左对齐 */
-.thBtnLeft {
-  justify-content: flex-start;
-}
-
-.thBtn:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.thBtnActive {
-  color: var(--dsw-alias-brand-primary);
-}
-
-.sortIcon {
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.35;
-  flex: none;
-  width: 10px;
-  text-align: center;
-}
-
-.sortIconActive {
-  opacity: 1;
-  color: var(--dsw-alias-brand-primary);
-}
+/* 可排序表头按钮样式已提取至 components/ThSortable.module.css（与 DatesTab/ModelsTab 共用） */
 
 .expandBtn {
   display: inline-flex;

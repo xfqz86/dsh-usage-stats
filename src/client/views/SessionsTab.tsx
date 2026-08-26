@@ -14,12 +14,12 @@ import type { SessionStat } from '../useSnapshot.ts'
 import type { UsageAgg } from '../useSnapshot.ts'
 import { fmt, fmtFull, fullDayLabel, pctOf, shortId, usageTotal, groupSessions } from '../stats.ts'
 import { Pagination } from '../components/Pagination.tsx'
+import { ThSortable, type SortDir } from '../components/ThSortable.tsx'
 
 const PAGE_SIZE = 20
 
 /** 排序键：与表头一一对应。 */
 type SortKey = 'session' | 'calls' | 'input' | 'output' | 'cacheRead' | 'hitRate' | 'total' | 'avg' | 'lastActive'
-type SortDir = 'asc' | 'desc'
 
 /** 缓存命中率：cacheRead / (cacheRead + input) *100，1 位小数；分母 0 时为 null。 */
 function hitRateOf(usage: UsageAgg): number | null {
@@ -162,48 +162,22 @@ export function SessionsTab({
   // 保留 sessionsListTotal 仅作兼容，主分页以 groups.length 为准
   void sessionsListTotal
 
-  // 表头辅助：渲染可排序 th
-  const ThSortable = ({
-    k, label, align = 'right',
-  }: {
-    k: SortKey
-    label: string
-    align?: 'left' | 'right'
-  }) => {
-    const active = sortKey === k
-    const ariaSort: 'ascending' | 'descending' | 'none' = active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-    return (
-      <th aria-sort={ariaSort} className={align === 'left' ? undefined : shared.num} style={align === 'left' ? { textAlign: 'left' } : undefined}>
-        <button
-          type="button"
-          className={`${css.thBtn} ${align === 'left' ? css.thBtnLeft : ''} ${active ? css.thBtnActive : ''}`}
-          onClick={() => handleSort(k)}
-          aria-label={label}
-        >
-          <span>{label}</span>
-          <span className={`${css.sortIcon} ${active ? css.sortIconActive : ''}`} aria-hidden>
-            {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
-          </span>
-        </button>
-      </th>
-    )
-  }
-
   return (
     <div className={`${shared.section} ${css.root}`}>
       <div className={css.tableWrap}>
         <table className={shared.table}>
           <thead>
             <tr>
-              <ThSortable k="session" label={t('table.session')} align="left" />
-              <ThSortable k="cacheRead" label={t('table.cacheRead')} />
-              <ThSortable k="input" label={t('table.input')} />
-              <ThSortable k="output" label={t('table.output')} />
-              <ThSortable k="total" label={t('table.total')} />
-              <ThSortable k="hitRate" label={t('table.hitRate')} />
-              <ThSortable k="calls" label={t('table.calls')} />
-              <ThSortable k="avg" label={t('table.avgPerCall')} />
-              <ThSortable k="lastActive" label={t('table.lastActive')} />
+              <ThSortable k="session" label={t('table.session')} align="left" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="cacheRead" label={t('table.cacheRead')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="input" label={t('table.input')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="output" label={t('table.output')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="total" label={t('table.total')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              {/* 长表头（命中率/平均）缩字号保持单行，经附加类注入 */}
+              <ThSortable k="hitRate" label={t('table.hitRate')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className={css.thSm} />
+              <ThSortable k="calls" label={t('table.calls')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className={css.thSm} />
+              <ThSortable k="lastActive" label={t('table.lastActive')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             </tr>
           </thead>
           <tbody>
