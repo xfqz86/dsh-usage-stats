@@ -237,7 +237,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                 : (
                   <>
                     <span className={css.badgeCalls}>{fmtFull(todayCalls)}{t('panel.summary.callsSuffix')}</span>
-                    <span className={css.badgeTokens}>· {fmt(todayTokens)}</span>
+                    <span className={css.badgeTokens}>· {fmt(todayTokens, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</span>
                     {missing && <span className={css.badgeErr}>{fmtFull(data?.failed ?? 0)}</span>}
                   </>
                 )}

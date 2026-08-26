@@ -9,17 +9,46 @@ import type { SeriesPoint, UsageAgg } from '../types.ts'
 import type { SessionStat } from './useSnapshot.ts'
 import { dateKeyOf, startOfDay } from '../utils.ts'
 
-/** 紧凑 token 格式化：1.2万 / 3.4亿 / 万以下原样。 */
-export function fmt(n: number | null | undefined): string {
+/** 判断是否为英文环境：支持传入 locale 字符串或翻译函数 t。 */
+function isEnglishLocale(localeOrT?: string | ((key: string, params?: Record<string, unknown>) => string)): boolean {
+  if (typeof localeOrT === 'function') {
+    try {
+      // 英文的 panel.summary.callsSuffix 为 ''，中文为 '次'
+      const v = (localeOrT as (k: string, p?: Record<string, unknown>) => string)('panel.summary.callsSuffix' as string)
+      if (v === '') return true
+    } catch { /* 忽略 */ }
+    try {
+      const v2 = (localeOrT as (k: string, p?: Record<string, unknown>) => string)('footer.todayLabel' as string)
+      if (v2 === 'Today') return true
+    } catch { /* 忽略 */ }
+    return false
+  }
+  if (typeof localeOrT === 'string') {
+    return localeOrT.startsWith('en')
+  }
+  return false
+}
+
+/** 紧凑 token 格式化：中文 1.2万 / 3.4亿，英文 1.2K / 3.4M / 1.2B。 */
+export function fmt(n: number | null | undefined, localeOrT?: string | ((key: string, params?: Record<string, unknown>) => string)): string {
   if (n == null || isNaN(n)) return '--'
   const trim = (v: number, d: number): string => String(v.toFixed(d)).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1')
+  const isEn = isEnglishLocale(localeOrT)
+  if (isEn) {
+    if (n >= 1e12) { const v = n / 1e12; return trim(v, v >= 100 ? 0 : v >= 10 ? 1 : 2) + 'T' }
+    if (n >= 1e9) { const v = n / 1e9; return trim(v, v >= 100 ? 0 : v >= 10 ? 1 : 2) + 'B' }
+    if (n >= 1e6) { const v = n / 1e6; return trim(v, v >= 100 ? 0 : v >= 10 ? 1 : 2) + 'M' }
+    if (n >= 1e3) { const v = n / 1e3; return trim(v, v >= 100 ? 0 : v >= 10 ? 1 : 2) + 'K' }
+    return String(Math.round(n))
+  }
   if (n >= 1e8) { const v = n / 1e8; return trim(v, v >= 100 ? 0 : v >= 10 ? 1 : 2) + '亿' }
   if (n >= 1e4) { const v = n / 1e4; return trim(v, v >= 100 ? 0 : v >= 10 ? 1 : 2) + '万' }
   return String(Math.round(n))
 }
 
 /** 完整 token 计数（千分位）。 */
-export function fmtFull(n: number | null | undefined): string {
+/** 完整 token 计数（千分位），英文/中文均用 en-US 千分位以保持数字一致性。 */
+export function fmtFull(n: number | null | undefined, _localeOrT?: string | ((key: string, params?: Record<string, unknown>) => string)): string {
   if (n == null || isNaN(n)) return '--'
   return Math.round(n).toLocaleString('en-US')
 }
