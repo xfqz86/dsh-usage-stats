@@ -5,18 +5,29 @@
  *   1. 顶层通过 window.__ModuleLoader__.load 注册，id 为 @xfqz86/dsh-usage-stats；
  *   2. factory(require) 可执行，exports.inject 含必需服务、exports.apply 为函数；
  *   3. CSS Modules 内联注入：每个 *.module.css 注入一个 data-plugin-css 的
- *      <style>（UsageStatsFooter / UsageStatsPanel / UsageStatsCommon /
- *      OverviewTab / HeroTile / UsageHeatmap / DatesTab / SessionsTab /
- *      ModelsTab / SettingsTab / SettingsSwitch / Tooltip），且样式文本含
- *      scoped 类名。
+ *      <style>（期望全集从 src 目录动态枚举，新增样式文件自动纳入断言，
+ *      覆盖 views / components 下全部模块：UsageStatsFooter / UsageStatsPanel /
+ *      UsageStatsCommon / OverviewTab / HeroTile / UsageHeatmap / DatesTab /
+ *      SessionsTab / ModelsTab / SettingsTab / SettingsSwitch / Tooltip /
+ *      Pagination / ModelPieChart / ModelStackedBar / DateStackedBar /
+ *      ThSortable 等），且样式文本含 scoped 类名。
  */
 
 import { createRequire } from 'node:module'
-import { join, dirname } from 'node:path'
+import { basename, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readdirSync } from 'node:fs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const bundlePath = join(here, '../lib/client.js')
+
+/** 递归枚举目录下全部 *.module.css 绝对路径（期望全集的单一事实来源）。 */
+function walkModuleCss(root) {
+  const dirents = readdirSync(root, { recursive: true, withFileTypes: true })
+  return dirents
+    .filter((e) => e.isFile() && e.name.endsWith('.module.css'))
+    .map((e) => join(e.parentPath ?? e.path, e.name))
+}
 
 /** 断言工具：失败即抛错，附上下文。 */
 function assert(cond, msg) {
@@ -92,20 +103,11 @@ try {
   // 共享样式（UsageStatsCommon 被多个 Tab import）只应注入一次 —— 构建脚本按
   // 物理文件缓存虚拟 id 去重，否则 bundle 会有 N 份重复的样式文本与注入代码。
   const cssTags = document.styles.map((s) => s.attributes['data-plugin-css'])
-  const expectedTags = [
-    'dsh-usage-stats/UsageStatsFooter',
-    'dsh-usage-stats/UsageStatsPanel',
-    'dsh-usage-stats/UsageStatsCommon',
-    'dsh-usage-stats/OverviewTab',
-    'dsh-usage-stats/HeroTile',
-    'dsh-usage-stats/UsageHeatmap',
-    'dsh-usage-stats/DatesTab',
-    'dsh-usage-stats/SessionsTab',
-    'dsh-usage-stats/ModelsTab',
-    'dsh-usage-stats/SettingsTab',
-    'dsh-usage-stats/SettingsSwitch',
-    'dsh-usage-stats/Tooltip',
-  ]
+  // 期望全集从源码目录动态枚举（不再硬编码清单）：新增 .module.css 自动纳入断言，
+  // 防止构建插件漏包或忘记补测试导致样式注入回归逃过检查。注入标签 = 文件名
+  // （basename 去扩展名），与 scripts/css-modules-inline.mjs 的 cssTagOf 一致。
+  const expectedTags = [...new Set(walkModuleCss(join(here, '../src')).map((f) => 'dsh-usage-stats/' + basename(f, '.module.css')))]
+  assert(expectedTags.length > 0, '源码目录未发现任何 *.module.css（枚举失效）')
   for (const tag of expectedTags) {
     assert(cssTags.includes(tag), `缺少 ${tag} 的 style 标签`)
   }
