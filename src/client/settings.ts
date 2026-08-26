@@ -1,5 +1,5 @@
 /**
- * 插件偏好设置（浏览器端）：当前是 OpenCode Go 抓取相关三项设置。
+ * 插件偏好设置（浏览器端）：当前是 OpenCode Go 额度监控相关三项设置。
  *
  * 纯逻辑模块（无 React），负责：
  *   - 偏好形状 `UsageSettings` 与默认值；
@@ -15,9 +15,9 @@ export const GO_FETCH_MIN_MINUTES = 3
 /** 抓取间隔默认值（分钟）。 */
 export const GO_FETCH_DEFAULT_MINUTES = 5
 
-/** 插件偏好设置（OpenCode Go 抓取相关三项）。 */
+/** 插件偏好设置（OpenCode Go 额度监控相关三项）。 */
 export interface UsageSettings {
-  /** 是否启用 OpenCode Go 额度抓取（关闭后不再请求官方额度接口）。 */
+  /** 是否启用 OpenCode Go 额度监控（关闭后不再请求官方额度接口）。 */
   goEnabled: boolean
   /** 是否在侧边栏底部展示 OpenCode Go 剩余额度芯片。 */
   showGoInSidebar: boolean

@@ -1,5 +1,5 @@
 /* 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 +
-   标题刷新按钮）、扫描页脚。颜色全部使用设计 token。 */
+   标题刷新按钮）。颜色全部使用设计 token。 */
 /* .section* / .goHint 等跨组件基元见 UsageStatsCommon.module.css。 */
 
 /* ---- 视口 ≤ 800px 时 Bento 变 2 列，Go/热力磁贴整行 ---- */
@@ -16,12 +16,6 @@
   .tileHeat,
   .tileHeatFull {
     grid-column: span 2;
-  }
-
-  .footer {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
   }
 }
 
@@ -173,14 +167,4 @@
   text-overflow: ellipsis;
 }
 
-/* ---- 页脚：扫描信息 ---- */
-.footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--dsw-alias-label-tertiary);
-  font-variant-numeric: tabular-nums;
-}
+/* （页脚已迁移至设置 Tab；此处不再定义 .footer） */

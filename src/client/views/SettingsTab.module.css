@@ -1,5 +1,5 @@
 /* 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、
-   抓取间隔数字输入。颜色全部使用设计 token。 */
+   抓取间隔数字输入、账本操作（折叠）与底部页脚。颜色全部使用设计 token。 */
 /* .section* / .goHint 等基元见 UsageStatsCommon.module.css。 */
 
 /* ---- 操作按钮（重建账本）---- */
@@ -111,4 +111,57 @@
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
+}
+
+/* ---- 账本操作（折叠）---- */
+.ledgerSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ledgerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ledgerHeader:hover {
+  opacity: 0.85;
+}
+
+.ledgerChevron {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  transition: transform 0.15s ease;
+}
+
+.ledgerChevronOpen {
+  transform: rotate(180deg);
+}
+
+.ledgerContent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---- 底部页脚（事件数 / 更新时间，原概览页脚迁移至设置页最底部）---- */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
 }

@@ -2,7 +2,7 @@
  * 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴
  * （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用；
  * 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档
- * 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）+ 扫描页脚。
+ * 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）。
  * 独立成文件（一个组件一个文件）。
  */
 
@@ -28,7 +28,7 @@ const GO_ROWS = [
   ['monthly', 'go.monthly'],
 ] as const
 
-/** 概览 Tab：Bento 磁贴网格 = 今日/总计（同款英雄磁贴，总计标题右侧附会话数）+ Go 额度磁贴 + 26 周热力磁贴 + 页脚。 */
+/** 概览 Tab：Bento 磁贴网格 = 今日/总计（同款英雄磁贴，总计标题右侧附会话数）+ Go 额度磁贴 + 26 周热力磁贴。 */
 export function OverviewTab({
   value, go, t, onRefreshGo,
 }: {
@@ -122,12 +122,6 @@ export function OverviewTab({
         <div className={`${css.tile} ${heatCls}`}>
           <UsageHeatmap series={value.series.all} t={t} />
         </div>
-      </div>
-
-      {/* 页脚：扫描信息 */}
-      <div className={css.footer}>
-        <span>{t('scanInfo')} {fmtFull(value.rawSessions)}/{fmtFull(value.harnessSessions)} · {t('events')} {fmtFull(value.foldedEvents)}</span>
-        <span>{t('updatedAt')} {value.time ? new Date(value.time).toTimeString().slice(0, 8) : '--'}</span>
       </div>
     </>
   )

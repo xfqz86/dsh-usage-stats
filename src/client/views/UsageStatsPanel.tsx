@@ -3,11 +3,11 @@
  *
  * 本文件是**模态窗壳**（Modal + 头部 + Tab 栏 + 内容切换）；每个 Tab 的
  * 内容组件独立成文件，避免一个 tsx 里塞多个组件、难以维护：
- *   - OverviewTab（概览：汇总 + Go 额度 + 热力图 + 页脚）
+ *   - OverviewTab（概览：汇总 + Go 额度 + 热力图）
  *   - DatesTab（日期：每日趋势曲线 + 范围切换）
  *   - SessionsTab（会话：按会话表）
  *   - ModelsTab（模型：拆分表）
- *   - SettingsTab（设置：刷新 / 重建账本）
+ *   - SettingsTab（设置：偏好设置 + 账本操作（折叠）+ 页脚）
  *
  * 数据与底部按钮共用 /usage-stats/api/snapshot 与 /usage-stats/api/go-quota
  * 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
@@ -146,6 +146,7 @@ export function UsageStatsPanel({ open, data, err, go, settings, onUpdateSetting
                     settings={settings}
                     onUpdateSettings={onUpdateSettings}
                     t={t}
+                    value={value}
                   />
                 )}
               </>

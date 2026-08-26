@@ -34,17 +34,17 @@ dsh-usage-stats/
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
 │   │   ├── views/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab（DatesTab）：堆叠柱状图 + 范围 chips + 数据表格（与模型 Tab 对齐）。
-│   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型 Tab 对齐）。
+│   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型/会话 Tab 对齐）。
 │   │   │   ├── HeroTile.module.css ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴样式。
 │   │   │   ├── HeroTile.tsx ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴。
 │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：占总比条形图 + 与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表（含占比条），布局与会话 Tab 对齐。
-│   │   │   ├── OverviewTab.module.css ← 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 + 标题刷新按钮）、扫描页脚。
-│   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴 （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用； 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）+ 扫描页脚。
+│   │   │   ├── OverviewTab.module.css ← 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 + 标题刷新按钮）。
+│   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴 （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用； 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）。
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab（SessionsTab）：主会话折叠按钮、子行与徽标、横向滚动容器（表格样式在共用基元里）。
 │   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表（分页 20/页，子代理折叠到主会话，带加号展开；数据完整展示）。
-│   │   │   ├── SettingsTab.module.css ← 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、 抓取间隔数字输入。
-│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置（OpenCode Go 抓取相关三项）+ 重建账本（最底部， 危险操作，点击后需二次确认：RiskConfirmation 复选「我已了解」+ 确认）。
+│   │   │   ├── SettingsTab.module.css ← 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、 抓取间隔数字输入、账本操作（折叠）与底部页脚。
+│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置（OpenCode Go 额度监控相关三项）+ 账本操作（折叠，内含清零/重建）+ 底部页脚（事件数 / 更新时间）。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
 │   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格（列 = 周，行 = 周一..周日， 4 档强度 + 月份标签 + 今日高亮）。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层（宽列与 56px rail 两种形态），几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。
@@ -54,7 +54,7 @@ dsh-usage-stats/
 │   │   ├── api.ts ← /usage-stats/api/* 的浏览器端调用约定：全部 POST 必须携带的请求头。
 │   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标）+ 模态窗详情。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
-│   │   ├── settings.ts ← 插件偏好设置（浏览器端）：当前是 OpenCode Go 抓取相关三项设置。
+│   │   ├── settings.ts ← 插件偏好设置（浏览器端）：当前是 OpenCode Go 额度监控相关三项设置。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
 │   │   ├── useGoQuota.ts ← OpenCode Go 订阅额度轮询（浏览器端）。
 │   │   ├── useGoSettings.ts ← 偏好设置的 React hook（浏览器端）。
