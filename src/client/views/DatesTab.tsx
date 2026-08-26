@@ -1,8 +1,8 @@
 /**
- * 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型 Tab 对齐）。
+ * 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型/会话 Tab 对齐）。
  * 顶部为按 token 类型堆叠的每日柱状图（DateStackedBar，横向滚动）；
- * 中间为居中展示的范围 chips（7d/14d/30d/90d/180d/全部）；
- * 底部为可排序分页的每日明细表格（日期 | 调用 | 输入 | 输出 | 缓存 | 总计）。
+ * 中间为靠右的范围 chips（7d/14d/30d/90d/180d/365d/全部，默认全部，位于图表与表格之间）；
+ * 底部为可排序分页的每日明细表格（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）。
  * 独立成文件（一个组件一个文件）。
  */
 
@@ -11,17 +11,32 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './DatesTab.module.css'
 import shared from '../components/UsageStatsCommon.module.css'
 import type { SeriesPoint } from '../../types.ts'
-import { fmt, fmtFull, fullDayLabel, buildDateStack, type DateRange } from '../stats.ts'
+import { fmt, fmtFull, fullDayLabel, pctOf, buildDateStack, type DateRange } from '../stats.ts'
 import { DateStackedBar } from '../components/DateStackedBar.tsx'
 import { Pagination } from '../components/Pagination.tsx'
 
 const PAGE_SIZE = 20
 
+/** 缓存命中率：cacheRead / (cacheRead + input) *100，1 位小数；分母 0 时为 null。 */
+function hitRateOfDay(d: { input?: number; cacheRead?: number }): number | null {
+  const input = d.input || 0
+  const cacheRead = d.cacheRead || 0
+  const denom = input + cacheRead
+  if (denom <= 0) return null
+  return Math.round((cacheRead / denom) * 1000) / 10
+}
+
+/** 平均每次调用：total / calls 取整；calls 为 0 时为 null。 */
+function avgOfDay(total: number, calls: number): number | null {
+  if (!calls || calls <= 0) return null
+  return Math.round(total / calls)
+}
+
 /** 排序键：与表头一一对应（日期 + 数值列）。 */
-type SortKey = 'date' | 'calls' | 'input' | 'output' | 'cacheRead' | 'total'
+type SortKey = 'date' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg'
 type SortDir = 'asc' | 'desc'
 
-/** 时间范围选项：值 + 文案键（与 locales 的 range.* 对齐，默认 7 天）。 */
+/** 时间范围选项：值 + 文案键（与 locales 的 range.* 对齐，默认全部）。 */
 const DATE_RANGES: Array<[DateRange, string]> = [
   ['7d', 'range.7d'],
   ['14d', 'range.14d'],
@@ -32,7 +47,7 @@ const DATE_RANGES: Array<[DateRange, string]> = [
   ['all', 'range.all'],
 ]
 
-/** 日期 Tab：堆叠柱 + 范围切换 + 排序分页表格，容器与会话/模型 Tab 对齐。 */
+/** 日期 Tab：堆叠柱 + 范围切换（图表与表格之间、右对齐）+ 排序分页表格，容器与会话/模型 Tab 对齐。 */
 export function DatesTab({
   series, t,
 }: {
@@ -72,9 +87,6 @@ export function DatesTab({
         case 'date':
           cmp = a.d.t - b.d.t
           break
-        case 'calls':
-          cmp = (a.d.calls || 0) - (b.d.calls || 0)
-          break
         case 'input':
           cmp = (a.d.input || 0) - (b.d.input || 0)
           break
@@ -87,6 +99,25 @@ export function DatesTab({
         case 'total':
           cmp = (a.d.total || 0) - (b.d.total || 0)
           break
+        case 'hitRate': {
+          const ah = hitRateOfDay(a.d)
+          const bh = hitRateOfDay(b.d)
+          const av = ah == null ? -1 : ah
+          const bv = bh == null ? -1 : bh
+          cmp = av - bv
+          break
+        }
+        case 'calls':
+          cmp = (a.d.calls || 0) - (b.d.calls || 0)
+          break
+        case 'avg': {
+          const av = avgOfDay(a.d.total || 0, a.d.calls || 0)
+          const bv = avgOfDay(b.d.total || 0, b.d.calls || 0)
+          const avv = av == null ? -1 : av
+          const bvv = bv == null ? -1 : bv
+          cmp = avv - bvv
+          break
+        }
         default:
           cmp = 0
       }
@@ -168,24 +199,32 @@ export function DatesTab({
           <thead>
             <tr>
               <ThSortable k="date" label={t('tab.dates')} align="left" />
-              <ThSortable k="calls" label={t('table.calls')} />
+              <ThSortable k="cacheRead" label={t('table.cacheRead')} />
               <ThSortable k="input" label={t('table.input')} />
               <ThSortable k="output" label={t('table.output')} />
-              <ThSortable k="cacheRead" label={t('table.cacheRead')} />
               <ThSortable k="total" label={t('table.total')} />
+              <ThSortable k="hitRate" label={t('table.hitRate')} />
+              <ThSortable k="calls" label={t('table.calls')} />
+              <ThSortable k="avg" label={t('table.avgPerCall')} />
             </tr>
           </thead>
           <tbody>
-            {pageDays.map((d) => (
-              <tr key={d.t}>
-                <td className={shared.cellText}>{fullDayLabel(d.t)}</td>
-                <td className={shared.num}>{fmtFull(d.calls)}</td>
-                <td className={shared.num}>{fmt(d.input)}</td>
-                <td className={shared.num}>{fmt(d.output)}</td>
-                <td className={shared.num}>{fmt(d.cacheRead)}</td>
-                <td className={`${shared.num} ${shared.strong}`}>{fmt(d.total)}</td>
-              </tr>
-            ))}
+            {pageDays.map((d) => {
+              const hit = hitRateOfDay(d)
+              const avg = avgOfDay(d.total || 0, d.calls || 0)
+              return (
+                <tr key={d.t}>
+                  <td className={shared.cellText}>{fullDayLabel(d.t)}</td>
+                  <td className={shared.num}>{fmt(d.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                  <td className={shared.num}>{fmt(d.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                  <td className={shared.num}>{fmt(d.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                  <td className={`${shared.num} ${shared.strong}`}>{fmt(d.total, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                  <td className={shared.num}>{hit == null ? '--' : pctOf(hit)}</td>
+                  <td className={shared.num}>{fmtFull(d.calls)}</td>
+                  <td className={shared.num}>{avg == null ? '--' : fmtFull(avg)}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

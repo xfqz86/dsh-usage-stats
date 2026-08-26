@@ -1,6 +1,7 @@
 /**
  * 模型 Tab：按模型/Provider 拆分表（含占比条），布局与会话 Tab 对齐。
- * 支持时间范围筛选（全部/半年/3 个月/1 个月/14 天/7 天，默认全部），
+ * 顶部为图表区（饼图 + 堆叠柱），中间为靠右的时间范围筛选（位于图表与表格之间，默认全部）；
+ * 表格列：模型 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比。
  * 过滤逻辑基于模型的按日细分（series），与饼图/堆叠柱共用同一过滤后切片。
  * 表头可排序（与 SessionsTab 同款交互）、分页 20/页、容器与会话 Tab 对齐。
  */
@@ -17,8 +18,23 @@ import { ModelStackedBar } from '../components/ModelStackedBar.tsx'
 
 const PAGE_SIZE = 20
 
+/** 缓存命中率：cacheRead / (cacheRead + input) *100，1 位小数；分母 0 时为 null。 */
+function hitRateOfModel(usage: { input?: number; cacheRead?: number }): number | null {
+  const input = usage.input || 0
+  const cacheRead = usage.cacheRead || 0
+  const denom = input + cacheRead
+  if (denom <= 0) return null
+  return Math.round((cacheRead / denom) * 1000) / 10
+}
+
+/** 平均每次调用：total / calls 取整；calls 为 0 时为 null。 */
+function avgOfModel(total: number, calls: number): number | null {
+  if (!calls || calls <= 0) return null
+  return Math.round(total / calls)
+}
+
 /** 排序键：与表头一一对应（模型文本 + 数值列 + 占比）。 */
-type SortKey = 'model' | 'calls' | 'input' | 'output' | 'cacheRead' | 'total' | 'share'
+type SortKey = 'model' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg' | 'share'
 type SortDir = 'asc' | 'desc'
 
 /** 时间范围选项：值 + 文案键（与 locales 的 modelRange.* 对齐，默认全部）。 */
@@ -32,7 +48,7 @@ const MODEL_RANGES: Array<[ModelRange, string]> = [
   ['all', 'modelRange.all'],
 ]
 
-/** 模型 Tab：时间范围筛选 + 排序 + 分页，容器与会话 Tab 对齐；图表由 t3 在上方补充。 */
+/** 模型 Tab：图表 + 时间范围筛选（图表与表格之间、右对齐）+ 排序 + 分页，容器与会话 Tab 对齐。 */
 export function ModelsTab({
   models, t,
 }: {
@@ -96,9 +112,6 @@ export function ModelsTab({
           cmp = av.localeCompare(bv, 'zh-Hans-CN')
           break
         }
-        case 'calls':
-          cmp = (a.m.calls || 0) - (b.m.calls || 0)
-          break
         case 'input':
           cmp = (a.m.usage.input || 0) - (b.m.usage.input || 0)
           break
@@ -111,6 +124,25 @@ export function ModelsTab({
         case 'total':
           cmp = usageTotal(a.m.usage) - usageTotal(b.m.usage)
           break
+        case 'hitRate': {
+          const ah = hitRateOfModel(a.m.usage)
+          const bh = hitRateOfModel(b.m.usage)
+          const av = ah == null ? -1 : ah
+          const bv = bh == null ? -1 : bh
+          cmp = av - bv
+          break
+        }
+        case 'calls':
+          cmp = (a.m.calls || 0) - (b.m.calls || 0)
+          break
+        case 'avg': {
+          const av = avgOfModel(usageTotal(a.m.usage), a.m.calls)
+          const bv = avgOfModel(usageTotal(b.m.usage), b.m.calls)
+          const avv = av == null ? -1 : av
+          const bvv = bv == null ? -1 : bv
+          cmp = avv - bvv
+          break
+        }
         case 'share':
           cmp = (a.share || 0) - (b.share || 0)
           break
@@ -198,27 +230,33 @@ export function ModelsTab({
               <thead>
                 <tr>
                   <ThSortable k="model" label={t('table.model')} align="left" />
-                  <ThSortable k="calls" label={t('table.calls')} />
+                  <ThSortable k="cacheRead" label={t('table.cacheRead')} />
                   <ThSortable k="input" label={t('table.input')} />
                   <ThSortable k="output" label={t('table.output')} />
-                  <ThSortable k="cacheRead" label={t('table.cacheRead')} />
                   <ThSortable k="total" label={t('table.total')} />
+                  <ThSortable k="hitRate" label={t('table.hitRate')} />
+                  <ThSortable k="calls" label={t('table.calls')} />
+                  <ThSortable k="avg" label={t('table.avgPerCall')} />
                   <ThSortable k="share" label={t('table.share')} />
                 </tr>
               </thead>
               <tbody>
                 {pageModels.map(({ m, share }) => {
                   const total = usageTotal(m.usage)
+                  const hit = hitRateOfModel(m.usage)
+                  const avg = avgOfModel(total, m.calls)
                   return (
                     <tr key={m.provider + '\u0000' + m.model}>
                       <td className={shared.cellText}>
                         {m.model} <span className={shared.sub}>· {m.provider}</span>
                       </td>
+                      <td className={shared.num}>{fmt(m.usage.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                      <td className={shared.num}>{fmt(m.usage.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                      <td className={shared.num}>{fmt(m.usage.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                      <td className={`${shared.num} ${shared.strong}`}>{fmt(total, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                      <td className={shared.num}>{hit == null ? '--' : pctOf(hit)}</td>
                       <td className={shared.num}>{fmtFull(m.calls)}</td>
-                      <td className={shared.num}>{fmt(m.usage.input)}</td>
-                      <td className={shared.num}>{fmt(m.usage.output)}</td>
-                      <td className={shared.num}>{fmt(m.usage.cacheRead)}</td>
-                      <td className={`${shared.num} ${shared.strong}`}>{fmt(total)}</td>
+                      <td className={shared.num}>{avg == null ? '--' : fmtFull(avg)}</td>
                       <td className={css.barRow}>
                         <span className={css.bar}><span className={css.barFill} style={{ width: share + '%' }} /></span>
                         <span className={css.barPct}>{pctOf(share)}</span>

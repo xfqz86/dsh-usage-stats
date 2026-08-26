@@ -1,7 +1,8 @@
 /**
  * 会话 Tab：按会话表（分页 20/页，子代理折叠到主会话，带加号展开；数据完整展示）。
  * 独立成文件（一个组件一个文件）。
- * 列替换：移除 cacheWrite / reasoning，新增 缓存命中率 与 平均每次调用；
+ * 列替换：移除 cacheWrite / reasoning，新增 命中率 与 每次调用；
+ * 列顺序：会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃；
  * 表头支持点击排序（稳定排序，分组后、分页前）。
  */
 
@@ -195,12 +196,12 @@ export function SessionsTab({
           <thead>
             <tr>
               <ThSortable k="session" label={t('table.session')} align="left" />
-              <ThSortable k="calls" label={t('table.calls')} />
+              <ThSortable k="cacheRead" label={t('table.cacheRead')} />
               <ThSortable k="input" label={t('table.input')} />
               <ThSortable k="output" label={t('table.output')} />
-              <ThSortable k="cacheRead" label={t('table.cacheRead')} />
-              <ThSortable k="hitRate" label={t('table.hitRate')} />
               <ThSortable k="total" label={t('table.total')} />
+              <ThSortable k="hitRate" label={t('table.hitRate')} />
+              <ThSortable k="calls" label={t('table.calls')} />
               <ThSortable k="avg" label={t('table.avgPerCall')} />
               <ThSortable k="lastActive" label={t('table.lastActive')} />
             </tr>
@@ -240,12 +241,12 @@ export function SessionsTab({
                       </span>
                       {hasChildren && <span className={css.badge}>{t('sessions.childrenCount', { n: g.childCount } as unknown as Record<string, unknown>)}</span>}
                     </td>
-                    <td className={shared.num}>{fmtFull(g.agg.calls)}</td>
-                    <td className={shared.num}>{fmt(agg.input)}</td>
-                    <td className={shared.num}>{fmt(agg.output)}</td>
-                    <td className={shared.num}>{fmt(agg.cacheRead)}</td>
+                    <td className={shared.num}>{fmt(agg.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                    <td className={shared.num}>{fmt(agg.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                    <td className={shared.num}>{fmt(agg.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                    <td className={`${shared.num} ${shared.strong}`}>{fmt(usageTotal(agg), t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
                     <td className={shared.num}>{aggHit == null ? '--' : pctOf(aggHit)}</td>
-                    <td className={`${shared.num} ${shared.strong}`}>{fmt(usageTotal(agg))}</td>
+                    <td className={shared.num}>{fmtFull(g.agg.calls)}</td>
                     <td className={shared.num}>{aggAvg == null ? '--' : fmtFull(aggAvg)}</td>
                     <td className={shared.num}>{when}</td>
                   </tr>
@@ -266,12 +267,12 @@ export function SessionsTab({
                             </span>
                             {c.title || shortId(c.id)} <span className={shared.sub}>· {shortId(c.id)}</span>
                           </td>
-                          <td className={shared.num}>{fmtFull(c.calls)}</td>
-                          <td className={shared.num}>{fmt(c.usage.input)}</td>
-                          <td className={shared.num}>{fmt(c.usage.output)}</td>
-                          <td className={shared.num}>{fmt(c.usage.cacheRead)}</td>
+                          <td className={shared.num}>{fmt(c.usage.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                          <td className={shared.num}>{fmt(c.usage.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                          <td className={shared.num}>{fmt(c.usage.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                          <td className={shared.num}>{fmt(usageTotal(c.usage), t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
                           <td className={shared.num}>{childHit == null ? '--' : pctOf(childHit)}</td>
-                          <td className={shared.num}>{fmt(usageTotal(c.usage))}</td>
+                          <td className={shared.num}>{fmtFull(c.calls)}</td>
                           <td className={shared.num}>{childAvg == null ? '--' : fmtFull(childAvg)}</td>
                           <td className={shared.num}>{childWhen}</td>
                         </tr>
