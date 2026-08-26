@@ -736,6 +736,22 @@ export interface PieSlice {
   path: string
   color: string
 }
+/** 饼图整圆判定容差：扇区扫角与 2π 的差小于该值视为覆盖整圆（浮点累计误差 + 浏览器零长弧省略防护）。 */
+export const PIE_FULL_EPSILON = 1e-6
+
+/**
+ * 单一扇区覆盖整圆时返回该切片，否则返回 null。
+ * SVG 弧的起终点重合即被整体省略、近似重合时各浏览器渲染不定，
+ * 故组件层须对返回的切片改绘 <circle> 而非 path。
+ */
+export function pieFullCircleOf(slices: PieSlice[]): PieSlice | null {
+  let best: PieSlice | null = null
+  for (const s of slices) {
+    if (s.endAngle - s.startAngle >= Math.PI * 2 - PIE_FULL_EPSILON) best = s
+  }
+  return best
+}
+
 export function pieSlicesOf(models: import('./useSnapshot.ts').ModelStat[]): PieSlice[] {
   const sum = models.reduce((s, m) => s + usageTotal(m.usage), 0)
   if (sum <= 0 || models.length === 0) return []

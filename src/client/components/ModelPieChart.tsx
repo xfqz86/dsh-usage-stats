@@ -9,7 +9,7 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './ModelPieChart.module.css'
 import type { ModelStat } from '../useSnapshot.ts'
 import { fmtFull, pctOf } from '../stats.ts'
-import { pieSlicesOf } from '../stats.ts'
+import { pieSlicesOf, pieFullCircleOf } from '../stats.ts'
 
 /** 模型饼图：按过滤后模型的占比饼图，悬停 tooltip 显示明细。 */
 export function ModelPieChart({
@@ -24,6 +24,9 @@ export function ModelPieChart({
   const tipRef = useRef<HTMLDivElement>(null)
 
   const slices = pieSlicesOf(models)
+  // 单模型（或单一扇区覆盖整圆）时 SVG 弧起终点重合即省略：改绘整圆 <circle>，切片索引供 tooltip 复用
+  const fullCircle = pieFullCircleOf(slices)
+  const fullCircleIndex = fullCircle ? slices.indexOf(fullCircle) : -1
 
   useEffect(() => {
     if (!tip) { setTipPos(null); return }
@@ -65,25 +68,45 @@ export function ModelPieChart({
         onMouseLeave={() => setTip(null)}
       >
         <svg className={css.svg} viewBox="0 0 120 120" role="img" aria-label={t('panel.models')}>
-          {slices.map((s, i) => (
-            <path
-              key={s.provider + '\u0000' + s.model + i}
-              d={s.path}
-              fill={s.color}
+          {fullCircle ? (
+            <circle
+              cx={60}
+              cy={60}
+              r={50}
+              fill={fullCircle.color}
               stroke="var(--dsw-alias-bg-base)"
               strokeWidth={1}
-              className={css.slice}
               onMouseEnter={(e) => {
                 const p = tipFromEvent(e)
-                setTip({ x: p.x, y: p.y, slicesIndex: i })
+                setTip({ x: p.x, y: p.y, slicesIndex: fullCircleIndex })
               }}
               onMouseMove={(e) => {
-                if (!tip || tip.slicesIndex !== i) return
+                if (!tip || tip.slicesIndex !== fullCircleIndex) return
                 const p = tipFromEvent(e)
-                setTip({ x: p.x, y: p.y, slicesIndex: i })
+                setTip({ x: p.x, y: p.y, slicesIndex: fullCircleIndex })
               }}
             />
-          ))}
+          ) : (
+            slices.map((s, i) => (
+              <path
+                key={s.provider + '\u0000' + s.model + i}
+                d={s.path}
+                fill={s.color}
+                stroke="var(--dsw-alias-bg-base)"
+                strokeWidth={1}
+                className={css.slice}
+                onMouseEnter={(e) => {
+                  const p = tipFromEvent(e)
+                  setTip({ x: p.x, y: p.y, slicesIndex: i })
+                }}
+                onMouseMove={(e) => {
+                  if (!tip || tip.slicesIndex !== i) return
+                  const p = tipFromEvent(e)
+                  setTip({ x: p.x, y: p.y, slicesIndex: i })
+                }}
+              />
+            ))
+          )}
           {/* 中心白圆形成甜甜圈，突出占比 */}
           <circle cx={60} cy={60} r={28} className={css.center} />
         </svg>
