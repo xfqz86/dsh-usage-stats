@@ -54,7 +54,7 @@ export function DatesTab({
   series: SeriesPoint[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
-  const [range, setRange] = useState<DateRange>('7d')
+  const [range, setRange] = useState<DateRange>('all')
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)

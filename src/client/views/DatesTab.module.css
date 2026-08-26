@@ -162,10 +162,10 @@
   border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
 }
 
-/* 时间选择条：位于图表与表格中间，居中展示 chips，小屏可横向滚动 */
+/* 时间选择条：位于图表与表格之间、靠右对齐展示 chips，小屏可横向滚动 */
 .rangeBar {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   padding: 8px 0;
   flex: none;
   min-width: 0;
