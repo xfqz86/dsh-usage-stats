@@ -46,7 +46,6 @@ export function fmt(n: number | null | undefined, localeOrT?: string | ((key: st
   return String(Math.round(n))
 }
 
-/** 完整 token 计数（千分位）。 */
 /** 完整 token 计数（千分位），英文/中文均用 en-US 千分位以保持数字一致性。 */
 export function fmtFull(n: number | null | undefined, _localeOrT?: string | ((key: string, params?: Record<string, unknown>) => string)): string {
   if (n == null || isNaN(n)) return '--'
@@ -590,6 +589,22 @@ export const DATE_TOKEN_META = [
   { key: 'reasoning' as const, label: '推理', color: '#a29bfe' },
 ] as const
 
+/** 本地化的日期堆叠元信息：根据 t 返回对应文案，未传 t 时回落中文。 */
+export function getDateTokenMeta(t?: (key: string, params?: Record<string, unknown>) => string): typeof DATE_TOKEN_META {
+  if (!t) return DATE_TOKEN_META
+  try {
+    return [
+      { key: 'input' as const, label: t('table.input' as string), color: '#4d6bfe' },
+      { key: 'output' as const, label: t('table.output' as string), color: '#00b894' },
+      { key: 'cacheRead' as const, label: t('table.cacheRead' as string), color: '#fdcb6e' },
+      { key: 'cacheWrite' as const, label: t('table.cacheWrite' as string), color: '#e17055' },
+      { key: 'reasoning' as const, label: t('table.reasoning' as string), color: '#a29bfe' },
+    ] as unknown as typeof DATE_TOKEN_META
+  } catch {
+    return DATE_TOKEN_META
+  }
+}
+
 export type DateTokenKey = typeof DATE_TOKEN_META[number]['key']
 
 /** 日期堆叠柱：每日一柱，按 token 类型堆叠。 */
@@ -618,7 +633,7 @@ export interface DateStack {
 }
 
 /** 由日序列构建日期堆叠柱数据（横向滚动，复用 buildModelStack 的日历推进逻辑避免 DST 漂移）。 */
-export function buildDateStack(series: SeriesPoint[], range: DateRange): DateStack {
+export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?: (key: string, params?: Record<string, unknown>) => string): DateStack {
   const byDate = new Map<number, SeriesPoint>()
   for (const p of series) if (p && p.t != null) byDate.set(p.t, p)
   const days: number[] = []
@@ -678,7 +693,8 @@ export function buildDateStack(series: SeriesPoint[], range: DateRange): DateSta
     const calls = pt?.calls ?? 0
     const total = dayTotal(pt ?? { input, output, cacheRead, cacheWrite, reasoning, calls, t })
     const segs: DateStackDay['segments'] = []
-    for (const meta of DATE_TOKEN_META) {
+    const metaList = getDateTokenMeta(localeT)
+    for (const meta of metaList) {
       const v = meta.key === 'input' ? input : meta.key === 'output' ? output : meta.key === 'cacheRead' ? cacheRead : meta.key === 'cacheWrite' ? cacheWrite : reasoning
       if (v > 0) segs.push({ key: meta.key, label: meta.label, value: v, color: meta.color })
     }

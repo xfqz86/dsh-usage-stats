@@ -70,7 +70,7 @@ export function DatesTab({
   }
 
   // 按范围构建堆叠数据（固定窗口按日历推进，all 时从最早日到今日、最多 366 天）
-  const stack = useMemo(() => buildDateStack(series, range), [series, range])
+  const stack = useMemo(() => buildDateStack(series, range, t as unknown as (k: string, p?: Record<string, unknown>) => string), [series, range, t])
 
   // 范围切换时分页回到首位
   useEffect(() => {

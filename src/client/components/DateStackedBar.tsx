@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './DateStackedBar.module.css'
 import type { SeriesPoint } from '../../types.ts'
-import { buildDateStack, DATE_TOKEN_META, fmtFull, type DateRange } from '../stats.ts'
+import { buildDateStack, getDateTokenMeta, fmtFull, type DateRange } from '../stats.ts'
 
 /** 日期堆叠柱：每日一柱，token 类型分段堆叠，悬停 tooltip 显示当日明细。 */
 export function DateStackedBar({
@@ -18,7 +18,7 @@ export function DateStackedBar({
   range: DateRange
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
-  const stack = useMemo(() => buildDateStack(series, range), [series, range])
+  const stack = useMemo(() => buildDateStack(series, range, t as unknown as (k: string, p?: Record<string, unknown>) => string), [series, range, t])
   const [tip, setTip] = useState<{ dayIndex: number; x: number; y: number } | null>(null)
   const [tipPos, setTipPos] = useState<{ left: number; top: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -71,7 +71,7 @@ export function DateStackedBar({
       <div className={css.header}>
         <span className={css.title}>{t('panel.trend')}</span>
         <span className={css.legend}>
-          {DATE_TOKEN_META.map((meta) => (
+          {getDateTokenMeta(t as unknown as (k: string, p?: Record<string, unknown>) => string).map((meta) => (
             <span key={meta.key} className={css.legendItem}>
               <span className={css.legendDot} style={{ background: meta.color }} />
               <span>{meta.label}</span>
