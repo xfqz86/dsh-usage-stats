@@ -80,11 +80,12 @@ jobs:
           tar -tzf /tmp/pack-test/*.tgz | grep -q "package/cordis.patch.yml" || (echo "::error::cordis.patch.yml missing in tarball" && exit 1)
           tar -tzf /tmp/pack-test/*.tgz | grep -q "package/README.md" || (echo "::error::README.md missing in tarball" && exit 1)
           tar -tzf /tmp/pack-test/*.tgz | grep -q "package/package.json" || (echo "::error::package.json missing in tarball" && exit 1)
-          echo "--- verify ONLY allowed files (lib + package.json + cordis.patch.yml + README.md, no map) ---"
+          tar -tzf /tmp/pack-test/*.tgz | grep -q "package/LICENSE" || (echo "::error::LICENSE missing in tarball" && exit 1)
+          echo "--- verify ONLY allowed files (lib + package.json + LICENSE + cordis.patch.yml + README.md, no map) ---"
           count=$(tar -tzf /tmp/pack-test/*.tgz | wc -l)
           echo "file count: $count"
-          if [ "$count" -ne 5 ]; then
-            echo "::error::unexpected file count $count, expected 5 (lib/index.js + lib/client.js + package.json + cordis.patch.yml + README.md)"
+          if [ "$count" -ne 6 ]; then
+            echo "::error::unexpected file count $count, expected 6 (lib/index.js + lib/client.js + package.json + LICENSE + cordis.patch.yml + README.md)"
             tar -tzf /tmp/pack-test/*.tgz | sort
             exit 1
           fi
@@ -113,4 +114,4 @@ jobs:
             if (extra.length) { console.error('packed package.json has extra keys:', extra.join(', ')); process.exit(1); }
             console.log('packed package.json pruned ok:', Object.keys(j).join(', '));
           "
-          echo "packed install ok — only lib(2) + package.json(pruned) + cordis.patch.yml + README.md"
+          echo "packed install ok — only lib(2) + package.json(pruned) + LICENSE + cordis.patch.yml + README.md"
