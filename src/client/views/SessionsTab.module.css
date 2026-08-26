@@ -20,9 +20,10 @@
   min-width: 0;
 }
 
-/* 列宽优化：固定布局，紧凑列宽，避免过宽（1366×768 下 1240 弹窗 9 列仍清晰） */
+/* 列宽优化：自适应布局，第一列撑满剩余，其余按内容自适应，避免过宽 */
 .tableWrap table {
-  table-layout: fixed;
+  table-layout: auto;
+  width: 100%;
 }
 
 .tableWrap th,
@@ -44,57 +45,18 @@
   box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
 }
 
-/* 会话列自适应占满剩余，其余数值列固定紧凑宽度 */
+/* 首列（会话）吃掉全部剩余空间、其余列按内容自适应（table-layout: auto；max-width: none 覆盖共用 cellText 的宽度钳制；顺序：缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃） */
 .tableWrap th:nth-child(1),
 .tableWrap td:nth-child(1) {
-  width: auto;
+  width: 100%;
   min-width: 180px;
+  max-width: none;
 }
 
-.tableWrap th:nth-child(2),
-.tableWrap td:nth-child(2) {
-  width: 56px;
-  min-width: 56px;
-  max-width: 56px;
-}
-
-.tableWrap th:nth-child(3),
-.tableWrap td:nth-child(3),
-.tableWrap th:nth-child(4),
-.tableWrap td:nth-child(4),
-.tableWrap th:nth-child(5),
-.tableWrap td:nth-child(5) {
-  width: 68px;
-  min-width: 68px;
-  max-width: 68px;
-}
-
-.tableWrap th:nth-child(6),
-.tableWrap td:nth-child(6) {
-  width: 84px;
-  min-width: 84px;
-  max-width: 84px;
-}
-
-.tableWrap th:nth-child(7),
-.tableWrap td:nth-child(7) {
-  width: 78px;
-  min-width: 78px;
-  max-width: 78px;
-}
-
-.tableWrap th:nth-child(8),
-.tableWrap td:nth-child(8) {
-  width: 96px;
-  min-width: 96px;
-  max-width: 96px;
-}
-
-.tableWrap th:nth-child(9),
-.tableWrap td:nth-child(9) {
-  width: 98px;
-  min-width: 98px;
-  max-width: 98px;
+.tableWrap th:not(:first-child),
+.tableWrap td:not(:first-child) {
+  width: 1%;
+  white-space: nowrap;
 }
 
 /* 长表头（命中率/平均）保持单行不换行，已通过加宽列宽避免撑宽与换行 */

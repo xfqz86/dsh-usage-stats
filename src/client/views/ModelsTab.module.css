@@ -19,9 +19,10 @@
   min-width: 0;
 }
 
-/* 列宽优化：固定布局，紧凑列宽，避免过宽（1366×768 下 1240 弹窗 7 列清晰） */
+/* 列宽优化：自适应布局，首列撑满剩余、其余按内容自适应，避免固定宽度导致的溢出与截断 */
 .tableWrap table {
-  table-layout: fixed;
+  table-layout: auto;
+  width: 100%;
 }
 
 .tableWrap th,
@@ -42,43 +43,24 @@
   box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
 }
 
-/* 模型列自适应占满剩余，其余数值列固定紧凑宽度 */
+/* 首列（模型）吃掉全部剩余空间、其余列按内容自适应（table-layout: auto；max-width: none 覆盖共用 cellText 的宽度钳制） */
 .tableWrap th:nth-child(1),
 .tableWrap td:nth-child(1) {
-  width: auto;
-  min-width: 180px;
+  width: 100%;
+  min-width: 160px;
+  max-width: none;
 }
 
-.tableWrap th:nth-child(2),
-.tableWrap td:nth-child(2) {
-  width: 64px;
-  min-width: 64px;
-  max-width: 64px;
+.tableWrap th:not(:first-child),
+.tableWrap td:not(:first-child) {
+  width: 1%;
+  white-space: nowrap;
 }
 
-.tableWrap th:nth-child(3),
-.tableWrap td:nth-child(3),
-.tableWrap th:nth-child(4),
-.tableWrap td:nth-child(4),
-.tableWrap th:nth-child(5),
-.tableWrap td:nth-child(5) {
-  width: 72px;
-  min-width: 72px;
-  max-width: 72px;
-}
-
-.tableWrap th:nth-child(6),
-.tableWrap td:nth-child(6) {
-  width: 84px;
-  min-width: 84px;
-  max-width: 84px;
-}
-
-.tableWrap th:nth-child(7),
-.tableWrap td:nth-child(7) {
-  width: 140px;
-  min-width: 120px;
-  max-width: 160px;
+/* 占比列（含条形图）保证最小可见宽度 */
+.tableWrap th:nth-child(9),
+.tableWrap td:nth-child(9) {
+  min-width: 100px;
 }
 
 /* 可排序表头按钮：整列可点击，右对齐数值列，首列左对齐（与 SessionsTab 一致） */
