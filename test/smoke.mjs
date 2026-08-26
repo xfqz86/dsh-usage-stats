@@ -5,6 +5,8 @@
  * 文件），喂入真实会话事件（从 session.jsonl.zstd 提取），验证：
  *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/
  *     dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
+ *   - 绝对基线（AGENTS §9）：快照 foldedEvents 锚定 fixture 的 394 条可折叠
+ *     事件，初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
  *   - 重启恢复：重开同一 sqlite 文件、会话清单返回空，仍能从介质重建统计
  *     （不依赖重扫日志）；
  *   - 实时重放事件经 seq 水位去重，不重复计数；
@@ -32,6 +34,22 @@ const events = readFileSync(fixturePath, 'utf8')
   .split('\n').filter(Boolean).map((l) => JSON.parse(l))
 const SESSION_ID = 'session-910656fd-379b-4651-8301-c9233eaeead7'
 const OTHER_ID = 'session-66d03fb3-cffa-4af1-bc0b-4afcf034fac4'
+// 绝对基线（AGENTS §9）：fixture 共 397 行，其中 394 条为带 usage 且各 token
+// 分量非负且总和为正的 assistant/message 事件 —— 全部可折叠（foldLedgerEvent
+// 对零用量行跳过）。期望值从 fixture 运行时推导后锚定 394：fixture 被裁剪或
+// 折叠口径回归时，双重断言都会显式失败而非静默通过。
+const foldableCount = events.filter((e) => {
+  if (e?.type !== 'assistant/message') return false
+  const u = e.data?.usage
+  if (u == null || typeof u !== 'object') return false
+  const sum = (u.inputTokens || 0) + (u.outputTokens || 0) + (u.cacheReadTokens || 0) + (u.cacheWriteTokens || 0) + (u.reasoningTokens || 0)
+  return Number.isFinite(sum) && sum > 0
+}).length
+if (foldableCount !== 394) {
+  console.error(`FAIL: fixture 可折叠事件数为 ${String(foldableCount)}，与 AGENTS §9 锚定的 394 不一致（fixture 被改动？）`)
+  process.exit(1)
+}
+const EXPECTED_FOLDED = foldableCount
 
 let route = null
 const webServer = {
@@ -156,6 +174,11 @@ async function waitForFolded(timeoutMs = 10_000, intervalMs = 200) {
 
 // 等待初始扫描完成：轮询至首条事件折叠，首个就绪快照即统计基线
 const snap = await waitForFolded()
+// 绝对基线锚定：初始扫描折满 fixture 全部 394 条可用事件（AGENTS §9）
+if (snap.foldedEvents !== EXPECTED_FOLDED) {
+  console.error(`FAIL: 快照 foldedEvents=${String(snap.foldedEvents)}，应为 ${String(EXPECTED_FOLDED)}`)
+  process.exit(1)
+}
 console.log(JSON.stringify({
   scanning: snap.scanning,
   sessions: snap.sessions,
@@ -177,6 +200,10 @@ if (snap2.all.calls !== snap.all.calls) {
   console.error('FAIL: live replay double-counted!')
   process.exit(1)
 }
+if (snap2.foldedEvents !== EXPECTED_FOLDED) {
+  console.error(`FAIL: 实时重放后 foldedEvents=${String(snap2.foldedEvents)}，应仍为 ${String(EXPECTED_FOLDED)}（去重失效）`)
+  process.exit(1)
+}
 
 // rebuild API：清空账本 → 重扫 → 统计重建
 const rebuildOut = await callRoute({}, '/usage-stats/api/rebuild')
@@ -190,6 +217,11 @@ const snap3 = await snapshotBody()
 console.log('after rebuild:', JSON.stringify({ foldedEvents: snap3.foldedEvents, calls: snap3.all.calls }))
 if (snap3.all.calls !== snap.all.calls) {
   console.error('FAIL: rebuild 后统计不一致')
+  process.exit(1)
+}
+// rebuild 后事件重扫折满同一绝对基线
+if (snap3.foldedEvents !== EXPECTED_FOLDED) {
+  console.error(`FAIL: rebuild 后 foldedEvents=${String(snap3.foldedEvents)}，应为 ${String(EXPECTED_FOLDED)}`)
   process.exit(1)
 }
 
@@ -273,6 +305,11 @@ const snap4 = await waitForFolded()
 console.log('after reopen (rebuild from medium):', JSON.stringify({ calls: snap4.all.calls, foldedEvents: snap4.foldedEvents, sessions: snap4.sessions }))
 if (snap4.all.calls !== snap.all.calls) {
   console.error('FAIL: 重启恢复统计不一致（应直接从 sqlite 重建）')
+  process.exit(1)
+}
+// 重开介质后从预统计加载，事件计数与账本一致（含增量对账后的崩溃窗口收敛）
+if (snap4.foldedEvents !== EXPECTED_FOLDED) {
+  console.error(`FAIL: 重启恢复 foldedEvents=${String(snap4.foldedEvents)}，应为 ${String(EXPECTED_FOLDED)}`)
   process.exit(1)
 }
 
