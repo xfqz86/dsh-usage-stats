@@ -238,6 +238,17 @@ export function emptySessionMeta(): SessionMeta {
   return { title: '', cwd: '', createdAt: 0, lastActive: 0, parentSession: '', origin: '', delegationDepth: 0 }
 }
 
+/**
+ * 清洗写入 sqlite TEXT 列的字符串：node:sqlite 不允许文本包含 U+0000，
+ * 异常元数据（标题 / cwd / 会话 id 等）原样写入会让 upsertMeta 抛错，
+ * 实时路径因此丢事件、扫描路径记 failed。统一把 NUL 替换为替换符
+ * U+FFFD（保留字符占位、可人工识别）；清洗确定性一致，重复写同一输入
+ * 结果相同，不破坏 upsert 幂等。仅作用于入列前的边界，内存其余路径不受影响。
+ */
+function sanitizeSqlText(value: string): string {
+  return value.includes('\u0000') ? value.replaceAll('\u0000', '\ufffd') : value
+}
+
 /** 会话事件 → 账本事件（无 usage 时返回 null）。 */
 export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/message'>): LedgerEvent | null {
   const usage = event.data?.usage
@@ -560,30 +571,31 @@ export class Ledger {
     return !existed
   }
 
-  /** 更新会话元数据（增量合并；内存缓存 + 同步写回）。 */
+  /** 更新会话元数据（增量合并；内存缓存 + 同步写回；全部字符串经 NUL 清洗后入列）。 */
   setMeta(id: string, patch: Partial<SessionMeta>): void {
     this.assertOpen()
-    const current = this.metaCache.get(id) ?? emptySessionMeta()
+    const key = sanitizeSqlText(id)
+    const current = this.metaCache.get(key) ?? emptySessionMeta()
     const next: SessionMeta = {
-      title: typeof patch.title === 'string' ? patch.title : current.title,
-      cwd: typeof patch.cwd === 'string' ? patch.cwd : current.cwd,
+      title: typeof patch.title === 'string' ? sanitizeSqlText(patch.title) : current.title,
+      cwd: typeof patch.cwd === 'string' ? sanitizeSqlText(patch.cwd) : current.cwd,
       createdAt: typeof patch.createdAt === 'number' && Number.isFinite(patch.createdAt) && patch.createdAt > 0 ? patch.createdAt : current.createdAt,
       // lastActive 取最大值，保证事件时间单调递增且不被旧值覆盖
       lastActive: typeof patch.lastActive === 'number' && Number.isFinite(patch.lastActive) && patch.lastActive > 0
         ? Math.max(current.lastActive, patch.lastActive)
         : current.lastActive,
-      parentSession: typeof patch.parentSession === 'string' ? patch.parentSession : current.parentSession,
-      origin: typeof patch.origin === 'string' ? patch.origin : current.origin,
+      parentSession: typeof patch.parentSession === 'string' ? sanitizeSqlText(patch.parentSession) : current.parentSession,
+      origin: typeof patch.origin === 'string' ? sanitizeSqlText(patch.origin) : current.origin,
       delegationDepth: typeof patch.delegationDepth === 'number' && Number.isFinite(patch.delegationDepth) && patch.delegationDepth >= 0 ? patch.delegationDepth : current.delegationDepth,
     }
-    this.metaCache.set(id, next)
-    this.stmts.upsertMeta.run(id, next.title, next.cwd, next.createdAt, next.lastActive, next.parentSession, next.origin, next.delegationDepth)
+    this.metaCache.set(key, next)
+    this.stmts.upsertMeta.run(key, next.title, next.cwd, next.createdAt, next.lastActive, next.parentSession, next.origin, next.delegationDepth)
   }
 
-  /** 取会话元数据（无则 null）。 */
+  /** 取会话元数据（无则 null）；键与 setMeta 同样清洗，保证读写对称命中。 */
   getMeta(id: string): SessionMeta | null {
     this.assertOpen()
-    return this.metaCache.get(id) ?? null
+    return this.metaCache.get(sanitizeSqlText(id)) ?? null
   }
 
   /** 全部账本事件（冷启动/重建：逐条折叠进聚合缓存）。 */
