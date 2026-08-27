@@ -83,12 +83,12 @@ jobs:
           ls -lh package/
           echo "--- contents ---"
           tar -tzf package/*.tgz | sort
-          echo "--- verify ONLY allowed files (lib + package.json + cordis.patch.yml + README.md, no map) ---"
-          # 期望仅 5 条目：lib/index.js, lib/client.js, package.json, cordis.patch.yml, README.md
+          echo "--- verify ONLY allowed files (lib + package.json + LICENSE + cordis.patch.yml + README.md, no map) ---"
+          # 期望仅 6 条目：lib/index.js, lib/client.js, package.json, LICENSE, cordis.patch.yml, README.md（LICENSE 由 npm 自动纳入，即使 files 未显式声明）
           count=$(tar -tzf package/*.tgz | wc -l)
           echo "file count: $count"
-          if [ "$count" -ne 5 ]; then
-            echo "::error::unexpected file count $count, expected 5"
+          if [ "$count" -ne 6 ]; then
+            echo "::error::unexpected file count $count, expected 6"
             exit 1
           fi
           tar -tzf package/*.tgz | grep -q "package/lib/index.js" || (echo "::error::lib/index.js missing" && exit 1)
@@ -100,6 +100,7 @@ jobs:
           tar -tzf package/*.tgz | grep -q "package/cordis.patch.yml" || (echo "::error::cordis.patch.yml missing" && exit 1)
           tar -tzf package/*.tgz | grep -q "package/README.md" || (echo "::error::README.md missing" && exit 1)
           tar -tzf package/*.tgz | grep -q "package/package.json" || (echo "::error::package.json missing" && exit 1)
+          tar -tzf package/*.tgz | grep -q "package/LICENSE" || (echo "::error::LICENSE missing" && exit 1)
           if tar -tzf package/*.tgz | grep -Eq "package/(src/|tsconfig|tsdown|scripts/|test/|docs/|\.github/)"; then
             echo "::error::tarball contains unwanted src/tsconfig/scripts/test files"
             exit 1
@@ -129,7 +130,7 @@ jobs:
             if (extra.length) { console.error('unexpected keys:', extra.join(', ')); process.exit(1); }
             console.log('allowed keys only:', Object.keys(j).join(', '));
           "
-          echo "pack ok — only lib + package.json(c pruned) + cordis.patch.yml + README.md"
+          echo "pack ok — only lib + package.json(c pruned) + LICENSE + cordis.patch.yml + README.md"
 
       - uses: actions/upload-artifact@v4
         with:

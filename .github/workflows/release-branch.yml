@@ -1,5 +1,5 @@
 # 同步 release 分支（GitHub 安装路径 — 仅最终交付物）
-# 目标：release 分支仅包含最终交付物（lib/ + package.json(已剪枝) + cordis.patch.yml + README.md），
+# 目标：release 分支仅包含最终交付物（lib/ + package.json(已剪枝) + cordis.patch.yml + README.md + LICENSE），
 #   不含任何源码（src/、tsconfig、scripts、test、.github 等），满足：
 #     dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release
 #   dev 分支的源码安装仍通过 prepare 自构建（github:xfqz86/dsh-usage-stats），release 分支则为预构建的最小形态。
@@ -8,7 +8,7 @@
 #   - 推送到 main 时自动同步（dev 为开发分支，不参与发布）
 #   - 手动 workflow_dispatch
 #
-# 实现：构建 lib（压缩，无 map）→ 剪枝 package.json → 组装 payload（4 项）→ 以 orphan/clean 方式覆盖 release 分支
+# 实现：构建 lib（压缩，无 map）→ 剪枝 package.json → 组装 payload（5 项）→ 以 orphan/clean 方式覆盖 release 分支
 name: sync-release-branch
 on:
   push:
@@ -76,14 +76,15 @@ jobs:
           cp package.json /tmp/payload/package.json
           cp cordis.patch.yml /tmp/payload/cordis.patch.yml
           cp README.md /tmp/payload/README.md
+          cp LICENSE /tmp/payload/LICENSE
           echo "=== payload ==="
           find /tmp/payload -type f | sort
           echo "--- payload package.json ---"
           cat /tmp/payload/package.json
-          # 校验 payload 仅 4 项顶层（lib 目录 + 3 文件）→ 5 文件（含 lib/index.js + lib/client.js + 3 顶部，无 map 已压缩）
+          # 校验 payload 仅 5 项顶层（lib 目录 + 4 文件）→ 6 文件（含 lib/index.js + lib/client.js + 4 顶部，无 map 已压缩）
           count=$(find /tmp/payload -type f | wc -l)
-          echo "payload file count: $count (expect 5: lib/index.js, lib/client.js + package.json/cordis.patch.yml/README.md)"
-          if [ "$count" -ne 5 ]; then
+          echo "payload file count: $count (expect 6: lib/index.js, lib/client.js + package.json/cordis.patch.yml/README.md/LICENSE)"
+          if [ "$count" -ne 6 ]; then
             echo "::error::unexpected payload file count $count"
             find /tmp/payload -type f | sort
             exit 1
@@ -124,24 +125,25 @@ jobs:
           echo "cleaned release branch, now empty except .git"
           ls -la
 
-          # 写入 payload（仅 4 项）
+          # 写入 payload（仅 5 项）
           cp -r /tmp/payload/lib ./
           cp /tmp/payload/package.json ./
           cp /tmp/payload/cordis.patch.yml ./
           cp /tmp/payload/README.md ./
+          cp /tmp/payload/LICENSE ./
 
           echo "=== release branch content ==="
           find . -mindepth 1 -maxdepth 1 ! -name '.git' | sort
           find . -type f | sort
-          ls -lh lib/ package.json cordis.patch.yml README.md
+          ls -lh lib/ package.json cordis.patch.yml README.md LICENSE
 
-          # 校验 release 分支内容：仅允许的 4 顶层 + lib 内 2 文件（无 map，已压缩）
-          if [ ! -f lib/index.js ] || [ ! -f lib/client.js ] || [ ! -f package.json ] || [ ! -f cordis.patch.yml ] || [ ! -f README.md ]; then
+          # 校验 release 分支内容：仅允许的 5 顶层 + lib 内 2 文件（无 map，已压缩）
+          if [ ! -f lib/index.js ] || [ ! -f lib/client.js ] || [ ! -f package.json ] || [ ! -f cordis.patch.yml ] || [ ! -f README.md ] || [ ! -f LICENSE ]; then
             echo "::error::release payload missing required files"
             exit 1
           fi
           if [ -f lib/client.js.map ]; then echo "::error::release contains client.js.map"; exit 1; fi
-          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'README.md' | grep -q .; then
+          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'README.md' ! -name 'LICENSE' | grep -q .; then
             echo "::error::release branch contains unexpected top-level files"
             find . -mindepth 1 -maxdepth 1 ! -name '.git' | sort
             exit 1
@@ -152,7 +154,7 @@ jobs:
           fi
 
           # 提交（即使 lib 已预构建，.gitignore 在 dev 中忽略 lib，但 release 分支已清空无 .gitignore，直接 add）
-          git add lib package.json cordis.patch.yml README.md
+          git add lib package.json cordis.patch.yml README.md LICENSE
           if git diff --cached --quiet; then
             echo "No changes to release branch — already up to date"
             exit 0
@@ -164,6 +166,6 @@ jobs:
       - name: Summary
         run: |
           echo "release branch synced — minimal deliverables only:"
-          echo "  lib/ package.json cordis.patch.yml README.md"
+          echo "  lib/ package.json cordis.patch.yml README.md LICENSE"
           echo "users can now install via:"
           echo "  dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release"
