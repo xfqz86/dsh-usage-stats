@@ -83,47 +83,52 @@ jobs:
           ls -lh package/
           echo "--- contents ---"
           tar -tzf package/*.tgz | sort
+          # 将 tar 清单缓存至文件，避免 grep -q 提前退出导致 tar 因 SIGPIPE 在 pipefail 模式下报错
+          tar -tzf package/*.tgz > /tmp/tgz-list.txt
           echo "--- verify ONLY allowed files (lib + package.json + LICENSE + cordis.patch.yml + README.md, no map) ---"
           # 期望仅 6 条目：lib/index.js, lib/client.js, package.json, LICENSE, cordis.patch.yml, README.md（LICENSE 由 npm 自动纳入，即使 files 未显式声明）
-          count=$(tar -tzf package/*.tgz | wc -l)
+          count=$(wc -l < /tmp/tgz-list.txt)
           echo "file count: $count"
           if [ "$count" -ne 6 ]; then
             echo "::error::unexpected file count $count, expected 6"
+            cat /tmp/tgz-list.txt | sort
             exit 1
           fi
-          tar -tzf package/*.tgz | grep -q "package/lib/index.js" || (echo "::error::lib/index.js missing" && exit 1)
-          tar -tzf package/*.tgz | grep -q "package/lib/client.js" || (echo "::error::lib/client.js missing" && exit 1)
-          if tar -tzf package/*.tgz | grep -q "package/lib/client.js.map"; then
+          grep -q "package/lib/index.js" /tmp/tgz-list.txt || (echo "::error::lib/index.js missing" && exit 1)
+          grep -q "package/lib/client.js" /tmp/tgz-list.txt || (echo "::error::lib/client.js missing" && exit 1)
+          if grep -q "package/lib/client.js.map" /tmp/tgz-list.txt; then
             echo "::error::client.js.map should not be in tarball"
             exit 1
           fi
-          tar -tzf package/*.tgz | grep -q "package/cordis.patch.yml" || (echo "::error::cordis.patch.yml missing" && exit 1)
-          tar -tzf package/*.tgz | grep -q "package/README.md" || (echo "::error::README.md missing" && exit 1)
-          tar -tzf package/*.tgz | grep -q "package/package.json" || (echo "::error::package.json missing" && exit 1)
-          tar -tzf package/*.tgz | grep -q "package/LICENSE" || (echo "::error::LICENSE missing" && exit 1)
-          if tar -tzf package/*.tgz | grep -Eq "package/(src/|tsconfig|tsdown|scripts/|test/|docs/|\.github/)"; then
+          grep -q "package/cordis.patch.yml" /tmp/tgz-list.txt || (echo "::error::cordis.patch.yml missing" && exit 1)
+          grep -q "package/README.md" /tmp/tgz-list.txt || (echo "::error::README.md missing" && exit 1)
+          grep -q "package/package.json" /tmp/tgz-list.txt || (echo "::error::package.json missing" && exit 1)
+          grep -q "package/LICENSE" /tmp/tgz-list.txt || (echo "::error::LICENSE missing" && exit 1)
+          if grep -Eq "package/(src/|tsconfig|tsdown|scripts/|test/|docs/|\.github/)" /tmp/tgz-list.txt; then
             echo "::error::tarball contains unwanted src/tsconfig/scripts/test files"
+            cat /tmp/tgz-list.txt | sort
             exit 1
           fi
           echo "--- verify package.json is pruned ---"
-          if tar -xzOf package/*.tgz package/package.json | grep -q '"prepare"'; then
+          tar -xzOf package/*.tgz package/package.json > /tmp/pkg.json
+          if grep -q '"prepare"' /tmp/pkg.json; then
             echo "::error::prepare still in packed package.json"
             exit 1
           fi
-          if tar -xzOf package/*.tgz package/package.json | grep -q '"devDependencies"'; then
+          if grep -q '"devDependencies"' /tmp/pkg.json; then
             echo "::error::devDependencies still in packed package.json — should be pruned"
             exit 1
           fi
-          if tar -xzOf package/*.tgz package/package.json | grep -q '"scripts"'; then
+          if grep -q '"scripts"' /tmp/pkg.json; then
             echo "::error::scripts still in packed package.json — should be pruned"
             exit 1
           fi
-          if tar -xzOf package/*.tgz package/package.json | grep -q '"packageManager"'; then
+          if grep -q '"packageManager"' /tmp/pkg.json; then
             echo "::error::packageManager still in packed package.json — should be pruned"
             exit 1
           fi
           echo "--- verify packed package.json keys ---"
-          tar -xzOf package/*.tgz package/package.json | node -e "
+          cat /tmp/pkg.json | node -e "
             const j = JSON.parse(require('fs').readFileSync(0,'utf-8'));
             const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
             const extra = Object.keys(j).filter(k => !allow.includes(k));
