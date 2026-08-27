@@ -107,11 +107,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # 清理 prune 产生的脏工作区（payload 已备份至 /tmp），避免 checkout 失败
+          # prune 步骤改写了 package.json 并生成 package.json.full / lib（未跟踪），直接 checkout 会因本地变更被拒
+          git reset --hard HEAD
+          git clean -fd
+
           # 准备 release 分支：若远端存在则检出，否则创建 orphan
           if git show-ref --verify --quiet refs/remotes/origin/release; then
             echo "release branch exists — fetching"
             git fetch origin release:release
-            git checkout release
+            git checkout -f release
           else
             echo "creating orphan release branch"
             git checkout --orphan release
