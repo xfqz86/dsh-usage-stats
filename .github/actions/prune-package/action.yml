@@ -1,0 +1,25 @@
+name: prune-package
+description: Prune package.json to minimal publish allowlist (name,version,type...)
+author: xfqz86
+
+branding:
+  icon: package
+  color: blue
+
+inputs:
+  path:
+    description: Path to package.json (relative to workspace)
+    required: false
+    default: package.json
+  allow:
+    description: Comma-separated allowlist
+    required: false
+    default: "name,version,description,type,main,exports,files,engines,dsh,license,repository"
+  check:
+    description: If true, only check (no write, exit 1 if not pruned)
+    required: false
+    default: "false"
+
+runs:
+  using: node22
+  main: prune.mjs

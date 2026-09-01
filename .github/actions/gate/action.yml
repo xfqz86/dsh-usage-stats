@@ -1,0 +1,29 @@
+name: gate-ci
+description: Gate — fail if CI job verify has not succeeded for this SHA
+author: xfqz86
+
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  sha:
+    description: Commit SHA to check (default context.sha)
+    required: false
+    default: ""
+  workflow:
+    description: Workflow name to gate on
+    required: false
+    default: "CI"
+  job:
+    description: Job name to check
+    required: false
+    default: "verify"
+  token:
+    description: GitHub token for API
+    required: false
+    default: ""
+
+runs:
+  using: node22
+  main: gate.mjs
