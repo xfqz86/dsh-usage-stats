@@ -57,7 +57,7 @@ jobs:
           # 校验仅保留必要字段
           node -e "
             const j = require('./package.json');
-            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
+            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license','repository'];
             const extra = Object.keys(j).filter(k => !allow.includes(k));
             if (extra.length) { console.error('pruned package.json has extra keys:', extra.join(', ')); process.exit(1); }
             console.log('prune ok — allowlist only');
@@ -112,7 +112,7 @@ jobs:
           fi
           cat /tmp/pkg.json | node -e "
             const j = JSON.parse(require('fs').readFileSync(0,'utf-8'));
-            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
+            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license','repository'];
             const extra = Object.keys(j).filter(k => !allow.includes(k));
             if (extra.length) { console.error('packed package.json has extra keys:', extra.join(', ')); process.exit(1); }
             console.log('packed package.json pruned ok:', Object.keys(j).join(', '));
