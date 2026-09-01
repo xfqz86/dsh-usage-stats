@@ -1,4 +1,5 @@
-/* 模型堆叠柱状图（ModelStackedBar）：每日为一柱，按模型堆叠，横向滚动。 */
+/* 统一堆叠柱状图（StackedBar）：合并 DateStackedBar / ModelStackedBar 及原 StackedBarCommon 的公共壳样式。
+   单文件承载全部样式，通过变体类处理图例最大宽度的差异（Date 70% / Model 60%）。 */
 
 .root {
   display: flex;
@@ -26,7 +27,6 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  max-width: 60%;
   justify-content: flex-end;
 }
 
@@ -44,6 +44,14 @@
   height: 8px;
   border-radius: 2px;
   flex: none;
+}
+
+.legendDate {
+  max-width: 70%;
+}
+
+.legendModel {
+  max-width: 60%;
 }
 
 .scroll {
@@ -102,7 +110,6 @@
   text-align: center;
   white-space: nowrap;
   overflow: visible;
-  /* 移除省略号截断，保证日期完整显示（配合间隔显示避免重叠） */
 }
 
 /* 提示气泡（与饼图一致，绝对定位于 scroll 容器内） */

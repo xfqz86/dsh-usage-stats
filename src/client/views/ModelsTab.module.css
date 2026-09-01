@@ -1,47 +1,6 @@
-/* 模型 Tab（ModelsTab）：占总比条形图 + 与会话 Tab 对齐的表格容器（表格样式在共用基元里）。 */
-
-/* 根容器：占满外层 bodyModels，纵向 flex 仅中间滚动（与 SessionsTab 一致） */
-.root {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  gap: 0 !important;
-}
-
-.tableWrap {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  min-width: 0;
-}
-
-/* 列宽优化：自适应布局，首列撑满剩余、其余按内容自适应，避免固定宽度导致的溢出与截断 */
-.tableWrap table {
-  table-layout: auto;
-  width: 100%;
-}
-
-.tableWrap th,
-.tableWrap td {
-  padding: 4px 6px;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.tableWrap th {
-  font-size: 11px;
-  line-height: 14px;
-  white-space: nowrap;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--dsw-alias-bg-base);
-  box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
-}
+/* 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
+   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard 等）已抽至
+   components/UsageStatsCommon.module.css，此处仅保留列宽差异与布局差异。 */
 
 /* 首列（模型）吃掉全部剩余空间、其余列按内容自适应（table-layout: auto；max-width: none 覆盖共用 cellText 的宽度钳制） */
 .tableWrap th:nth-child(1),
@@ -51,75 +10,7 @@
   max-width: none;
 }
 
-.tableWrap th:not(:first-child),
-.tableWrap td:not(:first-child) {
-  width: 1%;
-  white-space: nowrap;
-}
-
-/* 占比列（含条形图）保证最小可见宽度 */
-.tableWrap th:nth-child(9),
-.tableWrap td:nth-child(9) {
-  min-width: 100px;
-}
-
 /* 可排序表头按钮样式已提取至 components/ThSortable.module.css（与 DatesTab/SessionsTab 共用） */
-
-/* 时间范围 chips：文本不换行，小屏可横向滚动 */
-.chips {
-  display: flex;
-  gap: 4px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.chips::-webkit-scrollbar {
-  display: none;
-}
-
-.chip {
-  flex: none;
-  white-space: nowrap;
-  text-align: center;
-  padding: 5px 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 7px;
-  background: transparent;
-  font-family: inherit;
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.chip:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.chipOn {
-  color: var(--dsw-alias-brand-primary);
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
-  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
-}
-
-/* 时间选择条：位于图表与表格之间、靠右对齐展示 chips，小屏可横向滚动 */
-.rangeBar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 0;
-  flex: none;
-  min-width: 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.rangeBar::-webkit-scrollbar {
-  display: none;
-}
 
 /* 图表区：左右饼图 + 堆叠柱（超宽时横向滚动不撑爆） */
 .charts {
@@ -135,64 +26,4 @@
   .charts {
     grid-template-columns: 1fr;
   }
-}
-
-.chartCard {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-base);
-  box-shadow: var(--dsw-shadow-lv1);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.stackWrap {
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  min-width: 0;
-}
-
-/* 占比条（表格样式在共用基元里，此处仅条形图） */
-.barRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.bar {
-  flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--dsw-alias-bg-layer-1);
-  overflow: hidden;
-  min-width: 40px;
-}
-
-.barFill {
-  height: 100%;
-  border-radius: 3px;
-  background: var(--dsw-alias-brand-primary, #4d6bfe);
-}
-
-.barPct {
-  font-size: 11px;
-  color: var(--dsw-alias-label-secondary);
-  width: 40px;
-  text-align: right;
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
-
-/* 翻页栏：固定在列表底部，不随数据滚动（与 SessionsTab 一致） */
-.paginationBar {
-  flex: none;
-  display: flex;
-  justify-content: center;
-  padding: 8px 0 0;
-  border-top: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-base);
 }

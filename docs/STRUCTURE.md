@@ -19,16 +19,14 @@ dsh-usage-stats/
 ├── src/
 │   ├── client/
 │   │   ├── components/
-│   │   │   ├── DateStackedBar.module.css ← 日期堆叠柱状图（DateStackedBar）：每日为一柱，按 token 类型堆叠，横向滚动。
-│   │   │   ├── DateStackedBar.tsx ← 日期堆叠柱状图（DateStackedBar）：每日一柱，按 token 类型堆叠，横向滚动。
 │   │   │   ├── ModelPieChart.module.css ← 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图（ModelPieChart）：按模型占比的饼图（纯 SVG）。
-│   │   │   ├── ModelStackedBar.module.css ← 模型堆叠柱状图（ModelStackedBar）：每日为一柱，按模型堆叠，横向滚动。
-│   │   │   ├── ModelStackedBar.tsx ← 模型堆叠柱状图（ModelStackedBar）：每日一柱，按模型堆叠，横向滚动。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
 │   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
+│   │   │   ├── StackedBar.module.css ← 统一堆叠柱状图（StackedBar）：合并 DateStackedBar / ModelStackedBar 及原 StackedBarCommon 的公共壳样式。
+│   │   │   ├── StackedBar.tsx ← 统一堆叠柱状图（StackedBar）：合并 DateStackedBar 与 ModelStackedBar 为单一组件。
 │   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
@@ -39,7 +37,7 @@ dsh-usage-stats/
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型/会话 Tab 对齐）。
 │   │   │   ├── HeroTile.module.css ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴样式。
 │   │   │   ├── HeroTile.tsx ← 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴。
-│   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：占总比条形图 + 与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
+│   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表（含占比条），布局与会话 Tab 对齐。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 + 标题刷新按钮）。
 │   │   │   ├── OverviewTab.tsx ← 概览 Tab（Bento 磁贴网格）：「今日」+「总计」英雄磁贴 （共用 HeroTile，各 2 列，等宽，均含三色比例条、命中率与调用； 总计标题右侧附会话数）+ OpenCode Go 额度磁贴（窄列，纵向堆叠三档 窗口进度，标题右侧带立即刷新按钮）+ 26 周热力磁贴（宽列）。
@@ -80,6 +78,7 @@ dsh-usage-stats/
 │   └── smoke.mjs ← 用量统计服务端（Host）的独立冒烟测试（账本模式，自管理 sqlite 介质）。
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）
 ├── cordis.patch.yml ← 组合包 patch（dsh.bundle.patch）：插入插件条目
+├── LICENSE
 ├── package.json ← 组合包元数据 / exports / 构建脚本
 ├── pnpm-lock.yaml ← 锁文件（不手改）
 ├── pnpm-workspace.yaml ← pnpm 工作区（含版本保鲜期白名单）

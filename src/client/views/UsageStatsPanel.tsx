@@ -138,7 +138,7 @@ export function UsageStatsPanel({ open, data, err, go, settings, onUpdateSetting
               <>
                 {active === 'overview' && <OverviewTab value={value} go={go} t={t} onRefreshGo={onRefreshGo} />}
                 {active === 'dates' && <DatesTab series={value.series.all} t={t} />}
-                {active === 'sessions' && <SessionsTab sessionsList={value.sessionsList} sessionsListTotal={(value as { sessionsListTotal?: number }).sessionsListTotal} t={t} />}
+                {active === 'sessions' && <SessionsTab sessionsList={value.sessionsList} t={t} />}
                 {active === 'models' && <ModelsTab models={value.models} t={t} />}
                 {active === 'settings' && (
                   <SettingsTab

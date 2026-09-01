@@ -61,7 +61,6 @@ export interface UsageSnapshot {
   series: { all: SeriesPoint[]; current: SeriesPoint[] }
   models: ModelStat[]
   sessionsList: SessionStat[]
-  sessionsListTotal?: number
 }
 
 /** 每 `intervalMs` 轮询一次服务端快照；返回 [快照, 是否出错, 手动刷新]。 */

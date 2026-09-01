@@ -14,7 +14,7 @@ import type { ModelStat } from '../useSnapshot.ts'
 import { fmt, fmtFull, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts'
 import { Pagination } from '../components/Pagination.tsx'
 import { ModelPieChart } from '../components/ModelPieChart.tsx'
-import { ModelStackedBar } from '../components/ModelStackedBar.tsx'
+import { StackedBar } from '../components/StackedBar.tsx'
 import { ThSortable, type SortDir } from '../components/ThSortable.tsx'
 
 const PAGE_SIZE = 20
@@ -172,26 +172,26 @@ export function ModelsTab({
   }
 
   return (
-    <div className={`${shared.section} ${css.root}`}>
+    <div className={`${shared.section} ${shared.tableViewRoot}`}>
       {filteredModels.length === 0 ? (
         <div className={shared.empty}>{t('state.noUsage')}</div>
       ) : (
         <>
           <div className={css.charts}>
-            <div className={css.chartCard}>
+            <div className={shared.chartCard}>
               <ModelPieChart models={filteredModels} t={t} />
             </div>
-            <div className={css.chartCard}>
-              <ModelStackedBar models={models} range={range} t={t} />
+            <div className={shared.chartCard}>
+              <StackedBar mode="model" models={models} range={range} t={t} />
             </div>
           </div>
-          <div className={css.rangeBar}>
-            <span className={css.chips}>
+          <div className={shared.rangeBar}>
+            <span className={shared.chips}>
               {MODEL_RANGES.map(([value, labelKey]) => (
                 <button
                   key={value}
                   type="button"
-                  className={range === value ? `${css.chip} ${css.chipOn}` : css.chip}
+                  className={range === value ? `${shared.chip} ${shared.chipOn}` : shared.chip}
                   onClick={() => setRange(value)}
                 >
                   {t(labelKey as never)}
@@ -199,7 +199,7 @@ export function ModelsTab({
               ))}
             </span>
           </div>
-          <div className={css.tableWrap}>
+          <div className={`${shared.tableWrap} ${css.tableWrap}`}>
             <table className={shared.table}>
               <thead>
                 <tr>
@@ -231,10 +231,7 @@ export function ModelsTab({
                       <td className={shared.num}>{hit == null ? '--' : pctOf(hit)}</td>
                       <td className={shared.num}>{fmtFull(m.calls)}</td>
                       <td className={shared.num}>{avg == null ? '--' : fmtFull(avg)}</td>
-                      <td className={css.barRow}>
-                        <span className={css.bar}><span className={css.barFill} style={{ width: share + '%' }} /></span>
-                        <span className={css.barPct}>{pctOf(share)}</span>
-                      </td>
+                      <td className={shared.num}>{pctOf(share)}</td>
                     </tr>
                   )
                 })}
@@ -242,7 +239,7 @@ export function ModelsTab({
             </table>
           </div>
           {totalPages > 1 && (
-            <div className={css.paginationBar}>
+            <div className={shared.paginationBar}>
               <Pagination page={page} totalPages={totalPages} onPageChange={setPage} t={t} />
             </div>
           )}
