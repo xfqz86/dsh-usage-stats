@@ -81,10 +81,19 @@ jobs:
           NPM_CONFIG_CACHE="$RUNNER_TEMP/npm-cache" npm pack --pack-destination "$GITHUB_WORKSPACE/package"
           echo "tarball:"
           ls -lh package/
-          echo "--- contents ---"
-          tar -tzf package/*.tgz | sort
-          # 将 tar 清单缓存至文件，避免 grep -q 提前退出导致 tar 因 SIGPIPE 在 pipefail 模式下报错
-          tar -tzf package/*.tgz > /tmp/tgz-list.txt
+          # 固定文件名别名：供 README 的 stable tarball 地址（.../releases/latest/download/xfqz86-dsh-usage-stats.tgz）使用，地址永不变动
+          versioned=$(ls package/xfqz86-dsh-usage-stats-*.tgz 2>/dev/null | head -n1)
+          if [ -n "$versioned" ]; then
+            cp "$versioned" package/xfqz86-dsh-usage-stats.tgz
+            echo "created stable alias: package/xfqz86-dsh-usage-stats.tgz -> $(basename "$versioned")"
+          else
+            echo "::warning::versioned tgz not found for stable alias"
+          fi
+          ls -lh package/
+          echo "--- contents (versioned) ---"
+          tar -tzf package/xfqz86-dsh-usage-stats-*.tgz | sort
+          # 将 tar 清单缓存至文件，避免 grep -q 提前退出导致 tar 因 SIGPIPE 在 pipefail 模式下报错（仅校验版本化包，stable 别名内容一致）
+          tar -tzf package/xfqz86-dsh-usage-stats-*.tgz > /tmp/tgz-list.txt
           echo "--- verify ONLY allowed files (lib + package.json + LICENSE + cordis.patch.yml + README.md, no map) ---"
           # 期望仅 6 条目：lib/index.js, lib/client.js, package.json, LICENSE, cordis.patch.yml, README.md（LICENSE 由 npm 自动纳入，即使 files 未显式声明）
           count=$(wc -l < /tmp/tgz-list.txt)
@@ -110,7 +119,7 @@ jobs:
             exit 1
           fi
           echo "--- verify package.json is pruned ---"
-          tar -xzOf package/*.tgz package/package.json > /tmp/pkg.json
+          tar -xzOf package/xfqz86-dsh-usage-stats-*.tgz package/package.json > /tmp/pkg.json
           if grep -q '"prepare"' /tmp/pkg.json; then
             echo "::error::prepare still in packed package.json"
             exit 1
@@ -182,14 +191,15 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           ls -lh package/
+          # 仅发布版本化包，stable 别名（xfqz86-dsh-usage-stats.tgz）仅供 GitHub Releases 固定地址使用，不发到 npm
           # 优先 OIDC（trusted publishing，需在 npmjs 配置 publisher 指向本仓库 workflow=release.yml + environment=npm）
           # 若提供 NPM_TOKEN secret，则回退到 token 方式（兼容旧流程）
           if [ -n "$NODE_AUTH_TOKEN" ]; then
             echo "Publishing with NPM_TOKEN..."
-            npm publish ./package/*.tgz --access public
+            npm publish ./package/xfqz86-dsh-usage-stats-*.tgz --access public
           else
             echo "Publishing with OIDC (trusted publishing)..."
-            npm publish ./package/*.tgz --access public --provenance
+            npm publish ./package/xfqz86-dsh-usage-stats-*.tgz --access public --provenance
           fi
 
       - name: Create GitHub Release with tarball
