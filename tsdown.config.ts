@@ -54,6 +54,9 @@ export default [
     clean: true,
     minify: isProd,
     sourcemap: !isProd,
+    // 服务端仅依赖 Node 内置 + 本地代码，不 bundled 任何 npm 包（@deepseek-ai/* 为 devDependencies，仅类型）
+    // 设 neverBundle:true 可完全禁止 node_modules 打包，避免误引入值导致 cordis/cosmokit 等被内联
+    deps: { neverBundle: true },
   },
   {
     entry: { client: 'src/client/index.ts' },

@@ -13,7 +13,7 @@
  * 扫描报告（rawSessions / harnessSessions / failed）记录最近一次导入结果。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { SessionId, SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionId, SessionEvent, SessionLogOffset } from '@deepseek-ai/dsh-session'
 import { findSessionLogs, getSessionsRoot, parseLogLines } from './logs.ts'
 import type { UsageStore } from './store.ts'
 import { foldLedgerEvent, foldRecord } from './store.ts'
@@ -193,7 +193,7 @@ export async function scanOnce(
           }
           if (events === null && persist) {
             try {
-              const r = await persist.readFrom(id as SessionId, 0)
+              const r = await persist.readFrom(id as SessionId, 0 as unknown as SessionLogOffset)
               events = r && Array.isArray(r.events) ? r.events : []
             } catch (e) {
               store.lastError = 'readFrom ' + shortOf(id) + ': ' + errorMessage(e)
