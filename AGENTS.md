@@ -83,26 +83,26 @@ export function apply(ctx: ClientContext): void {
 
 存储不依赖 harness 的 storage 家族，直接使用 Node ≥22 内置的 `node:sqlite` 的 `DatabaseSync`（同步 API，运行时仅打印一条 experimental 警告）。数据落盘于 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`（`DSH_HOME` 默认为 `~/.dsh`，由 `logs.ts` 解析，测试通过注入 `DSH_HOME` 隔离介质）。
 
-### events / session_meta / agg_* 七表
+### events / session_meta / agg_* 九表
 
-- **events 表**：一行一条用量事件，结构为 `(t INTEGER, session_id TEXT, seq INTEGER, provider TEXT, model TEXT, input/output/cache_read/cache_write/reasoning INTEGER)`，主键为 `PRIMARY KEY (t, session_id, seq)`。结构化列主键具备天然幂等性，重复写入经 `INSERT ... ON CONFLICT DO UPDATE` 收敛；重建账本时每行仅折叠一次。
-  - 约束：`node:sqlite` 的 TEXT 不允许包含 U+0000。模型键在内存中以 `provider\0model` 形式存在，写入时经 `splitModelKey` 拆分为两列，不将含 `\0` 的整串写入 SQLite。
-- **session_meta 表**：`(session_id TEXT PRIMARY KEY, title, cwd, created_at, last_active)`，记录会话标题、工作目录、创建与最近活跃时间；初始化扫描时抄录，运行时由 `session/title` 事件更新；内存中保留一份 `Ledger.metaCache` 供快照读取。
-- **agg_* 预统计表**：`agg_total`（全量单行）、`agg_daily`（按日）、`agg_model`（按模型）、`agg_session`（按会话）、`agg_session_daily`（按会话×日）、`agg_checkpoint`（密封边界），与 events 同库事务，用于冷启动时直接加载聚合而无需重放全量事件。
-- **版本**：`PRAGMA user_version` 等于 `LEDGER_VERSION`（当前为 3）；`version 2→3` 增量保留历史事件，其余不兼容时 `open()` 自动 DROP 全量表重建（事件表为空时下次启动触发全量重扫）。所有读写为同步操作，`append` / `setMeta` 即写即持久（SQLite 自动提交），崩溃后重启可从介质恢复，无需周期性对账。
+- **events 表**：一行一条用量事件，结构为 `(t INTEGER, session_id TEXT, seq INTEGER, provider TEXT, model TEXT, input/output/cache_read/cache_write/reasoning INTEGER)`，主键为 `PRIMARY KEY (t, session_id, seq)`。结构化列主键具备天然幂等性，重复写入经 `INSERT ... ON CONFLICT DO UPDATE` 收敛；重建账本时每行仅折叠一次。`t` 无值时以当天内确定性毫秒偏移入账，避免污染 `all` 日桶。
+  - 约束：`node:sqlite` 的 TEXT 不允许包含 U+0000。模型键在内存中以 `provider\0model` 形式存在，写入时经 `splitModelKey` 拆分为两列，不将含 `\0` 的整串写入 SQLite；会话标题 / `cwd` / `parent_session` 等 TEXT 列写入前经 `sanitizeSqlText` 将 NUL 替换为 U+FFFD。
+- **session_meta 表**：`(session_id TEXT PRIMARY KEY, title, cwd, created_at, last_active, parent_session, origin, delegation_depth)`，记录会话标题、工作目录、创建与最近活跃时间及子代理归属（`parent_session` / `origin='subagent'` / `delegation_depth`）；初始化扫描时从会话头与种子记录抄录，运行时由 `session/title` 事件与实时 `session/event` 的头补齐更新；内存中保留一份 `Ledger.metaCache` 供快照读取。旧库 `user_version 3` 自动 `ALTER TABLE ADD COLUMN` 增量补齐三列（默认 `''/''/0`）。
+- **agg_* 预统计表**：`agg_total`（全量单行）、`agg_daily`（按日全量）、`agg_model`（按模型）、`agg_model_daily`（按模型×日）、`agg_session`（按会话）、`agg_session_daily`（按会话×日）、`agg_checkpoint`（密封边界），与 events 同库事务，用于冷启动时直接加载聚合而无需重放全量事件；批量扫描期间 `aggSuspended` 挂起增量，完成后一次 `persistAggregates` 物化。
+- **版本**：`PRAGMA user_version` 等于 `LEDGER_VERSION`（当前为 4）；`version 2→3` 与 `3→4` 增量保留历史事件（`3→4` 仅增三列），其余不兼容时 `open()` 自动 DROP 全量表重建（事件表为空时下次启动触发全量重扫）。兼容旧目录名 `dsh-usage-statistics` 自动迁移至 `dsh-usage-stats`。所有读写为同步操作，`append` / `setMeta` 即写即持久（SQLite 自动提交），崩溃后重启可从介质恢复，无需周期性对账。
 
 ### 数据流
 
-1. **打开账本**（`openLedger` → `Ledger.open`）：创建目录与表、执行迁移、载入 meta 缓存；预编译语句集 `LedgerStatements`（hasEvent / insertEvent / allEvents / upsertMeta / allMeta）。
-2. **首启 / 重建**（`scan.ts`）：`scanOnce` 以会话 id 全集（磁盘原始日志 `findSessionLogs` 深度 ≤3 与 harness 会话清单的并集）逐会话导入，优先使用 RAW 路径（`persistence.readRaw`，后端纯 JS zstd 解码，无 CLI 依赖），失败时回退至 harness 兜底路径（`sessionQuery.readSession` / `persistence.readFrom`）；4 路 worker 并行，`store.running` 防止重入。初始化与重建均经 `foldRecord`，与实时路径共用。
-3. **实时增量**（`ctx.on('session/event')`）：逐条经 `foldRecord` 写入账本并折叠至聚合；与扫描共用路径，按会话 `maxSeq` 水位去重。
-4. **重启恢复**：`bootstrap()` 中若 `ledger.hasEvents()` 为真，则经 `rebuildFromEvents` 从 events 表全量重折聚合缓存（`maxSeq` 水位随折叠重建，后续实时路径仍可对历史事件去重）；为假则全量扫描日志。有账本时不重扫，日志删除或不可读时仍可恢复统计。
-5. **重建账本**：`POST /usage-stats/api/rebuild` → `ledger.clear()`（清空两表）+ `resetStore`（复位聚合）+ `scanOnce` 重扫。设置页提供入口。
+1. **打开账本**（`openLedger` → `Ledger.open`）：创建目录与表（含旧目录 `dsh-usage-statistics` 自动迁移）、执行迁移（`3→4` 增量补列 / 不兼容 DROP）、载入 meta 缓存；预编译语句集 `LedgerStatements`（hasEvent / insertEvent / allEvents / upsertMeta / allMeta 及 `agg_*` 增量与批量语句）。
+2. **首启 / 重建**（`scan.ts`）：`scanOnce` 以会话 id 全集（磁盘原始日志 `findSessionLogs` 深度 ≤3 与 harness 会话清单的并集）逐会话导入，优先使用 RAW 路径（`persistence.readRaw`，后端纯 JS zstd 解码，无 CLI 依赖），失败时回退至 harness 兜底路径（`sessionQuery.readSession` / `persistence.readFrom`）；4 路 worker 并行，`store.running` 防止重入，批量期间 `aggSuspended` 挂起增量、结束后一次 `persistAggregates` 物化并 `sealUntil(今日零点)`。初始化与重建均经 `foldRecord`，与实时路径共用。
+3. **实时增量**（`ctx.on('session/event')`）：逐条经 `foldRecord` 写入账本并经 `foldLedgerEvent` 折叠至聚合（含 `agg_model_daily`）并增量物化 `incrementAgg`；与扫描共用路径，按会话 `maxSeq` 水位去重（`seq=-1` 按主键存在性校验）。实时头补齐 `parentSession/origin/delegationDepth/cwd/createdAt` 至 `session_meta`。
+4. **重启恢复**：`bootstrap()` 优先预统计快启——若 `ledger.hasAggregates()` 则经 `rebuildWithDelta` 从 `agg_*` 物化表加载聚合并对 `sealedUntil` 之后的增量事件按水位补齐；否则若 `ledger.hasEvents()` 则经 `rebuildFromEvents` 从 events 表全量重折并物化；否则全量扫描日志。有预统计时不重扫全量事件，日志删除或不可读时仍可从介质恢复。
+5. **重建账本**：`POST /usage-stats/api/rebuild` → `ledger.clear()`（清空 `events/session_meta/agg_*` 九表）+ `resetStore`（复位聚合）+ `scanOnce` 重扫并物化。设置页提供入口；`clear` 仅清库不重扫，`seal` 手动物化当前聚合并推进密封边界。
 
 ### 折叠语义（store.ts）
 
-- `foldRecord(store, ledger, id, record)`：session 种子记录写入 cwd / createdAt 至账本 meta；`session/title` 写入标题；`usable` 事件（`data.usage` 存在）按 seq 水位去重后经 `ledger.append` 与 `foldLedgerEvent` 折入会话日桶、会话总桶、全量日桶、全量总桶及模型桶，并推进该会话 `maxSeq`。全部为同步操作。
-- `foldLedgerEvent(store, ev)`：账本事件至聚合的折叠。参数归一化：非有限或负数 token 按 0 处理。
+- `foldRecord(store, ledger, id, record)`：session 种子记录写入 `cwd/createdAt/parentSession/origin/delegationDepth` 至账本 `meta`；`session/title` 写入标题；`usable` 事件（`data.usage` 存在）按 `seq` 水位去重（`seq=-1` 按主键存在性）后经 `ledger.append` 与 `foldLedgerEvent` 折入会话日桶、会话总桶、全量日桶、全量总桶及模型（含 `modelDaily`）并推进该会话 `maxSeq` 与 `lastActive`，同步增量物化 `agg_*`。全部为同步操作。
+- `foldLedgerEvent(store, ev, ledger?)`：账本事件至聚合的折叠（含 `modelDaily`），参数归一化：非有限或负数 token 按 0 处理；若传入 `ledger` 则同步 `incrementAgg`，失败仅记 `lastError` 不抛错。
 
 ## 6. 统计口径
 

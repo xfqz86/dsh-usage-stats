@@ -5,19 +5,19 @@
 | 形态 | 产物 | 安装方式 |
 |------|------|----------|
 | GitHub 源码 | 仓库源码 + `prepare: tsdown` | `dsh plugin add github:xfqz86/dsh-usage-stats` |
-| GitHub 预构建 | `release` 分支（仅 `lib/` + `package.json` + `cordis.patch.yml` + `README.md`） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
+| GitHub 预构建 | `release` 分支（仅 `lib/` + `package.json` + `cordis.patch.yml` + `README.md` + `LICENSE`） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
 | npm | `@xfqz86/dsh-usage-stats`（预构建，已剪枝） | `dsh plugin add @xfqz86/dsh-usage-stats` |
-| tarball | `xfqz86-dsh-usage-stats-*.tgz`（同 npm 内容） | `dsh plugin add ./xfqz86-dsh-usage-stats-*.tgz` |
+| tarball | `xfqz86-dsh-usage-stats-*.tgz`（同 npm 内容）+ 固定别名 `xfqz86-dsh-usage-stats.tgz`（`.../releases/latest/download/xfqz86-dsh-usage-stats.tgz` 永不变动） | `dsh plugin add ./xfqz86-dsh-usage-stats-*.tgz` / `dsh plugin add https://github.com/xfqz86/dsh-usage-stats/releases/latest/download/xfqz86-dsh-usage-stats.tgz` |
 
-所有可分发产物（`release` 分支 / npm / tarball）均仅包含 4 项：`lib/`、`package.json`（剪枝后仅 `name/version/description/type/main/exports/files/engines/dsh/license`）、`cordis.patch.yml`、`README.md`（`lib` 内为压缩后的 `index.js` / `client.js` 共 2 文件，无 `*.map`，合计 5 文件）。源码（`src/`、`tsconfig.json`、`scripts/`、`test/` 等）不在交付物中。
+所有可分发产物（`release` 分支 / npm / tarball）均仅包含 5 项：`lib/`、`package.json`（剪枝后仅 `name/version/description/type/main/exports/files/engines/dsh/license` 且保留 `repository` 供 provenance 校验）、`cordis.patch.yml`、`README.md`、`LICENSE`（`lib` 内为压缩后的 `index.js` / `client.js` 共 2 文件，无 `*.map`，合计 6 文件）。源码（`src/`、`tsconfig.json`、`scripts/`、`test/` 等）不在交付物中。
 
 ## 工作流
 
-- **CI**（`.github/workflows/ci.yml`）：`push` 到 `dev/main` 与 PR 触发，执行 `tsc --noEmit`、`NODE_ENV=production pnpm build`（压缩，无 map）、`node test/smoke.mjs`、`node test/client-bundle.mjs`、剪枝 `package.json` 后 `pnpm pack` 校验（仅上述 4 项，5 文件）。
-- **Sync release branch**（`.github/workflows/release-branch.yml`）：`push` 到 `main` 时自动 `NODE_ENV=production pnpm build`（压缩，无 map）、剪枝 `package.json`，组装仅含上述 4 项的最小 `release` 分支（无源码，`orphan/clean` 覆盖），保障 `github:xfqz86/dsh-usage-stats#release` 预构建安装可用。`dev` 为开发分支，不触发发布。
-- **Release**（`.github/workflows/release.yml`）：推送 `v*` 标签时触发（通常从 `main` 打 tag），校验 `tag` 与 `package.json` 版本一致，`NODE_ENV=production pnpm build` 后剪枝 `package.json` + `npm pack` 生成 tarball（压缩，无 map），上传为 workflow artifact，并发布到 npm（支持 OIDC trusted publishing 或 `NPM_TOKEN`）与 GitHub Release。
+- **CI**（`.github/workflows/ci.yml`）：`push` 到 `dev/main` 与 PR 触发，执行 `tsc --noEmit`、`NODE_ENV=production pnpm build`（压缩，无 map）、`node test/smoke.mjs`、`node test/client-bundle.mjs`、剪枝 `package.json` 后 `pnpm pack` 校验（仅上述 5 项，6 文件，含 `LICENSE`）。
+- **Sync release branch**（`.github/workflows/release-branch.yml`）：`push` 到 `main` 时自动 `NODE_ENV=production pnpm build`（压缩，无 map）、剪枝 `package.json`，组装仅含上述 5 项的最小 `release` 分支（无源码，`orphan/clean` 覆盖），保障 `github:xfqz86/dsh-usage-stats#release` 预构建安装可用。`dev` 为开发分支，不触发发布。
+- **Release**（`.github/workflows/release.yml`）：推送 `v*` 标签时触发（通常从 `main` 打 tag），校验 `tag` 与 `package.json` 版本一致，`NODE_ENV=production pnpm build` 后剪枝 `package.json` + `npm pack` 生成 tarball（压缩，无 map，额外复制一份固定文件名 `xfqz86-dsh-usage-stats.tgz` 供 `.../releases/latest/download/xfqz86-dsh-usage-stats.tgz` 固定地址使用），上传为 workflow artifact（两份：版本化 + 固定别名），并发布到 npm（仅版本化包，支持 OIDC trusted publishing 或 `NPM_TOKEN`）与 GitHub Release（两份均作为附件）。
 
-构建由 `tsdown.config.ts` 根据 `NODE_ENV` 区分：`production` 时压缩且无 `sourcemap`（交付物），其他环境（本地 `pnpm build`）保留可读性与 `*.map` 便于调试。剪枝由 `scripts/prune-package.mjs` 执行，白名单：`name, version, description, type, main, exports, files, engines, dsh, license`。`scripts`、`devDependencies`、`packageManager`、`repository` 等开发态字段在交付物中剥离；`prepare: tsdown` 仅保留在 `dev` 分支供 `github:xfqz86/dsh-usage-stats` 源码安装时自动构建（此时为开发态，未压缩）。
+构建由 `tsdown.config.ts` 根据 `NODE_ENV` 区分：`production` 时压缩且无 `sourcemap`（交付物），其他环境（本地 `pnpm build`）保留可读性与 `*.map` 便于调试。剪枝由 `scripts/prune-package.mjs` 执行，白名单：`name, version, description, type, main, exports, files, engines, dsh, license`（另保留 `repository` 供 OIDC provenance 校验）。`scripts`、`devDependencies`、`packageManager` 等开发态字段在交付物中剥离；`prepare: tsdown` 仅保留在 `dev` 分支供 `github:xfqz86/dsh-usage-stats` 源码安装时自动构建（此时为开发态，未压缩）。
 
 ## 本地验证
 
@@ -28,11 +28,11 @@ ls -lh lib/           # index.js ~37k, client.js ~112k, 含 *.map
 node test/smoke.mjs
 node test/client-bundle.mjs
 
-# 产出校验（需生产态，压缩无 map，5 文件）
+# 产出校验（需生产态，压缩无 map，6 文件）
 NODE_ENV=production pnpm build
 ls -lh lib/           # index.js ~17k, client.js ~62k, 无 *.map
 node scripts/prune-package.mjs
-pnpm pack --dry-run   # 5 文件：lib 2 + 顶部 3，且 package.json 已剪枝
+pnpm pack --dry-run   # 6 文件：lib 2 + 顶部 4（package.json/cordis.patch.yml/README.md/LICENSE），且 package.json 已剪枝
 ls lib/*.map 2>&1 | grep -q "No such" && echo "no map - ok (production)"
 ```
 
@@ -46,15 +46,15 @@ ls lib/*.map 2>&1 | grep -q "No such" && echo "no map - ok (production)"
    git merge dev
    # 编辑 package.json version（如 0.1.0 → 0.2.0）
    git commit -am "chore: bump v0.2.0"
-   git push origin main   # 触发 sync-release-branch → 更新 release 分支（最小 5 文件）
+   git push origin main   # 触发 sync-release-branch → 更新 release 分支（最小 6 文件）
    ```
 2. 在 `main` 上打标签并推送：
    ```bash
    git tag v0.2.0 && git push origin v0.2.0
    ```
 3. GitHub Actions 自动：
-   - 校验 `release` 分支已在 `main` 推送时同步为最小交付物（5 文件，无 map，已压缩）
-   - 构建并生成 `xfqz86-dsh-usage-stats-0.2.0.tgz`（`package/` 目录 + artifact + Release 附件，同样仅含上述 4 项/5 文件）
+   - 校验 `release` 分支已在 `main` 推送时同步为最小交付物（6 文件，无 map，已压缩）
+   - 构建并生成 `xfqz86-dsh-usage-stats-0.2.0.tgz` 及固定别名 `xfqz86-dsh-usage-stats.tgz`（`package/` 目录 + artifact + Release 附件，同样仅含上述 5 项/6 文件，后者供固定地址 `.../releases/latest/download/xfqz86-dsh-usage-stats.tgz` 使用）
    - 发布至 `https://www.npmjs.com/package/@xfqz86/dsh-usage-stats`
 
 ## npm 认证配置（择一）
