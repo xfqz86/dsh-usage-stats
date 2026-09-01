@@ -20,13 +20,14 @@
 ## 2. POST /usage-stats/api/snapshot
 
 - body `{ sessionId?: string, limit?: number, sessionsLimit?: number }`（带 sessionId 时返回对应会话的 `current` /
-  `series.current`；`limit` / `sessionsLimit` 为会话明细分页上限，`1..1000`，默认 `200`，超出截断）。
-- 响应 `value` 字段（`UsageSnapshot`，类型见 `src/client/useSnapshot.ts`）：
+  `series.current`；`limit` / `sessionsLimit` 为会话明细分页上限，`1..1000`，默认 `200`（浏览器端 `useSnapshot` 以 `500` 请求），超出截断）。
+- 响应 `value` 字段（`UsageSnapshot`，类型见 `src/client/useSnapshot.ts` / `src/host/snapshot.ts`）：
   - 统计元信息：`scanning` / `scans` / `failed` / `rawSessions` /
     `harnessSessions` / `foldedEvents` / `dedupSkipped` / `lastError` /
     `scanError` / `lastScanAt` / `time`；
-  - `sessions`（有量会话数）、`all`（全量 `Agg`）、`series.all`（按日
-    `SeriesPoint[]`）`models[]`（模型拆分）、`sessionsList[]`（会话明细，按 `lastActive` 倒序，已分页截断）、`sessionsListTotal`（会话总数，未截断）。
+  - `sessions`（有量会话数）、`current`（指定会话聚合或 `null`）、`all`（全量 `Agg`）、`series.all`（全量按日 `SeriesPoint[]`）及 `series.current`（指定会话按日）；
+  - `models[]`（按模型拆分，元素含 `provider/model/calls/usage/series`，`series` 为该模型按日 `SeriesPoint[]`，供浏览器端范围筛选与堆叠柱使用，旧快照可能缺省）；
+  - `sessionsList[]`（会话明细，按 `lastActive` 倒序，已分页截断；每项含 `id/title/cwd/createdAt/lastActive/calls/usage/parentSession/origin/delegationDepth`，后三者为子代理归属，序列化为 `string|null/string|null/number`）。
 
 ## 3. POST /usage-stats/api/go-quota
 
@@ -50,12 +51,12 @@
 
 ## 4. POST /usage-stats/api/rebuild
 
-- 清空 sqlite 全量表（events / session_meta / agg_* 共 7 张）+ 复位聚合缓存 → 全量重扫日志导入
-  → 物化预统计 → `{ rebuilt: true, foldedEvents }`。设置页有入口。
+- 清空 sqlite 全量表（`events` / `session_meta` / `agg_total` / `agg_daily` / `agg_model` / `agg_model_daily` / `agg_session` / `agg_session_daily` / `agg_checkpoint` 共 9 张）+ 复位聚合缓存 → 全量重扫日志导入
+  → 物化预统计并 `sealUntil(今日零点)` → `{ rebuilt: true, foldedEvents }`。设置页有入口（二次确认）。
 
 ## 4.1 POST /usage-stats/api/clear
 
-- 清空 sqlite 全量表（events / session_meta / agg_* 共 7 张）+ 复位聚合缓存 → `{ cleared: true, foldedEvents }`，
+- 清空 sqlite 全量表（同 rebuild，9 张）+ 复位聚合缓存 → `{ cleared: true, foldedEvents }`，
   **不重扫**（与重建的区别：重建会重新读取历史会话，清零不会，统计直接归零）。
   设置页有入口（二次确认）。
 
