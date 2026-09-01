@@ -1,6 +1,6 @@
 /**
  * 日期 Tab：堆叠柱状图 + 范围切换 + 数据表格（与模型/会话 Tab 对齐）。
- * 顶部为按 token 类型堆叠的每日柱状图（DateStackedBar，横向滚动）；
+ * 顶部为按 token 类型堆叠的每日柱状图（StackedBar mode="date"，横向滚动）；
  * 中间为靠右的范围 chips（7d/14d/30d/90d/180d/365d/全部，默认全部，位于图表与表格之间）；
  * 底部为可排序分页的每日明细表格（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）。
  * 独立成文件（一个组件一个文件）。
@@ -12,7 +12,7 @@ import css from './DatesTab.module.css'
 import shared from '../components/UsageStatsCommon.module.css'
 import type { SeriesPoint } from '../../types.ts'
 import { fmt, fmtFull, fullDayLabel, pctOf, buildDateStack, type DateRange } from '../stats.ts'
-import { DateStackedBar } from '../components/DateStackedBar.tsx'
+import { StackedBar } from '../components/StackedBar.tsx'
 import { Pagination } from '../components/Pagination.tsx'
 import { ThSortable, type SortDir } from '../components/ThSortable.tsx'
 
@@ -148,19 +148,19 @@ export function DatesTab({
   }
 
   return (
-    <div className={`${shared.section} ${css.root}`}>
+    <div className={`${shared.section} ${shared.tableViewRoot}`}>
       <div className={css.charts}>
-        <div className={css.chartCard}>
-          <DateStackedBar series={series} range={range} t={t} />
+        <div className={shared.chartCard}>
+          <StackedBar mode="date" series={series} range={range} t={t} />
         </div>
       </div>
-      <div className={css.rangeBar}>
-        <span className={css.chips}>
+      <div className={shared.rangeBar}>
+        <span className={shared.chips}>
           {DATE_RANGES.map(([value, labelKey]) => (
             <button
               key={value}
               type="button"
-              className={range === value ? `${css.chip} ${css.chipOn}` : css.chip}
+              className={range === value ? `${shared.chip} ${shared.chipOn}` : shared.chip}
               onClick={() => setRange(value)}
             >
               {t(labelKey as never)}
@@ -168,7 +168,7 @@ export function DatesTab({
           ))}
         </span>
       </div>
-      <div className={css.tableWrap}>
+      <div className={`${shared.tableWrap} ${css.tableWrap}`}>
         <table className={shared.table}>
           <thead>
             <tr>
@@ -203,7 +203,7 @@ export function DatesTab({
         </table>
       </div>
       {totalPages > 1 && (
-        <div className={css.paginationBar}>
+        <div className={shared.paginationBar}>
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} t={t} />
         </div>
       )}

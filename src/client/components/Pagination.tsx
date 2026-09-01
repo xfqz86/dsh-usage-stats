@@ -40,6 +40,3 @@ export function Pagination({
     </nav>
   )
 }
-
-// 兼容旧名（历史曾叫 SessionsPagination，已迁至通用 Pagination）
-export const SessionsPagination = Pagination

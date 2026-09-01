@@ -39,23 +39,6 @@
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-/* 磁贴标题行：图标 + 说明（说明由底部移至标题图标后） */
-.cellHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.cellHead .cellIcon {
-  margin-bottom: 0;
-}
-
-.cellHead .cellK {
-  flex: 1;
-  min-width: 0;
-}
-
 /* 磁贴悬浮：加深阴影与边框高亮 */
 .cell:hover {
   border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, var(--dsw-alias-border-l2));
@@ -72,24 +55,6 @@
   border-radius: 8px;
   color: var(--dsw-alias-brand-primary);
   background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
-}
-
-.cellV {
-  font-size: 15px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 20px;
-  color: var(--dsw-alias-label-primary);
-  white-space: nowrap;
-}
-
-.cellK {
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--dsw-alias-label-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ---- 空态（无数据 / 加载中 / 不可用）---- */
@@ -169,6 +134,133 @@
   color: var(--dsw-alias-label-tertiary);
   font-weight: 400;
   font-size: 11px;
+}
+
+/* ---- 表格视图根容器（DatesTab/SessionsTab/ModelsTab 三 Tab 共用）---- */
+.tableViewRoot {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0 !important;
+}
+
+/* ---- 表格滚动容器及嵌套表格基元（三 Tab 共用）---- */
+.tableWrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  min-width: 0;
+}
+
+.tableWrap table {
+  table-layout: auto;
+  width: 100%;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 4px 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tableWrap th {
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
+}
+
+.tableWrap th:not(:first-child),
+.tableWrap td:not(:first-child) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* ---- 翻页栏（固定底部居中，三 Tab 共用）---- */
+.paginationBar {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+}
+
+/* ---- 时间范围 chips（DatesTab/ModelsTab 共用）---- */
+.chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex: none;
+  white-space: nowrap;
+  text-align: center;
+  padding: 5px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 7px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.chipOn {
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
+}
+
+.rangeBar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0;
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.rangeBar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- 图表卡片与横向滚动容器（DatesTab/ModelsTab 共用）---- */
+.chartCard {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 /* ---- 视口 ≤ 800px 时表格紧凑化 ---- */

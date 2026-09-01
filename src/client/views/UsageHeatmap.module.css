@@ -14,14 +14,6 @@
   min-width: 0;
 }
 
-/* 兼容旧类名（如有外部引用），与 heatTitle 同款 */
-.heatTotal {
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
 /* 右上角图例：Less [5 档色块] More */
 .heatLegend {
   display: flex;

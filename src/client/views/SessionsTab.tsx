@@ -38,10 +38,9 @@ function avgOf(total: number, calls: number): number | null {
 
 /** 会话 Tab：分页（20/页）+ 子代理折叠（主会话前 + / −，子不占页位；数据完整展示全分量）。 */
 export function SessionsTab({
-  sessionsList, sessionsListTotal, t,
+  sessionsList, t,
 }: {
   sessionsList: SessionStat[]
-  sessionsListTotal?: number
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   // 分组：子代理折叠到根主会话，孤儿回落顶层，多级展平
@@ -159,12 +158,9 @@ export function SessionsTab({
     return <div className={shared.empty}>{t('state.noUsage')}</div>
   }
 
-  // 保留 sessionsListTotal 仅作兼容，主分页以 groups.length 为准
-  void sessionsListTotal
-
   return (
-    <div className={`${shared.section} ${css.root}`}>
-      <div className={css.tableWrap}>
+    <div className={`${shared.section} ${shared.tableViewRoot}`}>
+      <div className={`${shared.tableWrap} ${css.tableWrap}`}>
         <table className={shared.table}>
           <thead>
             <tr>
@@ -259,7 +255,7 @@ export function SessionsTab({
         </table>
       </div>
       {totalPages > 1 && (
-        <div className={css.paginationBar}>
+        <div className={shared.paginationBar}>
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} t={t} />
         </div>
       )}

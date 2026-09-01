@@ -59,7 +59,6 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
     })
   }
   sessionsList.sort((a, b) => (b.lastActive as number) - (a.lastActive as number))
-  const sessionsListTotal = sessionsList.length
   // 分页截断：避免上千会话时每 4 秒全量序列化开销；默认 200，可由客户端 limit 显式覆盖
   const rawLimit = opts?.limit
   const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? Math.max(1, Math.min(1000, Math.floor(rawLimit))) : 200
@@ -106,6 +105,5 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
     series: { all: allSeries, current: currentSeries },
     models,
     sessionsList: truncatedList,
-    sessionsListTotal,
   }
 }

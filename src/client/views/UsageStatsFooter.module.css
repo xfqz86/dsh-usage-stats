@@ -31,23 +31,6 @@
   display: none;
 }
 
-/* ---- OpenCode Go 额度芯片行（宽列，位于今日用量 badge 上方）---- */
-.goRow {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  height: 20px;
-  margin: 0 0 2px;
-  padding: 0 8px 0 6px;
-  box-sizing: border-box;
-}
-
-.rail .goRow {
-  display: none;
-}
-
 /* 额度行前置标签：说明这一排芯片是 OpenCode Go 订阅额度。 */
 .goLabel {
   flex: none;
