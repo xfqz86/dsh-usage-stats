@@ -1,8 +1,9 @@
 /**
  * 剪枝 package.json 至发布所需最小字段集合。
- * 仅保留：name、version、description、type、main、exports、files、engines、dsh、license
- * 其余（scripts、devDependencies、packageManager、repository、keywords、publishConfig 等）
+ * 仅保留：name、version、description、type、main、exports、files、engines、dsh、license、repository
+ * 其余（scripts、devDependencies、packageManager、keywords、publishConfig 等）
  * 在发布产物（npm / tarball / release 分支）中剥离，避免把开发时依赖与源码配置带入交付物。
+ * 保留 repository 以满足 npm OIDC provenance 对 repository.url 的校验。
  *
  * 用法：
  *   node scripts/prune-package.mjs          # 原地改写 package.json（先备份为 package.json.bak）
@@ -26,6 +27,7 @@ const ALLOW = new Set([
   'engines',
   'dsh',
   'license',
+  'repository',
 ])
 
 function prune(pkg) {

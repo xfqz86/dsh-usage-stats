@@ -63,7 +63,7 @@ jobs:
           cat package.json
           node -e "
             const j = require('./package.json');
-            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license'];
+            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license','repository'];
             const extra = Object.keys(j).filter(k => !allow.includes(k));
             if (extra.length) { console.error('pruned package.json has extra keys:', extra.join(', ')); process.exit(1); }
             console.log('prune ok');
