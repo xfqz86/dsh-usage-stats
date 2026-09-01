@@ -18,6 +18,12 @@ DSH（DeepSeek Harness）的 Web 用量统计插件。按**模型 / Provider**�
 dsh plugin --profile web add @xfqz86/dsh-usage-stats
 ```
 
+### 从 GitHub 安装
+
+```bash
+dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release
+```
+
 ### 从 tarball 安装
 
 ```bash
@@ -25,12 +31,6 @@ dsh plugin --profile web add https://github.com/xfqz86/dsh-usage-stats/releases/
 ```
 
 > 固定地址，始终指向最新 Release 的 tarball；也可在 [Releases](https://github.com/xfqz86/dsh-usage-stats/releases) 复制指定版本的 `xfqz86-dsh-usage-stats-*.tgz` 链接。
-
-### 从 GitHub 安装
-
-```bash
-dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release
-```
 
 ### 本地开发（link）
 

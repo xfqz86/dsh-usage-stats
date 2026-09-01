@@ -230,6 +230,7 @@ export function SettingsTab({
         description={t('settings.clearConfirmDesc')}
         acknowledgeLabel={t('settings.clearConfirmAck')}
         cancelLabel={t('settings.clearCancel')}
+        closeLabel={t('panel.close')}
         confirmLabel={t('settings.clearConfirm')}
         acknowledged={clearAcknowledged}
         onAcknowledgedChange={setClearAcknowledged}
@@ -244,6 +245,7 @@ export function SettingsTab({
         description={t('settings.rebuildConfirmDesc')}
         acknowledgeLabel={t('settings.rebuildConfirmAck')}
         cancelLabel={t('settings.rebuildCancel')}
+        closeLabel={t('panel.close')}
         confirmLabel={t('settings.rebuildConfirm')}
         acknowledged={acknowledged}
         onAcknowledgedChange={setAcknowledged}

@@ -82,7 +82,6 @@ export function UsageStatsPanel({ open, data, err, go, settings, onUpdateSetting
       open={open}
       onClose={onClose}
       title={t('panel.title')}
-      closeLabel={t('panel.close')}
       headless
       className={css.modal}
     >

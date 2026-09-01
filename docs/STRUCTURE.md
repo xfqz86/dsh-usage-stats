@@ -14,8 +14,7 @@ dsh-usage-stats/
 │   └── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
 ├── scripts/
 │   ├── css-modules-inline.mjs ← rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的 JS 模块。
-│   ├── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
-│   └── prune-package.mjs ← 剪枝 package.json 至发布所需最小字段集合。
+│   └── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
 ├── src/
 │   ├── client/
 │   │   ├── components/
