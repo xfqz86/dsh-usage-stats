@@ -33,5 +33,9 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xfqz86/dsh-usage-stats.git"
+  }
 }
