@@ -16,5 +16,5 @@ inputs:
     default: "name,version,description,type,main,exports,files,engines,dsh,license,repository"
 
 runs:
-  using: node22
+  using: node24
   main: verify.mjs
