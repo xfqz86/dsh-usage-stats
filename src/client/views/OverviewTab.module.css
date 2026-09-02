@@ -1,78 +1,123 @@
-/* 概览 Tab（OverviewTab）：Bento 磁贴网格、Go 额度磁贴（纵向三档窗口 +
-   标题刷新按钮）。颜色全部使用设计 token。 */
+/* 概览 Tab OverviewTab：Bento 磁贴网格 — 布局见布局图：今日/总计左列，热力图右大区，底行 DeepSeek/Go。颜色全部使用设计 token。 */
 /* .section* / .goHint 等跨组件基元见 UsageStatsCommon.module.css。 */
 
-/* ---- 视口 ≤ 800px 时 Bento 变 2 列，Go/热力磁贴整行 ---- */
-@media (max-width: 800px) {
-  .bento {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .tileGo {
-    grid-column: span 2;
-  }
-
-  .tileGoWide,
-  .tileHeat,
-  .tileHeatFull {
-    grid-column: span 2;
-  }
-}
-
-/* ---- 概览 Bento 磁贴网格 ---- */
+/* ---- 概览 Bento 磁贴网格：4 列，命名区域仅覆盖上两行，底行卡片自动补位 ----
+   紧凑化：模态窗高 640px 上限内需容纳 热力图两行 + 底行三卡含更新时间行，
+   全部间距/内边距取小值避免 body 滚动条。 */
 .bento {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-areas:
+    "today heatmap heatmap heatmap"
+    "total heatmap heatmap heatmap";
+  gap: 6px;
 }
 
-/* 汇总磁贴组：display:contents 让子磁贴直接参与 bento 网格（今日 2+总计 2 占首行）。 */
-.summary {
+/* 两者均隐藏时：同上，无底行，自动行不创建 */
+.bentoNoBottom {
+  grid-template-areas:
+    "today heatmap heatmap heatmap"
+    "total heatmap heatmap heatmap";
+}
+
+.bottomRow {
   display: contents;
 }
 
-/* 通用磁贴卡片：Go 额度 / 热力图收纳进统一卡片（与 .cell 同款外观）。 */
+/* 区域命名：今日 / 总计 / 热力图 / DeepSeek 余額 / Go 額度 */
+.tileToday {
+  grid-area: today;
+  /* HeroTile 自带 cell 样式，外层 tile 仅作网格定位，无需二次卡片壳 */
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.tileToday :global(.cellHero),
+.tileTotal :global(.cellHero) {
+  /* 覆盖 HeroTile 默认的 grid-column: span 2，避免在命名区域内再跨列 */
+  grid-column: auto !important;
+  width: 100%;
+}
+
+.tileTotal {
+  grid-area: total;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.tileHeatmap {
+  grid-area: heatmap;
+}
+
+/* 通用磁贴卡片：Go / DeepSeek / 热力图 共用壳，与 .cell 同款外观。 */
 .tile {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-base);
   box-shadow: var(--dsw-shadow-lv1);
 }
 
-.tileGo {
-  grid-column: span 1;
+.tileGo,
+.tileDeepSeek {
+  /* 直接作为 bento 的 grid 子项，默认占 1 列，与有待定时一致，自动左对齐补位 */
+  min-width: 0;
+  grid-column: auto;
 }
 
-/* 未配置 / 查询失败提示：整行磁贴（占满 4 列）。 */
-.tileGoWide {
-  grid-column: span 4;
+/* ---- 视口 ≤ 800px 时 Bento 改为单列堆叠，保证可读性 ---- */
+@media (max-width: 800px) {
+  .bento,
+  .bentoNoBottom {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "today"
+      "total"
+      "heatmap";
+  }
+
+  .tileGo,
+  .tileDeepSeek,
+  .tileToday,
+  .tileTotal,
+  .tileHeatmap {
+    grid-column: auto;
+    grid-area: auto;
+  }
+
+  /* 移动端按 DOM 顺序堆叠，无需命名区域 */
+  .tileToday { grid-area: auto; }
+  .tileTotal { grid-area: auto; }
+  .tileHeatmap { grid-area: auto; }
+  .tileGo { grid-area: auto; }
+  .tileDeepSeek { grid-area: auto; }
+
+  .bottomRow {
+    display: contents;
+  }
 }
 
-.tileHeat {
-  grid-column: span 3;
-}
-
-/* 无 Go 磁贴时热力图整行铺满。 */
-.tileHeatFull {
-  grid-column: span 4;
-}
-
-/* ---- OpenCode Go 额度磁贴（窄列：纵向堆叠三档窗口）---- */
+/* ---- OpenCode Go 额度磁贴：窄列纵向堆叠三档窗口 ---- */
 .goTileRows {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .goTileRow {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -83,7 +128,7 @@
   gap: 8px;
 }
 
-/* Go 磁贴标题右侧的立即刷新按钮（点击即触发额度重拉，不受抓取间隔控制）。 */
+/* Go 磁贴标题右侧的立即刷新按钮，点击即触发额度重拉，不受抓取间隔控制。 */
 .goRefresh {
   flex: none;
   display: inline-flex;
@@ -127,6 +172,17 @@
   overflow: hidden;
 }
 
+/* 窗口点数明细，Z.ai 专用，官方 currentValue/usage 缩写值，位于百分比左侧；
+   官方未下发 used/limit 为 null 时整段不渲染，不影响 Go 等无点数窗口。 */
+.goPoints {
+  flex: none;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .goBarFill {
   display: block;
   height: 100%;
@@ -135,7 +191,7 @@
 }
 
 .goFillWarn {
-  background: var(--dsw-alias-state-warning-primary, #f5a623);
+  background: var(--dsw-alias-state-warn-primary, #f5a623);
 }
 
 .goFillOver {
@@ -150,7 +206,7 @@
 }
 
 .goPctWarn {
-  color: var(--dsw-alias-state-warning-primary);
+  color: var(--dsw-alias-state-warn-primary, #b45309);
 }
 
 .goPctOver {
@@ -160,11 +216,97 @@
 .goReset {
   min-width: 0;
   font-size: 10px;
-  line-height: 14px;
+  line-height: 12px;
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* （页脚已迁移至设置 Tab；此处不再定义 .footer） */
+/* ---- DeepSeek 余额磁贴：窄列多币种余额 ---- */
+.deepseekRows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deepseekRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.deepseekCurrency {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+.deepseekAmount {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.deepseekDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 3px;
+  border-top: 1px dashed var(--dsw-alias-border-l1);
+}
+
+.deepseekDetailRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.deepseekDetailLabel {
+  white-space: nowrap;
+}
+
+.deepseekDetailValue {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.deepseekToday {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.deepseekTodayLabel {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.deepseekTodayValue {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.deepseekFetchedAt {
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}

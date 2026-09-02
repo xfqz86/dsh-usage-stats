@@ -6,11 +6,26 @@
  * 独立成文件（一个组件一个文件），样式见 ThSortable.module.css。
  */
 
-import css from './ThSortable.module.css'
-import shared from './UsageStatsCommon.module.css'
+import css from './ThSortable.module.css';
+import shared from './UsageStatsCommon.module.css';
 
 /** 排序方向：升序 / 降序。 */
-export type SortDir = 'asc' | 'desc'
+export type SortDir = 'asc' | 'desc';
+
+/** 根据激活态与方向返回 aria-sort 取值。 */
+function getAriaSort(
+  active: boolean,
+  dir: SortDir,
+): 'ascending' | 'descending' | 'none' {
+  if (!active) return 'none';
+  return dir === 'asc' ? 'ascending' : 'descending';
+}
+
+/** 根据激活态与方向返回排序图标。 */
+function getSortIcon(active: boolean, dir: SortDir): string {
+  if (!active) return '↕';
+  return dir === 'asc' ? '▲' : '▼';
+}
 
 /** 可排序表头：props 注入当前排序键 / 方向 / 回调 / 列文案，键相等判定激活态。 */
 export function ThSortable<K extends string>({
@@ -31,8 +46,8 @@ export function ThSortable<K extends string>({
   /** 附加按钮类：宿主 Tab 经自身 CSS Module 注入微调样式（如长表头缩字号） */
   className?: string
 }) {
-  const active = sortKey === k
-  const ariaSort: 'ascending' | 'descending' | 'none' = active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+  const active = sortKey === k;
+  const ariaSort = getAriaSort(active, sortDir);
   return (
     <th aria-sort={ariaSort} className={align === 'left' ? undefined : shared.num} style={align === 'left' ? { textAlign: 'left' } : undefined}>
       <button
@@ -43,9 +58,9 @@ export function ThSortable<K extends string>({
       >
         <span>{label}</span>
         <span className={`${css.sortIcon} ${active ? css.sortIconActive : ''}`} aria-hidden>
-          {active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}
+          {getSortIcon(active, sortDir)}
         </span>
       </button>
     </th>
-  )
+  );
 }

@@ -1,32 +1,33 @@
 /**
  * tsdown 构建配置：
- * - lib/index.js  —— 服务端（Host，Node ESM）。运行时只 import node 内置
- *   模块（含 node:sqlite）+ 本地代码；DSH 服务（webServer / sessionQuery /
- *   sessionPersistence）由 cordis 注入，从不直接 import。
- * - lib/client.js —— 浏览器端 bundle（CJS 闭包工厂），以包名 id
+ * - lib/index.js —— 服务端 Host，Node ESM。运行时只 import node 内置
+ *   模块含 node:sqlite + 本地代码；DSH 服务 webServer / sessionQuery /
+ *   sessionPersistence 由 cordis 注入，从不直接 import。
+ * - lib/client.js —— 浏览器端 bundle，CJS 闭包工厂，以包名 id
  *   `@xfqz86/dsh-usage-stats` 通过 window.__ModuleLoader__.load({ id, factory })
  *   注册。
  *
  * 浏览器端 externals 复刻 shell 的冻结模块表；bundle 运行时只 require
  * react / react/jsx-runtime / primitives，其余全部内联。样式为真正的
- * CSS Modules（*.module.css），由 scripts/css-modules-inline.mjs 在构建时
- * 编译并内联注入（独立插件 bundle 无法携带 .css 资产）。
+ * CSS Modules *.module.css，由 scripts/css-modules-inline.mjs 在构建时
+ * 编译并内联注入，独立插件 bundle 无法携带 .css 资产。
  *
- * 源码结构：src/host（服务端，Node ESM）与 src/client（浏览器端 bundle）
+ * 源码结构：src/host 服务端，Node ESM 与 src/client 浏览器端 bundle
  * 分离，入口分别是 src/host/index.ts 与 src/client/index.ts。
  *
  * 构建区分：
- * - 本地调试（`pnpm build`，`NODE_ENV` 非 production）：不压缩、保留 sourcemap，便于跟踪问题
- * - 生产发布（`NODE_ENV=production pnpm build`，CI/release 使用）：压缩（minify）且无 sourcemap，最终产物仅含压缩后的 2 个 js（无 map）
+ * - 本地调试 `pnpm build`，`NODE_ENV` 非 production：不压缩、保留 sourcemap，便于跟踪问题
+ * - 生产发布 `NODE_ENV=production pnpm build`，CI/release 使用：压缩 minify 且无 sourcemap，最终产物仅含压缩后的 2 个 js，无 map
  */
-import type { UserConfig } from 'tsdown'
-import { cssModulesInline } from './scripts/css-modules-inline.mjs'
+import { cssModulesInline } from './scripts/css-modules-inline.mjs';
+
+import type { UserConfig } from 'tsdown';
 
 /** 是否为生产构建：仅 `NODE_ENV=production` 时压缩并去掉 sourcemap，便于本地调试时保留可读性与映射。 */
-const isProd = process.env.NODE_ENV === 'production'
+const isProd = process.env.NODE_ENV === 'production';
 
-/** bundle id = package.json `name`（必须与 package.json 的 name 完全一致，含 scope）。 */
-const PLUGIN_ID = '@xfqz86/dsh-usage-stats'
+/** bundle id = package.json `name`，必须与 package.json 的 name 完全一致，含 scope。 */
+const PLUGIN_ID = '@xfqz86/dsh-usage-stats';
 
 /** web shell 冻结模块表中的模块标识。 */
 const CLIENT_EXTERNALS = [
@@ -40,7 +41,7 @@ const CLIENT_EXTERNALS = [
   '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-schema-form',
   '@deepseek-ai/dsh-client-runtime/client',
-]
+];
 
 export default [
   {
@@ -54,6 +55,9 @@ export default [
     clean: true,
     minify: isProd,
     sourcemap: !isProd,
+    // 服务端仅依赖 Node 内置 + 本地代码，不 bundled 任何 npm 包，@deepseek-ai/* 为 devDependencies，仅类型
+    // 设 neverBundle:true 可完全禁止 node_modules 打包，避免误引入值导致 cordis/cosmokit 等被内联
+    deps: { neverBundle: true },
   },
   {
     entry: { client: 'src/client/index.ts' },
@@ -80,9 +84,9 @@ export default [
     outputOptions: {
       entryFileNames: 'client.js',
       banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
-      footer: `return module.exports; } });`,
+      footer: 'return module.exports; } });',
       intro: 'var module = { exports: {} }; var exports = module.exports;',
       codeSplitting: false,
     },
   },
-] satisfies UserConfig[]
+] satisfies UserConfig[];

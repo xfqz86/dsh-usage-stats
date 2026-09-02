@@ -1,4 +1,4 @@
-/* 侧边栏底部动作层（宽列与 56px rail 两种形态），几何与 harness 的
+/* 侧边栏底部动作层，支持宽列与 56px rail 两种形态，几何与 harness 的
    CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。 */
 
 .root {
@@ -10,25 +10,10 @@
   margin: 8px 0 0;
 }
 
-/* rail（56px 折叠列）：36px 圆形图标按钮，高度随竖排 Go 芯片自适应。 */
+/* rail 为 56px 折叠列：36px 圆形图标按钮，高度随竖排 Go 芯片自适应。 */
 .rail {
   width: 36px;
   margin: 0;
-}
-
-.rail .badge {
-  justify-content: center;
-  gap: 0;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-}
-
-.rail .badgeMeta,
-.rail .badgeLabel,
-.rail .barRow {
-  display: none;
 }
 
 /* 额度行前置标签：说明这一排芯片是 OpenCode Go 订阅额度。 */
@@ -48,8 +33,8 @@
   margin: 0 0 4px;
 }
 
-/* 两行布局（短标签在上、百分比在下），整体水平居中，避免单行文字换行错位。
-   折叠态芯片背景为正方形（36×36），避免被合一按钮的 flex 布局压扁。 */
+/* 两行布局，短标签在上、百分比在下，整体水平居中，避免单行文字换行错位。
+   折叠态芯片背景为正方形 36×36，避免被合一按钮的 flex 布局压扁。 */
 .goRailChipBox {
   display: flex;
   flex-direction: column;
@@ -67,19 +52,24 @@
   cursor: default;
 }
 
-/* 上行：窗口短标签（如 5h） */
+/* 上行：窗口短标签，例如 5h */
 .goRailChipLabel {
   font-size: 9px;
   line-height: 12px;
   color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
 }
 
-/* 下行：用量百分比（如 99%） */
+/* 下行：用量百分比，例如 99% */
 .goRailChipPct {
   font-size: 11px;
   font-weight: 600;
   line-height: 14px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 .goChip {
@@ -96,42 +86,18 @@
 }
 
 .goChipWarn {
-  color: var(--dsw-alias-state-warning-primary);
-  background: color-mix(in srgb, var(--dsw-alias-state-warning-primary) 14%, transparent);
-}
-
-.goChipOver {
-  color: var(--dsw-alias-state-error-primary);
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent);
-}
-
-/* 兼容保留：旧的独立 badge 按钮（现已被合一按钮取代，保留以防回退） */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: 49px;
-  padding: 0 8px 0 6px;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font-family: inherit;
-  font-size: 14px;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.badge:hover {
-  background: var(--dsw-alias-interactive-bg-hover-solid);
-}
-
-.badge[data-active] {
+  color: var(--dsw-alias-state-warn-primary, #b45309);
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* ---- 合一按钮（宽列）：Go 额度行 + 今日用量行在同一按钮内，任意位置点击均打开弹窗 ---- */
+.goChipOver {
+  color: var(--dsw-alias-state-error-primary, #e5484d);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+
+
+/* ---- 合一按钮宽列：Go 额度行 + 今日用量行在同一按钮内，任意位置点击均打开弹窗 ---- */
 .unified {
   display: flex;
   flex-direction: column;
@@ -167,7 +133,7 @@
   box-sizing: border-box;
 }
 
-/* Go 芯片在合一按钮的上行中均分剩余宽度，使上行视觉铺满与下行（今日+比例条）一致 */
+/* Go 芯片在合一按钮的上行中均分剩余宽度，使上行视觉铺满与下行今日和比例条一致 */
 .unifiedGoRow .goChip {
   flex: 1 1 0;
   justify-content: center;
@@ -185,7 +151,7 @@
   box-sizing: border-box;
 }
 
-/* 折叠 rail 的合一按钮：Go 芯片（若有）在上，圆形图标在下，整块可点
+/* 折叠 rail 的合一按钮：额度/余额/今日迷你芯片自上而下，与宽列同序，整块可点
    芯片为正方形，按钮 stretch 保证芯片铺满 36px 宽度不被压扁。 */
 .railUnified {
   display: flex;
@@ -213,18 +179,6 @@
   width: 100%;
   margin: 0;
   justify-content: center;
-}
-
-.railUnifiedIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  flex: none;
-  color: var(--dsw-alias-label-secondary);
 }
 
 .badgeIcon {
@@ -296,7 +250,7 @@
 }
 
 .barCache {
-  background: var(--dsw-alias-state-warning-primary, #f5a623);
+  background: var(--dsw-alias-state-warn-primary, #f5a623);
   border-radius: 3px 0 0 3px;
 }
 

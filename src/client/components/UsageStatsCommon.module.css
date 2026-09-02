@@ -1,8 +1,8 @@
 /* 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、
    表格、通用提示等。颜色全部使用设计 token。 */
-/* 每个组件各自的专属样式见对应 *.module.css（如 OverviewTab.module.css）。 */
+/* 每个组件各自的专属样式见对应 *.module.css，例如 OverviewTab.module.css。 */
 
-/* ---- 分区（各 Tab 的通用纵向容器：头部 + 内容）---- */
+/* ---- 分区：各 Tab 通用纵向容器，含头部与内容 ---- */
 .section {
   display: flex;
   flex-direction: column;
@@ -25,7 +25,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ---- 统计磁贴 / 单元格（HeroTile 等通用磁贴基元）---- */
+/* ---- 统计磁贴 / 单元格：HeroTile 等通用磁贴基元 ---- */
 .cell {
   display: flex;
   flex-direction: column;
@@ -57,7 +57,7 @@
   background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
 }
 
-/* ---- 空态（无数据 / 加载中 / 不可用）---- */
+/* ---- 空态：无数据、加载中、不可用 ---- */
 .empty {
   padding: 12px 0;
   text-align: center;
@@ -66,15 +66,15 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* ---- 通用提示（Go 未配置 / 重建说明等）---- */
+/* ---- 通用提示：Go 未配置、重建说明等 ---- */
 .goHint {
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* ---- 表格（会话 / 模型两个 Tab 共用）----
-   1366x768 适配：表头 12px、行高 32（td 6px 垂直内边距 + 20px 行高）、
+/* ---- 表格：会话与模型两 Tab 共用 ----
+   1366x768 适配：表头 12px、行高 32，含 td 6px 垂直内边距与 20px 行高、
    单元格 12px，头部与体对齐，保持 --dsw-alias-* token 与横向滚动。 */
 .table {
   width: 100%;
@@ -136,7 +136,7 @@
   font-size: 11px;
 }
 
-/* ---- 表格视图根容器（DatesTab/SessionsTab/ModelsTab 三 Tab 共用）---- */
+/* ---- 表格视图根容器：DatesTab、SessionsTab、ModelsTab 三 Tab 共用 ---- */
 .tableViewRoot {
   display: flex;
   flex-direction: column;
@@ -146,7 +146,7 @@
   gap: 0 !important;
 }
 
-/* ---- 表格滚动容器及嵌套表格基元（三 Tab 共用）---- */
+/* ---- 表格滚动容器及嵌套表格基元：三 Tab 共用 ---- */
 .tableWrap {
   flex: 1;
   min-height: 0;
@@ -185,7 +185,7 @@
   white-space: nowrap;
 }
 
-/* ---- 翻页栏（固定底部居中，三 Tab 共用）---- */
+/* ---- 翻页栏：固定底部居中，三 Tab 共用 ---- */
 .paginationBar {
   flex: none;
   display: flex;
@@ -195,7 +195,7 @@
   background: var(--dsw-alias-bg-base);
 }
 
-/* ---- 时间范围 chips（DatesTab/ModelsTab 共用）---- */
+/* ---- 时间范围 chips：DatesTab 与 ModelsTab 共用 ---- */
 .chips {
   display: flex;
   gap: 4px;
@@ -250,7 +250,7 @@
   display: none;
 }
 
-/* ---- 图表卡片与横向滚动容器（DatesTab/ModelsTab 共用）---- */
+/* ---- 图表卡片与横向滚动容器：DatesTab 与 ModelsTab 共用 ---- */
 .chartCard {
   min-width: 0;
   padding: 12px;

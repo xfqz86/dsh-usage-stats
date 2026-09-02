@@ -1,0 +1,20 @@
+# 统一 JS 环境搭建（pnpm + Node + 依赖安装）
+# 复用点：ci / release-branch / release 均需此 3 步，避免重复声明 node-version 与安装命令
+name: setup
+description: Setup pnpm + Node (cache pnpm) + pnpm install
+inputs:
+  node-version:
+    description: Node.js version
+    required: false
+    default: "22"
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

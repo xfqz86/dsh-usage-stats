@@ -5,7 +5,7 @@
  * SettingsSwitch.module.css 的 switch 类（设计 token 配色）。
  */
 
-import css from './SettingsSwitch.module.css'
+import css from './SettingsSwitch.module.css';
 
 /** 开关（role="switch"）：带 aria-checked，disabled 时不可点。 */
 export function SettingsSwitch({ checked, disabled, onToggle }: {
@@ -24,5 +24,5 @@ export function SettingsSwitch({ checked, disabled, onToggle }: {
     >
       <span className={css.switchKnob} />
     </button>
-  )
+  );
 }

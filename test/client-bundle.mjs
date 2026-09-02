@@ -6,11 +6,7 @@
  *   2. factory(require) 可执行，exports.inject 含必需服务、exports.apply 为函数；
  *   3. CSS Modules 内联注入：每个 *.module.css 注入一个 data-plugin-css 的
  *      <style>（期望全集从 src 目录动态枚举，新增样式文件自动纳入断言，
- *      覆盖 views / components 下全部模块：UsageStatsFooter / UsageStatsPanel /
- *      UsageStatsCommon / OverviewTab / HeroTile / UsageHeatmap / DatesTab /
- *      SessionsTab / ModelsTab / SettingsTab / SettingsSwitch / Tooltip /
- *      Pagination / ModelPieChart / ModelStackedBar / DateStackedBar /
- *      ThSortable 等），且样式文本含 scoped 类名。
+ *      覆盖 views / components 下全部模块，且样式文本含 scoped 类名）。
  */
 
 import { createRequire } from 'node:module'

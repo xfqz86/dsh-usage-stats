@@ -1,5 +1,5 @@
-/* 英雄磁贴（HeroTile）：今日 / 总 tokens 共用的合并磁贴样式。
-   占 2 列，大数 + 命中率 + 调用 + 三色比例条（缓存 / 输入 / 输出）。
+/* 英雄磁贴 HeroTile：今日与总 tokens 共用的合并磁贴样式。
+   占 2 列，包含大数、命中率、调用和缓存/输入/输出三色比例条。
    颜色全部使用设计 token。 */
 /* .cell / .cellIcon 等基元见 UsageStatsCommon.module.css。 */
 
@@ -37,9 +37,8 @@
 .heroMain {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
   min-width: 0;
+  overflow: hidden;
 }
 
 .heroValue {
@@ -49,6 +48,18 @@
   line-height: 24px;
   color: var(--dsw-alias-label-primary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* 第二行：命中率居左、调用居右，与总计卡保持一致，今日亦如此。 */
+.heroMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .heroHitRate {
@@ -60,7 +71,6 @@
 }
 
 .heroCallsRight {
-  margin-left: auto;
   font-size: 11px;
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
@@ -68,7 +78,7 @@
   white-space: nowrap;
 }
 
-/* 三色比例条：缓存 / 输入 / 输出（与侧边栏同款配色与 tooltip 口径）。 */
+/* 三色比例条：缓存、输入、输出，与侧边栏同款配色与 tooltip 口径一致。 */
 .heroBar {
   display: flex;
   align-items: center;
@@ -93,7 +103,7 @@
 }
 
 .heroBarCache {
-  background: var(--dsw-alias-state-warning-primary, #f5a623);
+  background: var(--dsw-alias-state-warn-primary, #f5a623);
   border-radius: 3px 0 0 3px;
 }
 

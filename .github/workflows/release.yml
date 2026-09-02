@@ -1,5 +1,6 @@
 # 发布到 npm 与交付 tarball
 # 触发：推送 v* 标签（v0.1.0、v0.2.0-rc.1 等）或手动 workflow_dispatch
+# 依赖：tag 推送时强制校验 CI（job verify）在该提交上已成功；workflow_dispatch 仅构建不发布，不校验
 # 产物：
 #   - npmjs：@xfqz86/dsh-usage-stats（预构建 lib，无 prepare，避免安装时 build 脚本授权）
 #   - tarball：GitHub Release 附件 + workflow artifact（pnpm pack 产物）
@@ -19,22 +20,41 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  gate:
+    name: Gate — CI must pass
+    # 仅 tag 推送时校验 CI；workflow_dispatch 跳过校验（仅构建产物，不发布）
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - uses: ./.github/actions/gate
+        with:
+          sha: ${{ github.sha }}
+          workflow: CI
+          job: verify
+          token: ${{ secrets.GITHUB_TOKEN }}
+
   build:
     name: Build npm package
+    # gate 成功或被跳过（workflow_dispatch）时才构建；gate 失败则阻断
+    needs: gate
+    if: always() && (needs.gate.result == 'success' || needs.gate.result == 'skipped')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      # 版本取自 package.json 的 packageManager，避免双重声明冲突
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+      - uses: ./.github/actions/setup
 
       - name: Validate tag matches package.json
         if: startsWith(github.ref, 'refs/tags/v')
@@ -47,9 +67,6 @@ jobs:
             echo "::error::Tag version $tag_version does not match package.json $package_version"
             exit 1
           fi
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Build (production, minified, no map)
         run: NODE_ENV=production pnpm build
@@ -64,87 +81,27 @@ jobs:
         run: |
           echo "workflow_dispatch build at $(node -p "require('./package.json').version") — will pack but not publish"
 
-      - name: Create package tarball (pruned, without prepare/scripts/devDeps)
+      - uses: ./.github/actions/prune-package
+
+      - name: Create tarball
+        id: pack
         shell: bash
         run: |
-          # git 安装需要 prepare（tsdown），但 npm 发布的预构建包不应携带任何开发态字段
-          # 仅保留 name/version/description/type/main/exports/files/engines/dsh/license
-          # 其余（scripts、devDependencies、packageManager、repository 等）全部剥离
-          echo "before keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
-          echo "before prepare: $(node -p "require('./package.json').scripts.prepare || 'none'")"
-          node scripts/prune-package.mjs
-          echo "after keys: $(node -p "Object.keys(require('./package.json')).join(', ')")"
-          echo "after prepare: $(node -p "require('./package.json').scripts?.prepare || 'none (deleted)'")"
-          cat package.json
           mkdir -p package
-          # 使用 NPM_CONFIG_CACHE 隔离，避免宿主缓存权限问题（本地 npm 缓存可能为 root 拥有）
           NPM_CONFIG_CACHE="$RUNNER_TEMP/npm-cache" npm pack --pack-destination "$GITHUB_WORKSPACE/package"
-          echo "tarball:"
-          ls -lh package/
-          # 固定文件名别名：供 README 的 stable tarball 地址（.../releases/latest/download/xfqz86-dsh-usage-stats.tgz）使用，地址永不变动
+          # 固定文件名别名：供 README 的 stable tarball 地址使用，地址永不变动
           versioned=$(ls package/xfqz86-dsh-usage-stats-*.tgz 2>/dev/null | head -n1)
           if [ -n "$versioned" ]; then
             cp "$versioned" package/xfqz86-dsh-usage-stats.tgz
-            echo "created stable alias: package/xfqz86-dsh-usage-stats.tgz -> $(basename "$versioned")"
-          else
-            echo "::warning::versioned tgz not found for stable alias"
+            echo "created stable alias: $(basename "$versioned")"
           fi
           ls -lh package/
-          echo "--- contents (versioned) ---"
-          tar -tzf package/xfqz86-dsh-usage-stats-*.tgz | sort
-          # 将 tar 清单缓存至文件，避免 grep -q 提前退出导致 tar 因 SIGPIPE 在 pipefail 模式下报错（仅校验版本化包，stable 别名内容一致）
-          tar -tzf package/xfqz86-dsh-usage-stats-*.tgz > /tmp/tgz-list.txt
-          echo "--- verify ONLY allowed files (lib + package.json + LICENSE + cordis.patch.yml + README.md, no map) ---"
-          # 期望仅 6 条目：lib/index.js, lib/client.js, package.json, LICENSE, cordis.patch.yml, README.md（LICENSE 由 npm 自动纳入，即使 files 未显式声明）
-          count=$(wc -l < /tmp/tgz-list.txt)
-          echo "file count: $count"
-          if [ "$count" -ne 6 ]; then
-            echo "::error::unexpected file count $count, expected 6"
-            cat /tmp/tgz-list.txt | sort
-            exit 1
-          fi
-          grep -q "package/lib/index.js" /tmp/tgz-list.txt || (echo "::error::lib/index.js missing" && exit 1)
-          grep -q "package/lib/client.js" /tmp/tgz-list.txt || (echo "::error::lib/client.js missing" && exit 1)
-          if grep -q "package/lib/client.js.map" /tmp/tgz-list.txt; then
-            echo "::error::client.js.map should not be in tarball"
-            exit 1
-          fi
-          grep -q "package/cordis.patch.yml" /tmp/tgz-list.txt || (echo "::error::cordis.patch.yml missing" && exit 1)
-          grep -q "package/README.md" /tmp/tgz-list.txt || (echo "::error::README.md missing" && exit 1)
-          grep -q "package/package.json" /tmp/tgz-list.txt || (echo "::error::package.json missing" && exit 1)
-          grep -q "package/LICENSE" /tmp/tgz-list.txt || (echo "::error::LICENSE missing" && exit 1)
-          if grep -Eq "package/(src/|tsconfig|tsdown|scripts/|test/|docs/|\.github/)" /tmp/tgz-list.txt; then
-            echo "::error::tarball contains unwanted src/tsconfig/scripts/test files"
-            cat /tmp/tgz-list.txt | sort
-            exit 1
-          fi
-          echo "--- verify package.json is pruned ---"
-          tar -xzOf package/xfqz86-dsh-usage-stats-*.tgz package/package.json > /tmp/pkg.json
-          if grep -q '"prepare"' /tmp/pkg.json; then
-            echo "::error::prepare still in packed package.json"
-            exit 1
-          fi
-          if grep -q '"devDependencies"' /tmp/pkg.json; then
-            echo "::error::devDependencies still in packed package.json — should be pruned"
-            exit 1
-          fi
-          if grep -q '"scripts"' /tmp/pkg.json; then
-            echo "::error::scripts still in packed package.json — should be pruned"
-            exit 1
-          fi
-          if grep -q '"packageManager"' /tmp/pkg.json; then
-            echo "::error::packageManager still in packed package.json — should be pruned"
-            exit 1
-          fi
-          echo "--- verify packed package.json keys ---"
-          cat /tmp/pkg.json | node -e "
-            const j = JSON.parse(require('fs').readFileSync(0,'utf-8'));
-            const allow = ['name','version','description','type','main','exports','files','engines','dsh','license','repository'];
-            const extra = Object.keys(j).filter(k => !allow.includes(k));
-            if (extra.length) { console.error('unexpected keys:', extra.join(', ')); process.exit(1); }
-            console.log('allowed keys only:', Object.keys(j).join(', '));
-          "
-          echo "pack ok — only lib + package.json(c pruned) + LICENSE + cordis.patch.yml + README.md"
+          echo "versioned=$versioned" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tarball (6 files, pruned package.json)
+        uses: ./.github/actions/verify-pack
+        with:
+          path: ${{ steps.pack.outputs.versioned }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -170,12 +127,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # 版本取自 package.json 的 packageManager，避免双重声明冲突
-      - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       - name: Use OIDC-capable npm CLI

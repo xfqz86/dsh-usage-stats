@@ -1,0 +1,20 @@
+name: verify-pack
+description: Verify distribution contains only 6 files and pruned package.json
+author: xfqz86
+
+branding:
+  icon: package
+  color: green
+
+inputs:
+  path:
+    description: Path to tarball (.tgz) or payload directory to verify
+    required: true
+  allow:
+    description: Comma-separated allowlist for package.json
+    required: false
+    default: "name,version,description,type,main,exports,files,engines,dsh,license,repository"
+
+runs:
+  using: node24
+  main: verify.mjs
