@@ -90,6 +90,9 @@ jobs:
           git reset --hard HEAD
           git clean -fd
 
+          # 备份本地 Action 供 post 恢复（checkout release 会移除 .github）
+          if [ -d .github ]; then cp -r .github /tmp/.github.bak; fi
+
           # 准备 release 分支：若远端存在则检出，否则创建 orphan
           if git show-ref --verify --quiet refs/remotes/origin/release; then
             echo "release branch exists — fetching"
@@ -99,6 +102,9 @@ jobs:
             echo "creating orphan release branch"
             git checkout --orphan release
           fi
+
+          # 恢复 .github 供后续 post 使用（不入提交，仅保留空目录）
+          if [ -d /tmp/.github.bak ]; then mkdir -p .github; cp -r /tmp/.github.bak/* .github/ 2>/dev/null || true; fi
 
           # 清空 release 分支所有内容（保留 .git/.github 以避免本地 Action 的 post 失败；.github 仅保留空目录不入提交）
           # git rm 仅删除非 .github 的已跟踪文件， payload 在 /tmp 不受影响
