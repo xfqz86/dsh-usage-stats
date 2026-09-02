@@ -7,33 +7,38 @@
  * 返回 [settings, update]：update 接受 Partial 局部合并并做夹取与持久化。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import {
+  clampDeepSeekFetchMinutes,
   clampGoFetchMinutes,
+  clampZaiFetchMinutes,
   loadUsageSettings,
   saveUsageSettings,
   type UsageSettings,
-} from './settings.ts'
+} from './settings.ts';
 
-/** 偏好设置 hook：读取即持久（localStorage）。 */
+/** 偏好设置 hook：读取即持久（localStorage），同时支持 Go 与 DeepSeek 两组偏好。 */
 export function useGoSettings(): [UsageSettings, (patch: Partial<UsageSettings>) => void] {
-  const [settings, setSettings] = useState<UsageSettings>(() => loadUsageSettings())
-  const isFirstRef = useRef(true)
+  const [settings, setSettings] = useState<UsageSettings>(() => loadUsageSettings());
+  const isFirstRef = useRef(true);
 
   // 副作用移出 setState updater，避免 StrictMode 双写；通过 effect 持久化
   useEffect(() => {
-    if (isFirstRef.current) { isFirstRef.current = false; return }
-    saveUsageSettings(settings)
-  }, [settings])
+    if (isFirstRef.current) { isFirstRef.current = false; return; }
+    saveUsageSettings(settings);
+  }, [settings]);
 
-  /** 局部合并更新：间隔夹到下限后写入存储。 */
+  /** 局部合并更新：间隔夹到下限后写入存储（Go/DeepSeek/Z.ai 各自夹取）。 */
   const update = useCallback((patch: Partial<UsageSettings>) => {
     setSettings((prev) => ({
       ...prev,
       ...patch,
       goFetchMinutes: clampGoFetchMinutes(patch.goFetchMinutes ?? prev.goFetchMinutes),
-    }))
-  }, [])
+      deepseekFetchMinutes: clampDeepSeekFetchMinutes(patch.deepseekFetchMinutes ?? prev.deepseekFetchMinutes),
+      zaiFetchMinutes: clampZaiFetchMinutes(patch.zaiFetchMinutes ?? prev.zaiFetchMinutes),
+    }));
+  }, []);
 
-  return [settings, update]
+  return [settings, update];
 }

@@ -3,8 +3,9 @@
  * 独立成文件（一个组件一个文件），可被任意 Tab 复用。
  */
 
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import css from './Pagination.module.css'
+import css from './Pagination.module.css';
+
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 /** 通用分页：上一页 / 页码信息 / 下一页。 */
 export function Pagination({
@@ -15,7 +16,7 @@ export function Pagination({
   onPageChange: (p: number) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
-  if (totalPages <= 1) return null
+  if (totalPages <= 1) return null;
   return (
     <nav className={css.pagination} aria-label={t('pagination.label')}>
       <button
@@ -27,7 +28,7 @@ export function Pagination({
       >
         ‹
       </button>
-      <span className={css.pageInfo}>{t('pagination.page', { current: page, total: totalPages } as unknown as Record<string, unknown>)}</span>
+      <span className={css.pageInfo}>{t('pagination.page', { current: page, total: totalPages })}</span>
       <button
         type="button"
         className={css.pageBtn}
@@ -38,5 +39,5 @@ export function Pagination({
         ›
       </button>
     </nav>
-  )
+  );
 }

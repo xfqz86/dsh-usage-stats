@@ -13,7 +13,9 @@
  *   - rebuild API 清空账本并重扫；
  *   - 信任围栏双闸：非回环 Host、回环但缺 x-dsh-usage-stats 自定义头均 403；
  *   - go-quota 在清空 key / home 定位环境变量的隔离段内运行，精确期望
- *     结构化 no-key，不产生任何真实外网请求。
+ *     结构化 no-key，不产生任何真实外网请求；
+ *   - deepseek-balance 同款隔离段：无 key 确定性 no-key（覆盖凭据中心缺席
+ *     回退 env/文件解析的路径），interval / force 语义与 go-quota 对齐。
  */
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -290,6 +292,50 @@ try {
   }
 } finally {
   for (const [k, v] of savedGoEnv) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
+}
+
+// deepseek-balance 段网络隔离：清空 key 相关环境变量与 home / XDG 定位变量，
+// 使 resolveDeepSeekKey 确定性返回 null → fetchDeepSeekBalance 直接短路为
+// no-key，冒烟测试不产生任何真实外网请求；段结束（含异常路径）后恢复原环境。
+// mock ctx 不带 credentials 服务，恰好覆盖「凭据中心缺席 → 回退 env/文件解析」路径。
+const DS_ENV_KEYS = ['DEEPSEEK_API_KEY', 'DEEPSEEK_APIKEY', 'DEEPSEEK_API_TOKEN', 'DEEPSEEK_TOKEN', 'HOME', 'USERPROFILE', 'XDG_CONFIG_HOME']
+const savedDsEnv = DS_ENV_KEYS.map((k) => [k, process.env[k]])
+for (const k of DS_ENV_KEYS) delete process.env[k]
+try {
+  // deepseek-balance 路由：无 key 场景精确期望结构化 no-key（永不抛错、不出网）
+  const dsOut = await callRoute({}, '/usage-stats/api/deepseek-balance')
+  const dsBody = JSON.parse(dsOut.payload)
+  console.log('deepseek-balance ok:', dsBody.ok === true, '| status:', dsBody.value?.status)
+  if (dsBody.ok !== true || dsBody.value?.status !== 'no-key'
+    || dsBody.value?.isAvailable !== false || !Array.isArray(dsBody.value?.balances)) {
+    console.error('FAIL: unexpected deepseek-balance response (expected no-key)')
+    process.exit(1)
+  }
+
+  // deepseek-balance 支持客户端抓取间隔（TTL 适配）：携带 intervalMinutes
+  // 命中有效 TTL 缓存，仍为同一 no-key 结构化结果。
+  const dsOut2 = await callRoute({ intervalMinutes: 3 }, '/usage-stats/api/deepseek-balance')
+  const dsBody2 = JSON.parse(dsOut2.payload)
+  console.log('deepseek-balance w/ interval ok:', dsBody2.ok === true, '| status:', dsBody2.value?.status)
+  if (dsBody2.ok !== true || dsBody2.value?.status !== 'no-key') {
+    console.error('FAIL: unexpected deepseek-balance response with intervalMinutes (expected no-key)')
+    process.exit(1)
+  }
+
+  // deepseek-balance force=true：绕过 TTL 缓存强制重新抓取；无 key 下仍确定性
+  // 短路为 no-key（且受官方端点频率保护，不出网）。
+  const dsOut3 = await callRoute({ intervalMinutes: 3, force: true }, '/usage-stats/api/deepseek-balance')
+  const dsBody3 = JSON.parse(dsOut3.payload)
+  console.log('deepseek-balance force ok:', dsBody3.ok === true, '| status:', dsBody3.value?.status)
+  if (dsBody3.ok !== true || dsBody3.value?.status !== 'no-key') {
+    console.error('FAIL: unexpected deepseek-balance response with force (expected no-key)')
+    process.exit(1)
+  }
+} finally {
+  for (const [k, v] of savedDsEnv) {
     if (v === undefined) delete process.env[k]
     else process.env[k] = v
   }

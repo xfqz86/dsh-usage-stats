@@ -1,8 +1,8 @@
-/* 设置 Tab（SettingsTab）：操作按钮（含重建账本状态）、偏好设置行、
-   抓取间隔数字输入、账本操作（折叠）与底部页脚。颜色全部使用设计 token。 */
+/* 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、
+   抓取间隔数字输入、可折叠账本操作与底部页脚。颜色全部使用设计 token。 */
 /* .section* / .goHint 等基元见 UsageStatsCommon.module.css。 */
 
-/* ---- 操作按钮（重建账本）---- */
+/* ---- 重建账本操作按钮 ---- */
 .refreshBtn {
   align-self: flex-start;
   display: inline-flex;
@@ -38,22 +38,88 @@
   cursor: not-allowed;
 }
 
-/* ---- 偏好设置行（开关 + 数字输入）---- */
+/* ---- Go、DeepSeek 偏好设置分组 — 卡片式分组，头部带图标与底部分割 ---- */
+.prefGroup {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: var(--dsw-shadow-lv1);
+}
+
+.prefGroupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-subtle, var(--dsw-alias-bg-fill, #f6f7f9));
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.prefGroupIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--dsw-alias-brand-bg, #eef2ff);
+  color: var(--dsw-alias-brand-primary, #4d6bfe);
+  flex: none;
+}
+
+.prefGroupIconDeepSeek {
+  background: var(--dsw-alias-state-success-bg, #e6f6ec);
+  color: var(--dsw-alias-state-success-primary, #1a7f37);
+}
+
+.prefGroupTitle {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+}
+
+.prefGroupCount {
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-bg-fill, #f0f1f3);
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- 偏好设置行，组内列表项，卡片内有分割线 ---- */
 .settingRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 10px;
-  background: var(--dsw-alias-bg-base);
+  padding: 10px 12px;
+  background: transparent;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.settingRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.03));
+}
+
+.settingRow + .settingRow {
+  border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
 .settingRowDisabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.settingRowDisabled:hover {
+  background: transparent;
 }
 
 .settingText {
@@ -113,7 +179,7 @@
   white-space: nowrap;
 }
 
-/* ---- 账本操作（折叠）---- */
+/* ---- 可折叠账本操作 ---- */
 .ledgerSection {
   display: flex;
   flex-direction: column;
@@ -151,7 +217,7 @@
   gap: 8px;
 }
 
-/* ---- 底部页脚（事件数 / 更新时间，原概览页脚迁移至设置页最底部）---- */
+/* ---- 底部页脚显示事件数与更新时间，原概览页脚迁移至设置页最底部 ---- */
 .footer {
   display: flex;
   align-items: center;
