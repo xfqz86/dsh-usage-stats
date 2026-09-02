@@ -100,10 +100,12 @@ jobs:
             git checkout --orphan release
           fi
 
-          # 清空 release 分支所有内容（保留 .git）
-          # git rm 针对已跟踪文件，rm -rf 针对未跟踪；payload 在 /tmp 不受影响
-          git rm -rf . 2>/dev/null || true
-          # 兜底：物理删除残留的顶层文件/目录（除 .git/.github，保留后者以避免本地 Action 的 post 失败）
+          # 清空 release 分支所有内容（保留 .git/.github 以避免本地 Action 的 post 失败；.github 仅保留空目录不入提交）
+          # git rm 仅删除非 .github 的已跟踪文件， payload 在 /tmp 不受影响
+          if git ls-files -z | grep -zv "^\.github/" | grep -q .; then
+            git ls-files -z | grep -zv "^\.github/" | xargs -0 -r git rm -rf -- 2>/dev/null || true
+          fi
+          # 兜底：物理删除残留的顶层文件/目录（除 .git/.github）
           find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' -exec rm -rf {} + 2>/dev/null || true
           echo "cleaned release branch, now empty except .git"
           ls -la
@@ -126,9 +128,9 @@ jobs:
             exit 1
           fi
           if [ -f lib/client.js.map ]; then echo "::error::release contains client.js.map"; exit 1; fi
-          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'README.md' ! -name 'LICENSE' | grep -q .; then
+          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'README.md' ! -name 'LICENSE' | grep -q .; then
             echo "::error::release branch contains unexpected top-level files"
-            find . -mindepth 1 -maxdepth 1 ! -name '.git' | sort
+            find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' | sort
             exit 1
           fi
           if find . -name "*.ts" -o -name "tsconfig.json" -o -name "pnpm-workspace.yaml" | grep -q .; then
