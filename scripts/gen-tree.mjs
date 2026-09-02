@@ -202,7 +202,7 @@ function ensureIgnoreSet() {
   }
   try {
     collect(ROOT)
-  } catch {}
+  } catch (_e) {}
   if (allRels.length === 0) return ignoreSet
 
   if (ensureGitAvailable()) {
@@ -308,5 +308,5 @@ const body = ['# 项目结构（自动生成）', '',
 
 const out = join(ROOT, 'docs', 'STRUCTURE.md')
 writeFileSync(out, body)
-// eslint-disable-next-line no-console
+ 
 console.log(`written ${out.replace(ROOT + '/', '')}`)

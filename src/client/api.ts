@@ -11,4 +11,4 @@
 export const API_HEADERS: Record<string, string> = {
   'content-type': 'application/json',
   'x-dsh-usage-stats': 'dsh-usage-stats',
-}
+};

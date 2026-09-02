@@ -1,3 +1,5 @@
+allowBuilds:
+  unrs-resolver: false
 minimumReleaseAgeExclude:
   # @deepseek-ai 包近期发布（0.1.2-alpha.4 / 0.1.1-rc.2 等），类型/运行时与 shell 冻结模块表一致，
   # 不值得等 min-release-age；直接白名单放行。

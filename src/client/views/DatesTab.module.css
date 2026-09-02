@@ -1,8 +1,8 @@
-/* 日期 Tab（DatesTab）：堆叠柱状图 + 范围 chips + 数据表格（与模型 Tab 对齐）。
-   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard 等）已抽至
+/* 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
+   公共基元 tableWrap、tableViewRoot、paginationBar、chips、chartCard 等已抽至
    components/UsageStatsCommon.module.css，此处仅保留列宽差异与布局差异。 */
 
-/* 首列（日期）吃掉全部剩余空间、其余列按内容自适应（table-layout: auto；max-width: none 覆盖共用 cellText 的宽度钳制；顺序：缓存、输入、输出、总计、命中率、调用、每次调用） */
+/* 首列日期列吃掉全部剩余空间、其余列按内容自适应，采用 table-layout auto，max-width none 覆盖共用 cellText 宽度钳制，列顺序为缓存、输入、输出、总计、命中率、调用、每次调用 */
 .tableWrap th:nth-child(1),
 .tableWrap td:nth-child(1) {
   width: 100%;
@@ -10,9 +10,9 @@
   max-width: none;
 }
 
-/* 可排序表头按钮样式已提取至 components/ThSortable.module.css（与 SessionsTab/ModelsTab 共用） */
+/* 可排序表头按钮样式已提取至 components/ThSortable.module.css，与 SessionsTab 和 ModelsTab 共用 */
 
-/* 图表区：单卡片堆叠柱（超宽时横向滚动不撑爆） */
+/* 图表区单卡片堆叠柱，超宽时横向滚动不撑爆 */
 .charts {
   display: flex;
   flex-direction: column;

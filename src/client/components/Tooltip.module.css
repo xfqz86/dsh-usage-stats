@@ -26,6 +26,11 @@
   white-space: normal;
 }
 
+/* 富 tooltip（卡片式内容）需要更宽松的内边距，避免卡片贴边；纯文本气泡保持紧凑。 */
+.bubble:has(> .rich) {
+  padding: 10px 12px;
+}
+
 .bubble[data-side='right'] {
   transform: translateY(-50%);
 }

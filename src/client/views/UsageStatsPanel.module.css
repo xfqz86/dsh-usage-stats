@@ -1,9 +1,9 @@
-/* 用量统计模态窗壳（UsageStatsPanel）：headless Modal 卡片内的 chrome ——
+/* 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome ——
    头部、Tab 栏、可滚动内容区。颜色全部使用设计 token。 */
 /* 各 Tab 内容样式见对应 .module.css；跨组件共用基元见 UsageStatsCommon. */
 
-/* 模态卡片尺寸覆盖（primitives Modal 的 dialog 上叠加）。
-   1024x768 适配：四边各留 16px 边距（calc(100vw-32px) / calc(100vh-32px)），
+/* 模态卡片尺寸覆盖，叠加于 primitives Modal 的 dialog。
+   1024x768 适配：四边各留 16px 边距，对应 calc(100vw-32px) / calc(100vh-32px)，
    最大 960x640，兼顾 92vw/92vh 约束，美观清晰；圆角 20px、阴影 lv2。 */
 .modal {
   width: min(960px, calc(100vw - 32px));
@@ -86,7 +86,7 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* ---- Tab 栏（role="tablist"，语义化导航）---- */
+/* ---- Tab 栏，role 为 tablist 的语义化导航 ---- */
 .tabbar {
   flex: none;
   display: flex;
