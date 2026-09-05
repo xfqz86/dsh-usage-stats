@@ -1,0 +1,50 @@
+/* Z.ai 未开通空态：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
+   浅色走设计 token，深色沿用额度 tooltip 既有的半透明白（深色气泡上保证可读）。 */
+
+.root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--dsw-alias-border-l2);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 6%, transparent);
+}
+
+.icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
+}
+
+.text {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 深色 tooltip 内：半透明白边框与文字，与 TipHint / QuotaTipRow 同一深底语言。 */
+.tip {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tip .icon {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tip .text {
+  color: rgba(255, 255, 255, 0.88);
+}

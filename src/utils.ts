@@ -26,7 +26,7 @@ export function startOfDay(timeMs: number): number {
 export function dateKeyOf(t: number): string {
   const d = new Date(t);
   const pad = (v: number): string => String(v).padStart(2, '0');
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** 任意异常 → 可读消息字符串，Error 取 message，对象取 message 字段，其余原样字符串化。 */
@@ -68,6 +68,28 @@ export function goLevelOf(pct: number): 'over' | 'warn' | 'ok' {
   if (pct >= 80) return 'warn';
   return 'ok';
 }
+
+/** 额度抓取强制下限：官方端点任何情况下不低于该间隔打一次，与客户端设置下限对齐。 */
+export const QUOTA_MIN_FETCH_MS = 3 * 60 * 1000;
+/** 额度结果缓存上限：默认 5 分钟；客户端可按抓取间隔调短有效缓存。 */
+export const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * 额度有效 TTL：`min(上限, max(下限, 间隔))`，让实际打官方端点的频率与
+ * 设置一致且不短于下限；未提供间隔时用默认上限。三额度查询共用同一公式。
+ */
+export function effectiveQuotaTtl(intervalMinutes?: number): number {
+  if (typeof intervalMinutes === 'number' && Number.isFinite(intervalMinutes)) {
+    return Math.min(QUOTA_CACHE_TTL_MS, Math.max(QUOTA_MIN_FETCH_MS, Math.round(intervalMinutes * 60 * 1000)));
+  }
+  return QUOTA_CACHE_TTL_MS;
+}
+
+/** 快照与图表序列上限：`all` 范围最多回看的天数，快照截断与客户端建桶共用。 */
+export const SERIES_MAX_DAYS = 366;
+
+/** 一日毫秒数：仅用于日期差换算（`Math.round(毫秒差 / DAY_MS)`），绝不用于逐日推进（夏令时日不是 24h，推进一律 `setDate`）。 */
+export const DAY_MS = 86_400_000;
 
 /** 重置时间文案：无重置时间返回空串；否则用调用方 t 做本地化，参数为 {time}。 */
 export function goResetsAt(

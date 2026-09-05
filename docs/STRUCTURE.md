@@ -16,7 +16,8 @@ dsh-usage-stats/
 │   │   └── footer.png
 │   ├── API.md ← 服务端 HTTP 协议与偏好设置约定（随接口演进维护）
 │   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付三种形态：release / npm / tarball）
-│   └── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
+│   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
+│   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）
 ├── scripts/
 │   ├── css-modules-inline.mjs ← rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的 JS 模块。
 │   └── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
@@ -35,7 +36,9 @@ dsh-usage-stats/
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
 │   │   │   ├── Tooltip.tsx ← 自实现的 Tooltip：基于 dsh 自带 `@deepseek-ai/dsh-client-ui-primitives/Tooltip` 的轻量修改版， 并已合并原 `FollowTooltip` 的鼠标跟随能力，通过 `follow` 参数控制。
-│   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
+│   │   │   ├── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
+│   │   │   ├── ZaiNoPlan.module.css ← Z.ai 未开通空态：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
+│   │   │   └── ZaiNoPlan.tsx ← Z.ai 未开通空态：品牌色图标徽标配短文案，概览磁贴与侧边栏 tooltip 共用。
 │   │   ├── views/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
@@ -60,10 +63,14 @@ dsh-usage-stats/
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── settings.ts ← 浏览器端插件偏好设置：OpenCode Go 额度与 DeepSeek 余额监控的偏好设置。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
+│   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
 │   │   ├── useDeepSeekBalance.ts ← DeepSeek 余额轮询，浏览器端。
 │   │   ├── useGoQuota.ts ← OpenCode Go 订阅额度轮询，浏览器端实现。
 │   │   ├── useGoSettings.ts ← 偏好设置的 React hook（浏览器端）。
+│   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
+│   │   ├── useQuota.ts ← 额度轮询共享 hook 工厂（浏览器端）。
 │   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
+│   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
 │   │   └── useZaiQuota.ts ← Z.ai 额度轮询，浏览器端实现。
 │   ├── host/
 │   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink， 事件守卫 usable、modelKeyOf。
@@ -73,6 +80,7 @@ dsh-usage-stats/
 │   │   ├── index.ts ← 用量统计的服务端 Host 插件入口：账本模式装配，自管理 sqlite 介质。
 │   │   ├── ledger.ts ← 原始事件流账本 Ledger：用量事件的唯一事实来源 —— 自管理 SQLite。
 │   │   ├── logs.ts ← 会话日志的目录发现与 NDJSON 解析。
+│   │   ├── quota.ts ← 额度查询共享基元（服务端）：浏览器 UA、key 回退解析、TTL 缓存单飞工厂。
 │   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，经 foldRecord 写入账本，自管理 sqlite 的 events、 session_meta 表并折叠聚合缓存。
 │   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 /usage-stats/api/snapshot 的响应 value，纯函数，不触碰 HTTP、ctx。
 │   │   ├── store.ts ← 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、全量维度组织。
@@ -82,6 +90,7 @@ dsh-usage-stats/
 │   └── utils.ts ← 跨端共用的纯函数，host 与 client 两个 bundle 各自内联所需子集。
 ├── test/
 │   ├── client-bundle.mjs ← 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
+│   ├── pure.mjs ← 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
 │   └── smoke.mjs ← 用量统计服务端（Host）的独立冒烟测试（账本模式，自管理 sqlite 介质）。
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）
@@ -92,6 +101,7 @@ dsh-usage-stats/
 ├── pnpm-lock.yaml ← 锁文件（不手改）
 ├── pnpm-workspace.yaml ← pnpm 工作区（含版本保鲜期白名单）
 ├── README.md ← 面向普通用户的功能说明
+├── screenshots.json
 ├── tsconfig.json ← TS 编译配置（严格模式）
 └── tsdown.config.ts ← 双 bundle 构建配置（host ESM + client CJS）
 ```

@@ -2,6 +2,12 @@
 
 export const NS = 'dsh-usage-stats';
 
+/**
+ * 本地化函数形态：纯函数（`fmt`、`getDateTokenMeta` 等）接收 t 时的统一类型，
+ * 调用方以 `t as unknown as LocaleFn` 传入，避免各处重复内联函数类型。
+ */
+export type LocaleFn = (key: string, params?: Record<string, unknown>) => string;
+
 /** 中文文案（源语言）。 */
 export const zh = {
   'footer.todayLabel': '今日',
@@ -169,10 +175,11 @@ export const zh = {
   'zai.short.session': '5h',
   'zai.short.weekly': '周',
   'zai.short.webSearches': '搜',
+  'zai.short.label': 'Z.ai',
   'zai.resetsAt': '重置于 {time}',
   'zai.notConfigured': '未配置 API Key（在 DSH 凭据中心设置 ZAI_API_KEY 或 ZAI_CODING_CN_API_KEY）',
   'zai.unavailable': '额度查询失败，稍后重试',
-  'zai.noPlan': '未开通 GLM Coding Plan，访问 z.ai/subscribe 订阅后可用',
+  'zai.noPlan': '未开通 GLM Coding Plan',
   'zai.noData': '暂无额度数据',
   'zai.webSearchesCount': '{used} / {limit} 次',
   'settings.zaiEnabled': '启用 Z.ai 额度监控',
@@ -360,10 +367,11 @@ export const en = {
   'zai.short.session': '5h',
   'zai.short.weekly': 'Wk',
   'zai.short.webSearches': 'S',
+  'zai.short.label': 'Z.ai',
   'zai.resetsAt': 'Resets {time}',
   'zai.notConfigured': 'API key not configured (set ZAI_API_KEY or ZAI_CODING_CN_API_KEY in DSH credentials)',
   'zai.unavailable': 'Quota query failed, retrying…',
-  'zai.noPlan': 'No active GLM Coding Plan. Subscribe at z.ai/subscribe to see usage.',
+  'zai.noPlan': 'No GLM Coding Plan',
   'zai.noData': 'No quota data',
   'zai.webSearchesCount': '{used} / {limit} searches',
   'settings.zaiEnabled': 'Enable Z.ai quota monitoring',

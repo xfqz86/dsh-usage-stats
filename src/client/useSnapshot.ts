@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { API_HEADERS } from './api.ts';
+import { API_HEADERS, SNAPSHOT_INTERVAL_MS, SNAPSHOT_LIMIT } from './api.ts';
 
 import type { UsageSnapshot } from '../types.ts';
 
@@ -18,7 +18,7 @@ import type { UsageSnapshot } from '../types.ts';
 export type { UsageAgg, SeriesPoint, ModelStat, SessionStat, UsageSnapshot } from '../types.ts';
 
 /** 每 `intervalMs` 轮询一次服务端快照；返回 [快照, 是否出错, 手动刷新]。 */
-export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean, () => void] {
+export function useSnapshot(intervalMs = SNAPSHOT_INTERVAL_MS): [UsageSnapshot | null, boolean, () => void] {
   const [data, setData] = useState<UsageSnapshot | null>(null);
   const [err, setErr] = useState(false);
   const [tick, setTick] = useState(0);
@@ -36,7 +36,7 @@ export function useSnapshot(intervalMs = 4000): [UsageSnapshot | null, boolean, 
         const response = await fetch('/usage-stats/api/snapshot', {
           method: 'POST',
           headers: API_HEADERS,
-          body: JSON.stringify({ sessionId: null, limit: 500 }),
+          body: JSON.stringify({ sessionId: null, limit: SNAPSHOT_LIMIT }),
         });
         parsed = await response.json().catch(() => ({})) as { ok?: boolean; value?: UsageSnapshot };
       } catch {

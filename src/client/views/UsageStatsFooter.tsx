@@ -23,6 +23,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
 import { Tooltip } from '../components/Tooltip.tsx';
+import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
 import { useDeepSeekBalance } from '../useDeepSeekBalance.ts';
 import { useGoQuota, type GoWindow } from '../useGoQuota.ts';
@@ -33,6 +34,7 @@ import { useZaiQuota, type ZaiWindow } from '../useZaiQuota.ts';
 import css from './UsageStatsFooter.module.css';
 import { UsageStatsPanel } from './UsageStatsPanel.tsx';
 
+import type { LocaleFn } from '../locales.ts';
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 
 export type UsageStatsFooterProps =
@@ -195,8 +197,10 @@ function BalanceTipRow({ dot, label, amount }: { dot: string; label: string; amo
 }
 
 export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
+  // 本地化函数单点转换，组件内统一用 tFn。
+  const tFn = t as unknown as LocaleFn;
   const [open, setOpen] = useState(false);
-  const [data, err, refreshSnapshot] = useSnapshot(4000);
+  const [data, err, refreshSnapshot] = useSnapshot();
   // Go 额度、DeepSeek 余额与 Z.ai 额度抓取开关与间隔来自偏好设置，默认开启、间隔 5 分钟
   const [settings, updateSettings] = useGoSettings();
   const [go, refreshQuota] = useGoQuota(settings.goEnabled, settings.goFetchMinutes);
@@ -459,12 +463,10 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const toggle = () => setOpen((v) => !v);
   const ariaLabel = t('footer.railAria', { tokens: fmtFull(todayTokens), calls: fmtFull(todayCalls) });
 
-  // 是否展示 DeepSeek 行，启用监控且侧边栏展示开关打开、deepseek 非 null 时才渲染，未启用时整行不占位
-  const showDeepSeekRow = settings.showDeepSeekInSidebar && deepseek !== null;
-  const showDeepSeekRail = settings.showDeepSeekInSidebar && deepseek !== null;
-  // 是否展示 Z.ai 行与 rail
-  const showZaiRow = settings.showZaiInSidebar && zai !== null;
-  const showZaiRail = settings.showZaiInSidebar && zai !== null;
+  // 三额度行显隐同一写法：侧边栏展示开关开 + 数据已加载（未启用时 hook 回 null），宽列与 rail 共用。
+  const showZai = settings.showZaiInSidebar && zai !== null;
+  const showGo = settings.showGoInSidebar && go !== null;
+  const showDeepSeek = settings.showDeepSeekInSidebar && deepseek !== null;
 
   // ---- Z.ai 额度，含会话与本周百分比及 Web 搜索次数 ----
   const zaiWindows: ZaiWindowEntry[] =
@@ -504,7 +506,14 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     );
     if (zai.status !== 'ok') {
       if (zai.status === 'no-key') return wrap(t('zai.notConfigured'));
-      if (zai.status === 'no-plan') return wrap(t('zai.noPlan'));
+      if (zai.status === 'no-plan') {
+        return (
+          <div style={{ minWidth: 208, padding: '2px 0' }}>
+            <TipTitle>{t('zai.title')}</TipTitle>
+            <ZaiNoPlan text={t('zai.noPlan')} tone="tip" />
+          </div>
+        );
+      }
       return wrap(t('zai.unavailable'));
     }
     const webReset = zai.webSearches?.resetsAt
@@ -521,9 +530,8 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {zaiWindows.map((w) => {
             const pct = goPercent(w.win);
-            const tFmt = t as unknown as (k: string, p?: Record<string, unknown>) => string;
             const pointsText = w.win.used !== null && w.win.limit !== null
-              ? `${fmt(w.win.used, tFmt)} / ${fmt(w.win.limit, tFmt)}`
+              ? `${fmt(w.win.used, tFn)} / ${fmt(w.win.limit, tFn)}`
               : undefined;
             return (
               <QuotaTipRow
@@ -674,7 +682,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
-            <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+            <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
         </Tooltip>
@@ -684,7 +692,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
-            <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+            <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
         </Tooltip>
@@ -694,7 +702,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
           <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
-            <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+            <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
             <span className={css.goRailChipPct}>!</span>
           </span>
         </Tooltip>
@@ -703,7 +711,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     return (
       <Tooltip content={zaiTipContent} side="top" delayMs={400}>
         <span className={css.goRailChipBox}>
-          <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+          <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
           <span className={css.goRailChipPct}>—</span>
         </span>
       </Tooltip>
@@ -738,7 +746,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           aria-label={ariaLabel}
           onClick={toggle}
         >
-          {showZaiRow && (
+          {showZai && (
             <span className={css.unifiedGoRow}>
               <span className={css.goLabel}>{t('zai.label')}</span>
               {zai.status === 'ok' && zaiWindows.length > 0 && zaiWindows.map(zaiChip)}
@@ -770,7 +778,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
               )}
             </span>
           )}
-          {settings.showGoInSidebar && go !== null && (
+          {showGo && (
             <span className={css.unifiedGoRow}>
               <span className={css.goLabel}>{t('go.label')}</span>
               {go.status === 'ok' && goWindows.length > 0 && goWindows.map(goChip)}
@@ -787,7 +795,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
               )}
             </span>
           )}
-          {showDeepSeekRow && (
+          {showDeepSeek && (
             <span className={css.unifiedGoRow}>
               <span className={css.goLabel}>{t('deepseek.label')}</span>
               {deepseek.status === 'ok' && deepseek.isAvailable && deepseek.balances.length > 0 && deepseek.balances.map((b) => (
@@ -826,7 +834,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                 : (
                   <>
                     <span className={css.badgeCalls}>{fmtFull(todayCalls)}{t('panel.summary.callsSuffix')}</span>
-                    <span className={css.badgeTokens}>· {fmt(todayTokens, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</span>
+                    <span className={css.badgeTokens}>· {fmt(todayTokens, tFn)}</span>
                     {missing && <span className={css.badgeErr}>{fmtFull(data?.failed ?? 0)}</span>}
                   </>
                 )}
@@ -867,17 +875,17 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           aria-label={ariaLabel}
           onClick={toggle}
         >
-          {showZaiRail && (
+          {showZai && (
             <span className={css.goRailChip}>
               {renderZaiRail()}
             </span>
           )}
-          {settings.showGoInSidebar && go !== null && (
+          {showGo && (
             <span className={css.goRailChip}>
               {renderGoRail()}
             </span>
           )}
-          {showDeepSeekRail && (
+          {showDeepSeek && (
             <span className={css.goRailChip}>
               {renderDeepSeekRail()}
             </span>
@@ -887,7 +895,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
             <span className={css.goRailChipBox}>
               <span className={css.goRailChipLabel}>{t('footer.todayLabel')}</span>
               <span className={css.goRailChipPct} style={{ fontSize: 10, lineHeight: '12px', letterSpacing: '-0.2px' }}>
-                {err ? '--' : fmt(todayTokens, t as unknown as (k: string, p?: Record<string, unknown>) => string)}
+                {err ? '--' : fmt(todayTokens, tFn)}
               </span>
             </span>
           </Tooltip>

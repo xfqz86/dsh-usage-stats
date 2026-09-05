@@ -26,6 +26,9 @@ import type { SessionId, SessionEvent, SessionLogOffset } from '@deepseek-ai/dsh
 
 
 
+/** 扫描并发 worker 数：IO 等待为主，4 路并行兼顾吞吐与 sqlite 写竞争。 */
+const SCAN_WORKERS = 4;
+
 /** 复位聚合缓存，重建账本前调用：清空会话/模型/全量/日桶与去重水位与计数。 */
 export function resetStore(store: UsageStore): void {
   store.sessions.clear();
@@ -166,6 +169,7 @@ export async function scanOnce(
 
     // 2) 逐会话：RAW 优先，完整且不受解释器限制，失败则 harness 兜底。
     //    对于无 RAW 的会话，用 headerMap 的 cwd/createdAt 预填充 session_meta，避免 cwd/created_at/last_active 为空。
+    //    worker 取号 `idList[i]; i+=1` 在同步段内完成，await 之前无交错，单线程下无竞态，可安全 4 路并行。
     let i = 0;
     async function worker(): Promise<void> {
       while (i < idList.length) {
@@ -245,7 +249,7 @@ export async function scanOnce(
       }
     }
 
-    const n = Math.max(1, Math.min(4, idList.length || 1));
+    const n = Math.max(1, Math.min(SCAN_WORKERS, idList.length || 1));
     const workers: Promise<void>[] = [];
     for (let k = 0; k < n; k += 1) workers.push(worker());
     await Promise.all(workers.map((w) => w.catch((e) => { store.lastError = 'worker: ' + errorMessage(e); store.failed += 1; })));

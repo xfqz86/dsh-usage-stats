@@ -1,6 +1,7 @@
 /**
  * 统一堆叠柱状图 StackedBar，合并 DateStackedBar 与 ModelStackedBar 为单一组件。
  * 每日一柱、按 token 类型 date 模式或按模型 model 模式堆叠，横向滚动。
+ * date 模式仅展示输入、输出、缓存三段，柱上叠加缓存命中率折线（0-100% 映射柱高，空值断开）。
  * 抽提公共壳逻辑：wrapRef/tipRef、tip/tipPos 状态、滚动到末尾、悬浮定位、空状态、
  * header+图例容器、scroll+grid+axis+tip 壳；差异仅在图例、柱段与 tooltip 的分支渲染。
  * 样式已合并至 StackedBar.module.css，单文件承载公共壳与变体类。
@@ -9,11 +10,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { buildDateStack, buildModelStack, fmtFull, getDateTokenMeta, modelColorAt, type DateRange, type ModelRange } from '../stats.ts';
+import { HIT_RATE_COLOR, buildDateStack, buildModelStack, fmtFull, getDateTokenMeta, hitRateOfDay, modelColorAt, pctOf, type DateRange, type ModelRange } from '../stats.ts';
 
 import css from './StackedBar.module.css';
 
 import type { SeriesPoint } from '../../types.ts';
+import type { LocaleFn } from '../locales.ts';
 import type { ModelStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
@@ -35,6 +37,8 @@ export type StackedBarProps =
 
 export function StackedBar(props: StackedBarProps) {
   const { mode, t } = props;
+  // 本地化函数单点转换，组件内统一用 tFn。
+  const tFn = t as unknown as LocaleFn;
   const isDate = mode === 'date';
 
   // 分支所需的原始输入，保证 hooks 调用顺序稳定
@@ -45,7 +49,7 @@ export function StackedBar(props: StackedBarProps) {
 
   const dateStack = useMemo(() => {
     if (!isDate || dateSeries == null || dateRange == null) return null;
-    return buildDateStack(dateSeries, dateRange, t as unknown as (k: string, p?: Record<string, unknown>) => string);
+    return buildDateStack(dateSeries, dateRange, tFn);
   }, [isDate, dateSeries, dateRange, t]);
 
   const modelStack = useMemo(() => {
@@ -71,10 +75,21 @@ export function StackedBar(props: StackedBarProps) {
   const days = isDate ? (dateStack?.days ?? []) : (modelStack?.days ?? []);
   const max = isDate ? (dateStack?.maxTotal ?? 1) : (modelStack?.maxTotal ?? 1);
   const H = 100; // 柱高
+  // 柱宽与间距需与 StackedBar.module.css 同步：.barCol 宽 18px、.grid/.axis 间距 4px、
+  // .grid 内边距 `0 4px`；svg 以 `left:4px` 对齐首柱左缘（即 grid padding-left），
+  // 总宽 `n*(W+GAP)-GAP`，第 idx 柱中心 `W/2+idx*(W+GAP)`；改 CSS 三处须同步改此处。
+  const BAR_W = 18;
+  const BAR_GAP = 4;
 
   // 模型图例数据，避免非空断言，统一由可选链与回退提供
   const modelList = modelStack?.models ?? [];
   const getModelColor = (provider: string, model: string) => colorMap?.get(provider + '\u0000' + model);
+
+  // 日期模式命中率序列：与 DatesTab 同口径，null 处折线断开
+  const hitRates = useMemo(() => {
+    if (!isDate || !dateStack) return [];
+    return dateStack.days.map((d) => hitRateOfDay(d));
+  }, [isDate, dateStack]);
 
   // 默认滚动到今日列即最右侧，范围切换或数据更新时重新对齐
   useEffect(() => {
@@ -119,12 +134,20 @@ export function StackedBar(props: StackedBarProps) {
   // 图例渲染：避免嵌套三元，改用 if 分支
   const renderLegend = () => {
     if (isDate) {
-      return getDateTokenMeta(t as unknown as (k: string, p?: Record<string, unknown>) => string).map((meta) => (
-        <span key={meta.key} className={css.legendItem}>
-          <span className={css.legendDot} style={{ background: meta.color }} />
-          <span>{meta.label}</span>
-        </span>
-      ));
+      return (
+        <>
+          {getDateTokenMeta(tFn).map((meta) => (
+            <span key={meta.key} className={css.legendItem}>
+              <span className={css.legendDot} style={{ background: meta.color }} />
+              <span>{meta.label}</span>
+            </span>
+          ))}
+          <span key="hitRate" className={css.legendItem}>
+            <span className={css.legendLine} style={{ background: HIT_RATE_COLOR }} />
+            <span>{t('table.hitRate')}</span>
+          </span>
+        </>
+      );
     }
     if (modelList.length === 0) return null;
     return (
@@ -171,6 +194,65 @@ export function StackedBar(props: StackedBarProps) {
     });
   };
 
+  // 缓存命中率折线叠加：0-100% 映射到柱高 H，null 处断开，仅 date 模式
+  const renderHitRateOverlay = () => {
+    if (!isDate || hitRates.length === 0) return null;
+    const totalWidth = hitRates.length * (BAR_W + BAR_GAP) - BAR_GAP;
+    if (totalWidth <= 0) return null;
+    const pts = hitRates.map((rate, idx) => {
+      if (rate === null) return null;
+      const x = BAR_W / 2 + idx * (BAR_W + BAR_GAP);
+      const y = Math.max(0, Math.min(H, H - (rate / 100) * H));
+      return { x, y };
+    });
+    // 连续非空点成段，单点仅绘圆点不断线
+    const lines: { x: number; y: number }[][] = [];
+    let cur: { x: number; y: number }[] = [];
+    for (const p of pts) {
+      if (p === null) {
+        if (cur.length >= 2) lines.push(cur);
+        cur = [];
+      } else {
+        cur.push(p);
+      }
+    }
+    if (cur.length >= 2) lines.push(cur);
+    const dots = pts.filter((p): p is { x: number; y: number } => p !== null);
+    if (dots.length === 0) return null;
+    return (
+      <svg
+        className={css.hitRateSvg}
+        width={totalWidth}
+        height={H}
+        viewBox={'0 0 ' + totalWidth + ' ' + H}
+        aria-hidden="true"
+      >
+        {lines.map((seg, i) => (
+          <polyline
+            key={'line-' + i}
+            points={seg.map((q) => q.x + ',' + q.y).join(' ')}
+            fill="none"
+            stroke={HIT_RATE_COLOR}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ))}
+        {dots.map((q, i) => (
+          <circle
+            key={'dot-' + i}
+            cx={q.x}
+            cy={q.y}
+            r={2}
+            fill={HIT_RATE_COLOR}
+            stroke="var(--dsw-alias-bg-base, #fff)"
+            strokeWidth={1}
+          />
+        ))}
+      </svg>
+    );
+  };
+
   return (
     <div className={css.root}>
       <div className={css.header}>
@@ -198,6 +280,7 @@ export function StackedBar(props: StackedBarProps) {
           <div style={{ position: 'absolute', left: 0, right: 0, top: '25%', height: 1, background: 'var(--dsw-alias-border-l1)', opacity: 0.35, pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 1, background: 'var(--dsw-alias-border-l1)', opacity: 0.35, pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', left: 0, right: 0, top: '75%', height: 1, background: 'var(--dsw-alias-border-l1)', opacity: 0.35, pointerEvents: 'none' }} />
+          {renderHitRateOverlay()}
         </div>
         <div className={css.axis}>
           {(() => {
@@ -235,6 +318,11 @@ export function StackedBar(props: StackedBarProps) {
                     </div>
                   ))
                 )}
+                <div className={css.tipRow}>
+                  <span className={css.tipDot} style={{ background: HIT_RATE_COLOR }} />
+                  <span className={css.tipModel}>{t('table.hitRate')}</span>
+                  <span className={css.tipVal}>{pctOf(hitRateOfDay(tipDay as { input?: number; cacheRead?: number }))}</span>
+                </div>
               </>
             ) : (
               <>

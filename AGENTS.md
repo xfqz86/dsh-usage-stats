@@ -6,7 +6,7 @@
 
 harness 每个包已导出完整精确的类型（`Context`/`ClientContext`/`SessionEvent`/`TokenUsage`/`PropsRuntime`/`InjectFace`/`Modal` 等），**禁止**为 `ctx/slots/locale/session/primitives/注入服务` 手写结构、最小接口或 ambient 镜像；**必须** `import type` harness 导出，用法与 `packages/extensions/ui-cordis` 等一致。
 
-实现：`@deepseek-ai/*` 已发布至 npm（版本对齐见 `AGENTS.local.md`），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 仅 `devDependencies`，服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。
+实现：`@deepseek-ai/*` 已发布至 npm（版本对齐见 `AGENTS.local.md`），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 仅 `devDependencies`，服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。例外：服务端额度/余额查询允许值导入 `credentialRef`（`@deepseek-ai/dsh-credentials`），DSH 基座原生提供该模块，`tsdown` host 侧 `neverBundle` 不打包，npm 发布后仍由基座解析，不随包安装。
 
 服务端范式：
 ```ts
@@ -43,7 +43,7 @@ export function apply(ctx: ClientContext): void {
 - **风格与检查**：遵循 **Google TypeScript Style Guide**；`eslint.config.mjs`（flat config，`eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic`，分 `host/client/scripts` 三类 overrides）为唯一事实来源；新增代码须 `npx eslint .` 零 `errors`。
 - 纯逻辑置于无 React 模块（`src/utils.ts`/`src/host/agg.ts`/`src/client/stats.ts`）便于测试。
 - **tsx 一组件一文件**（如 `OverviewTab/DatesTab/SessionsTab` 各独立）；**协议类型集中 `src/types.ts`**（零运行时，host/client 各自 re-export），`src/utils.ts` 仅纯函数。
-- **样式用 CSS Modules**（`*.module.css` + `import css`），与 `ui-sidebar/primitives` 一致；颜色一律 `var(--dsw-alias-*)`；禁止字符串 CSS。独立 bundle 由 `scripts/css-modules-inline.mjs`（lightningcss）编译内联为 `<style data-plugin-css>`。
+- **样式用 CSS Modules**（`*.module.css` + `import css`），与 `ui-sidebar/primitives` 一致；界面静态样式颜色一律 `var(--dsw-alias-*)`，图表数据驱动调色板（`MODEL_PALETTE`/`DATE_TOKEN_META`/`HIT_RATE_COLOR`，集中定义于 `src/client/stats.ts`，`fill` 属性不解析 `var()`）为唯一豁免；禁止字符串 CSS。独立 bundle 由 `scripts/css-modules-inline.mjs`（lightningcss）编译内联为 `<style data-plugin-css>`。
 - **组件归属**：可复用通用组件归 `src/client/components`，`src/client/views` 仅 Tab 级视图。
 - **注释中文**，标识符/类型/错误消息英文；文档中文。
 
@@ -69,14 +69,15 @@ export function apply(ctx: ClientContext): void {
 4. **重启恢复**：`bootstrap()` 优先 `hasAggregates→rebuildWithDelta`（加载 `agg_*` + 补 `sealedUntil` 后增量），其次 `hasEvents→rebuildFromEvents`，否则全量扫描；日志删除仍可从介质恢复。
 5. **重建**：`POST /usage-stats/api/rebuild` → `ledger.clear()`+`resetStore`+`scanOnce`；`clear` 仅清库，`seal` 手动物化。
 
-**折叠语义**：`foldRecord` 处理种子/`title`/`usable(data.usage存在)` 事件，按水位去重后 `append`+`foldLedgerEvent` 折入日桶/总桶/模型并更新 `maxSeq/lastActive`；`foldLedgerEvent` 归一非有限/负数→0，若传 `ledger` 则同步 `incrementAgg`（失败仅 `lastError`）。
+**折叠语义**：`foldRecord` 处理种子/`title`/`usable(data.usage存在)` 事件，零用量事件直接丢弃不入账本；按水位去重后 `append`+`foldLedgerEvent` 折入日桶/总桶/模型并更新 `maxSeq/lastActive`；`foldLedgerEvent` 归一非有限/负数→0并向下取整，若传 `ledger` 则同步 `incrementAgg`（失败仅 `lastError`）。
 
 ## 6. 统计口径
-- 数据源：`assistant/message` 且 `data.usage` 存在（`toLedgerEvent` 非有限/负数→0）。
+- 数据源：`assistant/message` 且 `data.usage` 存在（`toLedgerEvent` 非有限/负数→0并向下取整，零用量直接丢弃不入账本）。
 - `total=input+output+cacheRead+cacheWrite`，`reasoning` 单列。
 - 按模型：`data.message.source.provider/model`，缺失 `unknown`。
 - 按会话：标题/`cwd`/创建时间/最近活跃。
 - 本地日划分：`startOfDay`（`utils.ts` 唯一来源，避免 UTC 漂移）。
+- 展示口径：日期趋势柱仅堆叠输入/输出/缓存三段（柱高按三段求和，`total` 字段仍为全口径），缓存命中率=`cacheRead/(cacheRead+input)`；快照序列截断至最近 366 天。
 
 ## 7. 构建（tsdown 双 bundle + CSS 内联）
 - `lib/index.js`（Host, Node ESM，`@xfqz86/dsh-usage-stats`）：仅 Node 内置+本地，DSH 服务 cordis 注入。
@@ -86,25 +87,27 @@ export function apply(ctx: ClientContext): void {
 ## 8. 运行时与 JSON API
 - **注入**：`inject={webServer,sessionQuery,sessionPersistence:必需, credentials:可选}`；先挂实时监听再 `bootstrap`。
 - **路由**：`ctx.webServer.register({kind:'prefix', path:'/usage-stats/api', handler})` 仅 `POST`，先回环围栏（防 DNS 重绑定）+ CSRF 自定义头围栏。
-- 协议细节（`snapshot/go-quota/deepseek-balance/rebuild/clear/seal`、TTL、偏好字段）见 `docs/API.md`。
+- 协议细节（`snapshot/go-quota/deepseek-balance/zai-quota/rebuild/clear/seal`、TTL、偏好字段）见 `docs/API.md`；快照 `series`/`models[].series` 截断至最近 366 天。
 
 ## 9. 验证（每次改动必须）
 ```bash
 npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
 pnpm build
+node --experimental-strip-types test/pure.mjs
 node test/smoke.mjs
 node test/client-bundle.mjs
 ```
+- `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/日志解析/围栏/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
 - `smoke.mjs`：mock `webServer/sessionQuery/sessionPersistence`，真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→实时重放20条去重→rebuild一致→回环围栏→go-quota/deepseek-balance 结构化→空清单仍从介质重建394。
 - `client-bundle.mjs`：验证 `window.__ModuleLoader__.load` 注册、每 `*.module.css` 对应 `data-plugin-css` 样式含 scoped 类名。
 
 ## 10. 文档维护
 - `AGENTS.md` 为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它，结构/协议现状记 `docs/*` 或文件头注释。
-- `docs/STRUCTURE.md` 生成文件（`pnpm tree`），`docs/API.md` 随接口维护；`README` 面向用户；`AGENTS.local.md` 放本机私有与强时效事实。
+- `docs/STRUCTURE.md` 生成文件（`pnpm tree`），`docs/API.md` 随接口维护，`docs/STYLE.md` 为风格经验（lint 之外的统一约定，新会话先读）；`README` 面向用户；`AGENTS.local.md` 放本机私有与强时效事实。
 
 ## 11. 提交（Conventional Commits）
-格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；提交前须过 §9 四项。
+格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；提交前须过 §9 全项。
 
 ## 12. 交付物
 仅陈述最终确定的规则/架构/协议/实现，不写入过程备注与待定方案；过程内容走会话记录，不入库。

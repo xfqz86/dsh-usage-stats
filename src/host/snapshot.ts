@@ -5,7 +5,7 @@
  * UsageAgg 单一定义在 types.ts，host 构建与 client 消费共用同一类型面，
  * 避免两端镜像漂移；splitModelKey 来自 utils.ts，host 与 client 共用。
  */
-import { splitModelKey } from '../utils.ts';
+import { SERIES_MAX_DAYS, splitModelKey } from '../utils.ts';
 
 import { metaOf } from './store.ts';
 
@@ -41,7 +41,12 @@ export function usageOf(agg: Agg): UsageAgg {
 }
 
 /** 无用量会话的占位 usage。 */
-export const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+export const zeroUsage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+
+/** 截断已排序序列至共享上限（`SERIES_MAX_DAYS`，与客户端 `all` 范围对齐），避免长历史下每 4s 全量序列化开销。 */
+function truncateSeries(series: SeriesPoint[]): SeriesPoint[] {
+  return series.length > SERIES_MAX_DAYS ? series.slice(series.length - SERIES_MAX_DAYS) : series;
+}
 
 /** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。 */
 export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | null, opts?: { limit?: number }): UsageSnapshot {
@@ -73,13 +78,13 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
   for (const [key, agg] of store.models) {
     const { provider, model } = splitModelKey(key);
     const dailyMap = store.modelDaily.get(key);
-    const series = dailyMap ? buildSeries(dailyMap) : [];
+    const series = dailyMap ? truncateSeries(buildSeries(dailyMap)) : [];
     models.push({ provider, model, calls: agg.calls, usage: usageOf(agg), series });
   }
   models.sort((a, b) => b.usage.total - a.usage.total);
 
   const allAgg = store.allAgg;
-  const allSeries = buildSeries(store.allDaily);
+  const allSeries = truncateSeries(buildSeries(store.allDaily));
   let current: UsageSnapshot['current'] = null;
   let currentSeries: SeriesPoint[] = [];
   if (sessionId) {

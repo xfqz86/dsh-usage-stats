@@ -12,6 +12,7 @@ import {
 
 import { goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
 import shared from '../components/UsageStatsCommon.module.css';
+import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, todayOf } from '../stats.ts';
 
 import { HeroTile } from './HeroTile.tsx';
@@ -19,6 +20,7 @@ import css from './OverviewTab.module.css';
 import { UsageHeatmap } from './UsageHeatmap.tsx';
 
 import type { DeepSeekBalance, DeepSeekBalanceInfo, ZaiQuota } from '../../types.ts';
+import type { LocaleFn } from '../locales.ts';
 import type { GoQuota } from '../useGoQuota.ts';
 import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
@@ -74,6 +76,8 @@ export function OverviewTab({
   /** 是否启用 Z.ai 额度监控，关闭时隐藏 Z.ai 卡片。 */
   zaiEnabled: boolean
 }) {
+  // 本地化函数单点转换，组件内统一用 tFn。
+  const tFn = t as unknown as LocaleFn;
   const all = value?.all ?? {
     calls: 0,
     usage: {
@@ -146,7 +150,7 @@ export function OverviewTab({
               </div>,
             ])}
           </div>
-          <div className={css.deepseekFetchedAt}>
+          <div className={css.tileFetchedAt}>
             {t('updatedAt')} {new Date(deepseek.fetchedAt).toLocaleTimeString()}
           </div>
         </>
@@ -165,32 +169,34 @@ export function OverviewTab({
     }
     if (go.status === 'ok') {
       return (
-        <div className={css.goTileRows}>
-          {GO_ROWS.map(([key, labelKey]) => {
-            const win = go[key];
-            if (win === null) return null;
-            const pct = goPercent(win);
-            const level = goLevelOf(pct);
-            return (
-              <div className={css.goTileRow} key={key}>
-                <span className={css.goTileTop}>
-                  <span className={css.goLabel}>{t(labelKey)}</span>
-                  <span className={goPctClass(level)}>{pct}%</span>
-                </span>
-                <span className={css.goBar}>
-                  <span
-                    className={goBarFillClass(level)}
-                    style={{ width: pct + '%' }}
-                  />
-                </span>
-                <span className={css.goReset}>{goResetsAt(t, win)}</span>
-              </div>
-            );
-          })}
-          <div className={css.deepseekFetchedAt}>
+        <>
+          <div className={css.goTileRows}>
+            {GO_ROWS.map(([key, labelKey]) => {
+              const win = go[key];
+              if (win === null) return null;
+              const pct = goPercent(win);
+              const level = goLevelOf(pct);
+              return (
+                <div className={css.goTileRow} key={key}>
+                  <span className={css.goTileTop}>
+                    <span className={css.goLabel}>{t(labelKey)}</span>
+                    <span className={goPctClass(level)}>{pct}%</span>
+                  </span>
+                  <span className={css.goBar}>
+                    <span
+                      className={goBarFillClass(level)}
+                      style={{ width: pct + '%' }}
+                    />
+                  </span>
+                  <span className={css.goReset}>{goResetsAt(t, win)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className={css.tileFetchedAt}>
             {t('updatedAt')} {new Date(go.fetchedAt).toLocaleTimeString()}
           </div>
-        </div>
+        </>
       );
     }
     if (go.status === 'no-key') {
@@ -213,98 +219,105 @@ export function OverviewTab({
         return <span className={shared.goHint}>{t('zai.noData')}</span>;
       }
       return (
-        <div className={css.goTileRows}>
-          {zai.session && (() => {
-            const pct = goPercent(zai.session);
-            const level = goLevelOf(pct);
-            const tFmt = t as unknown as (k: string, p?: Record<string, unknown>) => string;
-            return (
-              <div className={css.goTileRow} key="session">
-                <span className={css.goTileTop}>
-                  <span className={css.goLabel}>{t('zai.session')}</span>
-                  {zai.session.used !== null && zai.session.limit !== null && (
-                    <span className={css.goPoints}>{fmt(zai.session.used, tFmt)} / {fmt(zai.session.limit, tFmt)}</span>
-                  )}
-                  <span className={goPctClass(level)}>{pct}%</span>
-                </span>
-                <span className={css.goBar}>
-                  <span
-                    className={goBarFillClass(level)}
-                    style={{ width: pct + '%' }}
-                  />
-                </span>
-                <span className={css.goReset}>{goResetsAt(t, zai.session)}</span>
-              </div>
-            );
-          })()}
-          {zai.weekly && (() => {
-            const pct = goPercent(zai.weekly);
-            const level = goLevelOf(pct);
-            const tFmt = t as unknown as (k: string, p?: Record<string, unknown>) => string;
-            return (
-              <div className={css.goTileRow} key="weekly">
-                <span className={css.goTileTop}>
-                  <span className={css.goLabel}>{t('zai.weekly')}</span>
-                  {zai.weekly.used !== null && zai.weekly.limit !== null && (
-                    <span className={css.goPoints}>{fmt(zai.weekly.used, tFmt)} / {fmt(zai.weekly.limit, tFmt)}</span>
-                  )}
-                  <span className={goPctClass(level)}>{pct}%</span>
-                </span>
-                <span className={css.goBar}>
-                  <span
-                    className={goBarFillClass(level)}
-                    style={{ width: pct + '%' }}
-                  />
-                </span>
-                <span className={css.goReset}>{goResetsAt(t, zai.weekly)}</span>
-              </div>
-            );
-          })()}
-          {zai.webSearches && (() => {
-            const pct = Math.round(
-              Math.max(0, Math.min(100, zai.webSearches.percent)),
-            );
-            const level = goLevelOf(pct);
-            return (
-              <div className={css.goTileRow} key="webSearches">
-                <span className={css.goTileTop}>
-                  <span className={css.goLabel}>{t('zai.webSearches')}</span>
-                  <span className={goPctClass(level)}>
-                    {t('zai.webSearchesCount', {
-                      used: zai.webSearches.used,
-                      limit: zai.webSearches.limit,
-                    })}
+        <>
+          <div className={css.goTileRows}>
+            {zai.session && (() => {
+              const pct = goPercent(zai.session);
+              const level = goLevelOf(pct);
+              return (
+                <div className={css.goTileRow} key="session">
+                  <span className={css.goTileTop}>
+                    <span className={css.goLabel}>{t('zai.session')}</span>
+                    {zai.session.used !== null && zai.session.limit !== null && (
+                      <span className={css.goPoints}>{fmt(zai.session.used, tFn)} / {fmt(zai.session.limit, tFn)}</span>
+                    )}
+                    <span className={goPctClass(level)}>{pct}%</span>
                   </span>
-                </span>
-                <span className={css.goBar}>
-                  <span
-                    className={goBarFillClass(level)}
-                    style={{ width: pct + '%' }}
-                  />
-                </span>
-                <span className={css.goReset}>
-                  {zai.webSearches.resetsAt
-                    ? t('zai.resetsAt', {
-                      time: new Date(
-                        zai.webSearches.resetsAt,
-                      ).toLocaleString(),
-                    })
-                    : ''}
-                </span>
-              </div>
-            );
-          })()}
-          <div className={css.deepseekFetchedAt}>
+                  <span className={css.goBar}>
+                    <span
+                      className={goBarFillClass(level)}
+                      style={{ width: pct + '%' }}
+                    />
+                  </span>
+                  <span className={css.goReset}>{goResetsAt(t, zai.session)}</span>
+                </div>
+              );
+            })()}
+            {zai.weekly && (() => {
+              const pct = goPercent(zai.weekly);
+              const level = goLevelOf(pct);
+              return (
+                <div className={css.goTileRow} key="weekly">
+                  <span className={css.goTileTop}>
+                    <span className={css.goLabel}>{t('zai.weekly')}</span>
+                    {zai.weekly.used !== null && zai.weekly.limit !== null && (
+                      <span className={css.goPoints}>{fmt(zai.weekly.used, tFn)} / {fmt(zai.weekly.limit, tFn)}</span>
+                    )}
+                    <span className={goPctClass(level)}>{pct}%</span>
+                  </span>
+                  <span className={css.goBar}>
+                    <span
+                      className={goBarFillClass(level)}
+                      style={{ width: pct + '%' }}
+                    />
+                  </span>
+                  <span className={css.goReset}>{goResetsAt(t, zai.weekly)}</span>
+                </div>
+              );
+            })()}
+            {zai.webSearches && (() => {
+              const pct = Math.round(
+                Math.max(0, Math.min(100, zai.webSearches.percent)),
+              );
+              const level = goLevelOf(pct);
+              return (
+                <div className={css.goTileRow} key="webSearches">
+                  <span className={css.goTileTop}>
+                    <span className={css.goLabel}>{t('zai.webSearches')}</span>
+                    <span className={goPctClass(level)}>
+                      {t('zai.webSearchesCount', {
+                        used: zai.webSearches.used,
+                        limit: zai.webSearches.limit,
+                      })}
+                    </span>
+                  </span>
+                  <span className={css.goBar}>
+                    <span
+                      className={goBarFillClass(level)}
+                      style={{ width: pct + '%' }}
+                    />
+                  </span>
+                  <span className={css.goReset}>
+                    {zai.webSearches.resetsAt
+                      ? t('zai.resetsAt', {
+                        time: new Date(
+                          zai.webSearches.resetsAt,
+                        ).toLocaleString(),
+                      })
+                      : ''}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+          <div className={css.tileFetchedAt}>
             {t('updatedAt')} {new Date(zai.fetchedAt).toLocaleTimeString()}
           </div>
-        </div>
+        </>
       );
     }
     if (zai.status === 'no-key') {
       return <span className={shared.goHint}>{t('zai.notConfigured')}</span>;
     }
     if (zai.status === 'no-plan') {
-      return <span className={shared.goHint}>{t('zai.noPlan')}</span>;
+      return (
+        <>
+          <ZaiNoPlan text={t('zai.noPlan')} />
+          <div className={css.tileFetchedAt}>
+            {t('updatedAt')} {new Date(zai.fetchedAt).toLocaleTimeString()}
+          </div>
+        </>
+      );
     }
     return <span className={shared.goHint}>{t('zai.unavailable')}</span>;
   }
@@ -399,7 +412,8 @@ export function OverviewTab({
                     {zai.plan}
                   </span>
                 )}
-                {zai?.status === 'ok' && (
+                {/* 未开通态也允许手动刷新，开通订阅后可第一时间重查。 */}
+                {(zai?.status === 'ok' || zai?.status === 'no-plan') && (
                   <button
                     type="button"
                     className={css.goRefresh}
