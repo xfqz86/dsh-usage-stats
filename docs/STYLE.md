@@ -85,3 +85,25 @@
 
 `foldRecord` 是实时与扫描的唯一入口：`seq>=0` 按 `maxSeq` 水位，`seq=-1` 按主键存在性；
 零用量事件直接丢弃不入账本。改折叠语义先改 `AGENTS.md §5/§6`，再改代码。
+
+## 11. 同一概念一种写法
+
+多次会话协作最容易烂的就是这里：同一个东西，三个人写三样。
+动笔前先 grep 同义词（avg/mean、hitRate、showXRow/showX、可空判断），有现成写法就复用：
+
+- **布尔条件**：同一组显隐只用一种形态。额度行显隐统一为预计算
+  `showZai/showGo/showDeepSeek`（宽列与 rail 共用），不在 JSX 里 inline 重写条件；
+  新增同类行时跟这个写法。
+- **t 转换**：每组件只转一次（`const tFn = t as unknown as LocaleFn` 置顶），
+  不在 20 个调用点各转一次；范围元组的文案键类型标 `UsageStatsKey`，消灭 `as never`。
+- **表格**：排序分页走 `useSortTable` + `stableSort`，比较函数只留 switch 返回值；
+  命中率/平均每次调用只用 `hitRateOfDay`/`avgPerCall`（`stats.ts`），不在各表各写一份；
+  空值渲染优先用自带缺省的 `pctOf/fmtFull`（回 `--`），少写 `x == null ? '--' : …` 三元。
+- **额度三件套**：轮询骨架只活在 `useQuota`，服务端查询只活在
+  `createQuotaQuery`/`resolveFirstKey`（`host/quota.ts`），新增额度来源时配
+  端点/键名/error 占位，不抄整份文件。
+- **确认操作/间隔输入**：走 `useConfirmOp`/`useIntervalText`，接口调用走 `postLedgerApi`。
+- **判空**：可空类型全是 `T | null`，用 `=== null`/`!== null`；`!= null` 只留给
+  运行时可能出现 undefined 的防御位（如 `p?.t`）；`== null` 不出现。
+- **新文件归属**：可复用 hook 进 `src/client/use*.ts`，跨端常量进 `utils.ts`，
+  别在视图文件里各建一份。

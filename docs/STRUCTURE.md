@@ -63,10 +63,14 @@ dsh-usage-stats/
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── settings.ts ← 浏览器端插件偏好设置：OpenCode Go 额度与 DeepSeek 余额监控的偏好设置。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
+│   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
 │   │   ├── useDeepSeekBalance.ts ← DeepSeek 余额轮询，浏览器端。
 │   │   ├── useGoQuota.ts ← OpenCode Go 订阅额度轮询，浏览器端实现。
 │   │   ├── useGoSettings.ts ← 偏好设置的 React hook（浏览器端）。
+│   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
+│   │   ├── useQuota.ts ← 额度轮询共享 hook 工厂（浏览器端）。
 │   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
+│   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
 │   │   └── useZaiQuota.ts ← Z.ai 额度轮询，浏览器端实现。
 │   ├── host/
 │   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink， 事件守卫 usable、modelKeyOf。
@@ -76,6 +80,7 @@ dsh-usage-stats/
 │   │   ├── index.ts ← 用量统计的服务端 Host 插件入口：账本模式装配，自管理 sqlite 介质。
 │   │   ├── ledger.ts ← 原始事件流账本 Ledger：用量事件的唯一事实来源 —— 自管理 SQLite。
 │   │   ├── logs.ts ← 会话日志的目录发现与 NDJSON 解析。
+│   │   ├── quota.ts ← 额度查询共享基元（服务端）：浏览器 UA、key 回退解析、TTL 缓存单飞工厂。
 │   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，经 foldRecord 写入账本，自管理 sqlite 的 events、 session_meta 表并折叠聚合缓存。
 │   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 /usage-stats/api/snapshot 的响应 value，纯函数，不触碰 HTTP、ctx。
 │   │   ├── store.ts ← 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、全量维度组织。
