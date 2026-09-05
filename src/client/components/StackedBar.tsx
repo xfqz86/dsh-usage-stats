@@ -37,6 +37,8 @@ export type StackedBarProps =
 
 export function StackedBar(props: StackedBarProps) {
   const { mode, t } = props;
+  // 本地化函数单点转换，组件内统一用 tFn。
+  const tFn = t as unknown as LocaleFn;
   const isDate = mode === 'date';
 
   // 分支所需的原始输入，保证 hooks 调用顺序稳定
@@ -47,7 +49,7 @@ export function StackedBar(props: StackedBarProps) {
 
   const dateStack = useMemo(() => {
     if (!isDate || dateSeries == null || dateRange == null) return null;
-    return buildDateStack(dateSeries, dateRange, t as unknown as LocaleFn);
+    return buildDateStack(dateSeries, dateRange, tFn);
   }, [isDate, dateSeries, dateRange, t]);
 
   const modelStack = useMemo(() => {
@@ -134,7 +136,7 @@ export function StackedBar(props: StackedBarProps) {
     if (isDate) {
       return (
         <>
-          {getDateTokenMeta(t as unknown as LocaleFn).map((meta) => (
+          {getDateTokenMeta(tFn).map((meta) => (
             <span key={meta.key} className={css.legendItem}>
               <span className={css.legendDot} style={{ background: meta.color }} />
               <span>{meta.label}</span>
@@ -198,7 +200,7 @@ export function StackedBar(props: StackedBarProps) {
     const totalWidth = hitRates.length * (BAR_W + BAR_GAP) - BAR_GAP;
     if (totalWidth <= 0) return null;
     const pts = hitRates.map((rate, idx) => {
-      if (rate == null) return null;
+      if (rate === null) return null;
       const x = BAR_W / 2 + idx * (BAR_W + BAR_GAP);
       const y = Math.max(0, Math.min(H, H - (rate / 100) * H));
       return { x, y };
@@ -207,7 +209,7 @@ export function StackedBar(props: StackedBarProps) {
     const lines: { x: number; y: number }[][] = [];
     let cur: { x: number; y: number }[] = [];
     for (const p of pts) {
-      if (p == null) {
+      if (p === null) {
         if (cur.length >= 2) lines.push(cur);
         cur = [];
       } else {
@@ -215,7 +217,7 @@ export function StackedBar(props: StackedBarProps) {
       }
     }
     if (cur.length >= 2) lines.push(cur);
-    const dots = pts.filter((p): p is { x: number; y: number } => p != null);
+    const dots = pts.filter((p): p is { x: number; y: number } => p !== null);
     if (dots.length === 0) return null;
     return (
       <svg
@@ -319,7 +321,7 @@ export function StackedBar(props: StackedBarProps) {
                 <div className={css.tipRow}>
                   <span className={css.tipDot} style={{ background: HIT_RATE_COLOR }} />
                   <span className={css.tipModel}>{t('table.hitRate')}</span>
-                  <span className={css.tipVal}>{(() => { const h = hitRateOfDay(tipDay as { input?: number; cacheRead?: number }); return h == null ? '--' : pctOf(h); })()}</span>
+                  <span className={css.tipVal}>{pctOf(hitRateOfDay(tipDay as { input?: number; cacheRead?: number }))}</span>
                 </div>
               </>
             ) : (

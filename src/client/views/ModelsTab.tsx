@@ -11,38 +11,24 @@ import { useEffect, useMemo, useState } from 'react';
 import { ModelPieChart } from '../components/ModelPieChart.tsx';
 import { Pagination } from '../components/Pagination.tsx';
 import { StackedBar } from '../components/StackedBar.tsx';
-import { ThSortable, type SortDir } from '../components/ThSortable.tsx';
+import { ThSortable } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { fmt, fmtFull, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts';
+import { avgPerCall, fmt, fmtFull, hitRateOfDay, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts';
+import { stableSort, useSortTable } from '../useSortTable.ts';
 
 import css from './ModelsTab.module.css';
 
-import type { LocaleFn } from '../locales.ts';
+import type { LocaleFn, UsageStatsKey } from '../locales.ts';
 import type { ModelStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 const PAGE_SIZE = 20;
 
-/** 缓存命中率：cacheRead / (cacheRead + input) *100，1 位小数；分母 0 时为 null。 */
-function hitRateOfModel(usage: { input?: number; cacheRead?: number }): number | null {
-  const input = usage.input ?? 0;
-  const cacheRead = usage.cacheRead ?? 0;
-  const denom = input + cacheRead;
-  if (denom <= 0) return null;
-  return Math.round((cacheRead / denom) * 1000) / 10;
-}
-
-/** 平均每次调用：total / calls 取整；calls 为 0 时为 null。 */
-function avgOfModel(total: number, calls: number): number | null {
-  if (!calls || calls <= 0) return null;
-  return Math.round(total / calls);
-}
-
 /** 排序键：与表头一一对应，含模型文本、数值列与占比。 */
 type SortKey = 'model' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg' | 'share';
 
 /** 时间范围选项：值 + 文案键，与 locales 的 modelRange.* 对齐，默认1年。 */
-const MODEL_RANGES: [ModelRange, string][] = [
+const MODEL_RANGES: [ModelRange, UsageStatsKey][] = [
   ['7d', 'modelRange.7d'],
   ['14d', 'modelRange.14d'],
   ['30d', 'modelRange.30d'],
@@ -59,29 +45,21 @@ export function ModelsTab({
   models: ModelStat[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
+  // 本地化函数单点转换：纯函数要的无命名空间形态，组件内统一用 tFn。
+  const tFn = t as unknown as LocaleFn;
   const [range, setRange] = useState<ModelRange>('365d');
-  const [sortKey, setSortKey] = useState<SortKey>('total');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [page, setPage] = useState(1);
-
-  const handleSort = (key: SortKey) => {
-    if (key === sortKey) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortKey(key);
-      setSortDir('desc');
-    }
-    setPage(1);
-  };
 
   // 按时间范围过滤：基于 model.series 的按日聚合，host 已下发 daily 细分
   // 过滤后按 total 降序为初序，后续排序在 filtered 基础上进行
   const filteredModels = useMemo(() => filterModelsByRange(models, range), [models, range]);
 
+  // 排序分页三件套（三表同一交互，比较函数保留领域差异；排序不增删行）
+  const { sortKey, sortDir, handleSort, page, totalPages, setPage, slice } = useSortTable<SortKey>('total', filteredModels.length, PAGE_SIZE);
+
   // 范围切换时分页回到首位
   useEffect(() => {
     setPage(1);
-  }, [range]);
+  }, [range, setPage]);
 
   // 占比：基于过滤后总和，非最大值，最大余数法保证 1 位小数总和 100%
   // 需在排序前计算，保证 share 与过滤后顺序一一对应，再按排序键重排时 share 随行
@@ -106,69 +84,24 @@ export function ModelsTab({
     } else {
       shares = filteredModels.map(() => 0);
     }
-    const withIdx = filteredModels.map((m, i) => ({ m, i, share: shares[i] ?? 0 }));
-    withIdx.sort((a, b) => {
-      let cmp = 0;
+    const withShares = filteredModels.map((m, i) => ({ m, i, share: shares[i] ?? 0 }));
+    return stableSort(withShares, (a, b) => {
       switch (sortKey) {
-        case 'model': {
-          const av = (a.m.model || '') + ' ' + (a.m.provider || '');
-          const bv = (b.m.model || '') + ' ' + (b.m.provider || '');
-          cmp = av.localeCompare(bv, 'zh-Hans-CN');
-          break;
-        }
-        case 'input':
-          cmp = (a.m.usage.input || 0) - (b.m.usage.input || 0);
-          break;
-        case 'output':
-          cmp = (a.m.usage.output || 0) - (b.m.usage.output || 0);
-          break;
-        case 'cacheRead':
-          cmp = (a.m.usage.cacheRead || 0) - (b.m.usage.cacheRead || 0);
-          break;
-        case 'total':
-          cmp = usageTotal(a.m.usage) - usageTotal(b.m.usage);
-          break;
-        case 'hitRate': {
-          const ah = hitRateOfModel(a.m.usage);
-          const bh = hitRateOfModel(b.m.usage);
-          const av = ah ?? -1;
-          const bv = bh ?? -1;
-          cmp = av - bv;
-          break;
-        }
-        case 'calls':
-          cmp = (a.m.calls || 0) - (b.m.calls || 0);
-          break;
-        case 'avg': {
-          const av = avgOfModel(usageTotal(a.m.usage), a.m.calls);
-          const bv = avgOfModel(usageTotal(b.m.usage), b.m.calls);
-          const avv = av ?? -1;
-          const bvv = bv ?? -1;
-          cmp = avv - bvv;
-          break;
-        }
-        case 'share':
-          cmp = (a.share || 0) - (b.share || 0);
-          break;
-        default:
-          cmp = 0;
+        case 'model': return `${a.m.model || ''} ${a.m.provider || ''}`.localeCompare(`${b.m.model || ''} ${b.m.provider || ''}`, 'zh-Hans-CN');
+        case 'input': return (a.m.usage.input || 0) - (b.m.usage.input || 0);
+        case 'output': return (a.m.usage.output || 0) - (b.m.usage.output || 0);
+        case 'cacheRead': return (a.m.usage.cacheRead || 0) - (b.m.usage.cacheRead || 0);
+        case 'total': return usageTotal(a.m.usage) - usageTotal(b.m.usage);
+        case 'hitRate': return (hitRateOfDay(a.m.usage) ?? -1) - (hitRateOfDay(b.m.usage) ?? -1);
+        case 'calls': return (a.m.calls || 0) - (b.m.calls || 0);
+        case 'avg': return (avgPerCall(usageTotal(a.m.usage), a.m.calls) ?? -1) - (avgPerCall(usageTotal(b.m.usage), b.m.calls) ?? -1);
+        case 'share': return (a.share || 0) - (b.share || 0);
+        default: return 0;
       }
-      if (cmp !== 0) return sortDir === 'asc' ? cmp : -cmp;
-      return a.i - b.i;
-    });
-    return withIdx;
+    }, sortDir);
   }, [filteredModels, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sortedModels.length / PAGE_SIZE));
-
-  useEffect(() => {
-    setPage((p) => Math.min(Math.max(1, p), totalPages));
-  }, [totalPages]);
-
-  const pageModels = useMemo(
-    () => sortedModels.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [sortedModels, page],
-  );
+  const pageModels = useMemo(() => slice(sortedModels), [slice, sortedModels]);
 
   // 完全无数据，历史为空，与过滤后无数据区分：后者提示范围无数据
   if (models.length === 0) {
@@ -198,7 +131,7 @@ export function ModelsTab({
                   className={range === value ? `${shared.chip} ${shared.chipOn}` : shared.chip}
                   onClick={() => setRange(value)}
                 >
-                  {t(labelKey as never)}
+                  {t(labelKey)}
                 </button>
               ))}
             </span>
@@ -221,20 +154,20 @@ export function ModelsTab({
               <tbody>
                 {pageModels.map(({ m, share }) => {
                   const total = usageTotal(m.usage);
-                  const hit = hitRateOfModel(m.usage);
-                  const avg = avgOfModel(total, m.calls);
+                  const hit = hitRateOfDay(m.usage);
+                  const avg = avgPerCall(total, m.calls);
                   return (
                     <tr key={m.provider + '\u0000' + m.model}>
                       <td className={shared.cellText}>
                         {m.model} <span className={shared.sub}>· {m.provider}</span>
                       </td>
-                      <td className={shared.num}>{fmt(m.usage.cacheRead, t as unknown as LocaleFn)}</td>
-                      <td className={shared.num}>{fmt(m.usage.input, t as unknown as LocaleFn)}</td>
-                      <td className={shared.num}>{fmt(m.usage.output, t as unknown as LocaleFn)}</td>
-                      <td className={`${shared.num} ${shared.strong}`}>{fmt(total, t as unknown as LocaleFn)}</td>
-                      <td className={shared.num}>{hit == null ? '--' : pctOf(hit)}</td>
+                      <td className={shared.num}>{fmt(m.usage.cacheRead, tFn)}</td>
+                      <td className={shared.num}>{fmt(m.usage.input, tFn)}</td>
+                      <td className={shared.num}>{fmt(m.usage.output, tFn)}</td>
+                      <td className={`${shared.num} ${shared.strong}`}>{fmt(total, tFn)}</td>
+                      <td className={shared.num}>{pctOf(hit)}</td>
                       <td className={shared.num}>{fmtFull(m.calls)}</td>
-                      <td className={shared.num}>{avg == null ? '--' : fmtFull(avg)}</td>
+                      <td className={shared.num}>{fmtFull(avg)}</td>
                       <td className={shared.num}>{pctOf(share)}</td>
                     </tr>
                   );

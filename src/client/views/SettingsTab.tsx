@@ -25,17 +25,20 @@ import {
   IconDataOutline16,
   RiskConfirmation,
 } from '@deepseek-ai/dsh-client-ui-primitives';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 
-import { API_HEADERS } from '../api.ts';
+import { postLedgerApi } from '../api.ts';
 import { SettingsSwitch } from '../components/SettingsSwitch.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { clampDeepSeekFetchMinutes, clampGoFetchMinutes, clampZaiFetchMinutes, DEEPSEEK_FETCH_MIN_MINUTES, GO_FETCH_MIN_MINUTES, ZAI_FETCH_MIN_MINUTES } from '../settings.ts';
 import { fmtFull } from '../stats.ts';
+import { useConfirmOp, type ConfirmOpState } from '../useConfirmOp.ts';
+import { useIntervalText } from '../useIntervalText.ts';
 
 import css from './SettingsTab.module.css';
 
+import type { UsageStatsKey } from '../locales.ts';
 import type { UsageSettings } from '../settings.ts';
 import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
@@ -52,128 +55,26 @@ export function SettingsTab({
   /** 快照，用于底部页脚的事件数与更新时间。 */
   value: UsageSnapshot | null
 }) {
-  const [rebuildState, setRebuildState] = useState<'idle' | 'busy' | 'done'>('idle');
-  // 重建账本二次确认：确认弹窗可见性 + 「我已了解」复选，防误触。
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [acknowledged, setAcknowledged] = useState(false);
-  const [clearState, setClearState] = useState<'idle' | 'busy' | 'done'>('idle');
-  // 清零账本二次确认
-  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
-  const [clearAcknowledged, setClearAcknowledged] = useState(false);
+  // 重建/清零同一写法：二次确认状态机 + 账本接口调用，逻辑收拢于 useConfirmOp/postLedgerApi。
+  const rebuild = useConfirmOp(() => postLedgerApi('rebuild', onRefresh));
+  const clear = useConfirmOp(() => postLedgerApi('clear', onRefresh));
   // 账本操作折叠
   const [ledgerOpen, setLedgerOpen] = useState(false);
-  // 抓取间隔输入：本地文本态，失焦时才夹取并提交，避免每键回跳。
-  const [intervalText, setIntervalText] = useState(String(settings.goFetchMinutes));
-  const intervalInputRef = useRef<HTMLInputElement>(null);
-  // DeepSeek 抓取间隔输入
-  const [deepseekIntervalText, setDeepseekIntervalText] = useState(String(settings.deepseekFetchMinutes));
-  const deepseekIntervalInputRef = useRef<HTMLInputElement>(null);
-  // Z.ai 抓取间隔输入
-  const [zaiIntervalText, setZaiIntervalText] = useState(String(settings.zaiFetchMinutes));
-  const zaiIntervalInputRef = useRef<HTMLInputElement>(null);
-
-  /** 重建账本：清空事件流与元数据 → 服务端重扫日志；完成后立即拉快照。 */
-  const handleRebuild = async () => {
-    if (rebuildState === 'busy') return;
-    setRebuildState('busy');
-    try {
-      const response = await fetch('/usage-stats/api/rebuild', {
-        method: 'POST',
-        headers: API_HEADERS,
-        body: JSON.stringify({}),
-      });
-      const json = await response.json().catch(() => null) as { ok?: boolean } | null;
-      if (!response.ok || json?.ok !== true) throw new Error('rebuild failed');
-      setRebuildState('done');
-      onRefresh();
-      window.setTimeout(() => setRebuildState('idle'), 1500);
-    } catch {
-      setRebuildState('idle');
-    }
-  };
-
-  /** 点击「重建账本」：打开二次确认弹窗，每次重置复选。 */
-  const armRebuild = () => {
-    if (rebuildState === 'busy') return;
-    setAcknowledged(false);
-    setConfirmOpen(true);
-  };
-
-  /** 确认弹窗内点「确认重建」：关闭弹窗并执行重建。 */
-  const confirmRebuild = () => {
-    setConfirmOpen(false);
-    setAcknowledged(false);
-    void handleRebuild();
-  };
-
-  /** 清零账本：清空事件流与元数据，不重扫；完成后立即拉快照。 */
-  const handleClear = async () => {
-    if (clearState === 'busy') return;
-    setClearState('busy');
-    try {
-      const response = await fetch('/usage-stats/api/clear', {
-        method: 'POST',
-        headers: API_HEADERS,
-        body: JSON.stringify({}),
-      });
-      const json = await response.json().catch(() => null) as { ok?: boolean } | null;
-      if (!response.ok || json?.ok !== true) throw new Error('clear failed');
-      setClearState('done');
-      onRefresh();
-      window.setTimeout(() => setClearState('idle'), 1500);
-    } catch {
-      setClearState('idle');
-    }
-  };
-
-  const armClear = () => {
-    if (clearState === 'busy') return;
-    setClearAcknowledged(false);
-    setClearConfirmOpen(true);
-  };
-
-  const confirmClear = () => {
-    setClearConfirmOpen(false);
-    setClearAcknowledged(false);
-    void handleClear();
-  };
-
-  /** 提交抓取间隔：夹到下限后更新设置，并把输入框同步为提交值。 */
-  const commitInterval = () => {
-    const minutes = clampGoFetchMinutes(Number(intervalText));
-    setIntervalText(String(minutes));
-    onUpdateSettings({ goFetchMinutes: minutes });
-  };
-
-  /** 提交 DeepSeek 抓取间隔：夹到下限后更新设置，并把输入框同步为提交值。 */
-  const commitDeepSeekInterval = () => {
-    const minutes = clampDeepSeekFetchMinutes(Number(deepseekIntervalText));
-    setDeepseekIntervalText(String(minutes));
-    onUpdateSettings({ deepseekFetchMinutes: minutes });
-  };
-
-  /** 提交 Z.ai 抓取间隔：夹到下限后更新设置，并把输入框同步为提交值。 */
-  const commitZaiInterval = () => {
-    const minutes = clampZaiFetchMinutes(Number(zaiIntervalText));
-    setZaiIntervalText(String(minutes));
-    onUpdateSettings({ zaiFetchMinutes: minutes });
-  };
+  // 三额度抓取间隔同一写法：本地文本态 + 失焦提交，逻辑收拢于 useIntervalText。
+  const goInterval = useIntervalText(settings.goFetchMinutes, clampGoFetchMinutes, (m) => onUpdateSettings({ goFetchMinutes: m }));
+  const deepseekInterval = useIntervalText(settings.deepseekFetchMinutes, clampDeepSeekFetchMinutes, (m) => onUpdateSettings({ deepseekFetchMinutes: m }));
+  const zaiInterval = useIntervalText(settings.zaiFetchMinutes, clampZaiFetchMinutes, (m) => onUpdateSettings({ zaiFetchMinutes: m }));
 
   // 按钮样式与文案：避免嵌套三元，改用 if/else
-  const getButtonClass = (state: 'idle' | 'busy' | 'done'): string => {
+  const getButtonClass = (state: ConfirmOpState): string => {
     if (state === 'done') return `${css.refreshBtn} ${css.refreshBtnDone}`;
     if (state === 'busy') return `${css.refreshBtn} ${css.refreshBtnBusy}`;
     return css.refreshBtn;
   };
-  const getClearLabel = (state: 'idle' | 'busy' | 'done'): string => {
-    if (state === 'busy') return t('settings.clearing');
-    if (state === 'done') return t('settings.cleared');
-    return t('settings.clearAction');
-  };
-  const getRebuildLabel = (state: 'idle' | 'busy' | 'done'): string => {
-    if (state === 'busy') return t('settings.rebuilding');
-    if (state === 'done') return t('settings.rebuilt');
-    return t('settings.rebuildAction');
+  const opLabel = (state: ConfirmOpState, keys: { busy: UsageStatsKey; done: UsageStatsKey; idle: UsageStatsKey }): string => {
+    if (state === 'busy') return t(keys.busy);
+    if (state === 'done') return t(keys.done);
+    return t(keys.idle);
   };
 
   return (
@@ -227,17 +128,11 @@ export function SettingsTab({
           </span>
           <span className={css.intervalInput}>
             <input
-              ref={intervalInputRef}
               type="number"
               min={GO_FETCH_MIN_MINUTES}
               step={1}
-              value={intervalText}
               disabled={!settings.goEnabled}
-              onChange={(e) => setIntervalText(e.target.value)}
-              onBlur={commitInterval}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') intervalInputRef.current?.blur();
-              }}
+              {...goInterval.field}
             />
             <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
           </span>
@@ -288,17 +183,11 @@ export function SettingsTab({
           </span>
           <span className={css.intervalInput}>
             <input
-              ref={deepseekIntervalInputRef}
               type="number"
               min={DEEPSEEK_FETCH_MIN_MINUTES}
               step={1}
-              value={deepseekIntervalText}
               disabled={!settings.deepseekEnabled}
-              onChange={(e) => setDeepseekIntervalText(e.target.value)}
-              onBlur={commitDeepSeekInterval}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') deepseekIntervalInputRef.current?.blur();
-              }}
+              {...deepseekInterval.field}
             />
             <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
           </span>
@@ -349,17 +238,11 @@ export function SettingsTab({
           </span>
           <span className={css.intervalInput}>
             <input
-              ref={zaiIntervalInputRef}
               type="number"
               min={ZAI_FETCH_MIN_MINUTES}
               step={1}
-              value={zaiIntervalText}
               disabled={!settings.zaiEnabled}
-              onChange={(e) => setZaiIntervalText(e.target.value)}
-              onBlur={commitZaiInterval}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') zaiIntervalInputRef.current?.blur();
-              }}
+              {...zaiInterval.field}
             />
             <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
           </span>
@@ -385,11 +268,11 @@ export function SettingsTab({
             </div>
             <button
               type="button"
-              className={getButtonClass(clearState)}
-              onClick={armClear}
-              disabled={clearState === 'busy'}
+              className={getButtonClass(clear.state)}
+              onClick={clear.arm}
+              disabled={clear.state === 'busy'}
             >
-              {getClearLabel(clearState)}
+              {opLabel(clear.state, { busy: 'settings.clearing', done: 'settings.cleared', idle: 'settings.clearAction' })}
             </button>
             <span className={shared.goHint}>{t('settings.clearHint')}</span>
 
@@ -399,11 +282,11 @@ export function SettingsTab({
             </div>
             <button
               type="button"
-              className={getButtonClass(rebuildState)}
-              onClick={armRebuild}
-              disabled={rebuildState === 'busy'}
+              className={getButtonClass(rebuild.state)}
+              onClick={rebuild.arm}
+              disabled={rebuild.state === 'busy'}
             >
-              {getRebuildLabel(rebuildState)}
+              {opLabel(rebuild.state, { busy: 'settings.rebuilding', done: 'settings.rebuilt', idle: 'settings.rebuildAction' })}
             </button>
             <span className={shared.goHint}>{t('settings.rebuildHint')}</span>
           </div>
@@ -411,32 +294,32 @@ export function SettingsTab({
       </div>
 
       <RiskConfirmation
-        open={clearConfirmOpen}
+        open={clear.confirmOpen}
         title={t('settings.clearConfirmTitle')}
         description={t('settings.clearConfirmDesc')}
         acknowledgeLabel={t('settings.clearConfirmAck')}
         cancelLabel={t('settings.clearCancel')}
         closeLabel={t('panel.close')}
         confirmLabel={t('settings.clearConfirm')}
-        acknowledged={clearAcknowledged}
-        onAcknowledgedChange={setClearAcknowledged}
-        onCancel={() => setClearConfirmOpen(false)}
-        onConfirm={confirmClear}
+        acknowledged={clear.acknowledged}
+        onAcknowledgedChange={clear.setAcknowledged}
+        onCancel={clear.dismiss}
+        onConfirm={clear.confirm}
       />
 
       {/* 二次确认弹窗：复选「我已了解」后才可确认，复用 harness RiskConfirmation */}
       <RiskConfirmation
-        open={confirmOpen}
+        open={rebuild.confirmOpen}
         title={t('settings.rebuildConfirmTitle')}
         description={t('settings.rebuildConfirmDesc')}
         acknowledgeLabel={t('settings.rebuildConfirmAck')}
         cancelLabel={t('settings.rebuildCancel')}
         closeLabel={t('panel.close')}
         confirmLabel={t('settings.rebuildConfirm')}
-        acknowledged={acknowledged}
-        onAcknowledgedChange={setAcknowledged}
-        onCancel={() => setConfirmOpen(false)}
-        onConfirm={confirmRebuild}
+        acknowledged={rebuild.acknowledged}
+        onAcknowledgedChange={rebuild.setAcknowledged}
+        onCancel={rebuild.dismiss}
+        onConfirm={rebuild.confirm}
       />
 
       {/* 底部页脚：事件数与更新时间，原概览页脚迁移至此 */}

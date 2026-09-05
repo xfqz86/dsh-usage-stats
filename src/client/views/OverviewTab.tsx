@@ -76,6 +76,8 @@ export function OverviewTab({
   /** 是否启用 Z.ai 额度监控，关闭时隐藏 Z.ai 卡片。 */
   zaiEnabled: boolean
 }) {
+  // 本地化函数单点转换，组件内统一用 tFn。
+  const tFn = t as unknown as LocaleFn;
   const all = value?.all ?? {
     calls: 0,
     usage: {
@@ -222,13 +224,12 @@ export function OverviewTab({
             {zai.session && (() => {
               const pct = goPercent(zai.session);
               const level = goLevelOf(pct);
-              const tFmt = t as unknown as LocaleFn;
               return (
                 <div className={css.goTileRow} key="session">
                   <span className={css.goTileTop}>
                     <span className={css.goLabel}>{t('zai.session')}</span>
                     {zai.session.used !== null && zai.session.limit !== null && (
-                      <span className={css.goPoints}>{fmt(zai.session.used, tFmt)} / {fmt(zai.session.limit, tFmt)}</span>
+                      <span className={css.goPoints}>{fmt(zai.session.used, tFn)} / {fmt(zai.session.limit, tFn)}</span>
                     )}
                     <span className={goPctClass(level)}>{pct}%</span>
                   </span>
@@ -245,13 +246,12 @@ export function OverviewTab({
             {zai.weekly && (() => {
               const pct = goPercent(zai.weekly);
               const level = goLevelOf(pct);
-              const tFmt = t as unknown as LocaleFn;
               return (
                 <div className={css.goTileRow} key="weekly">
                   <span className={css.goTileTop}>
                     <span className={css.goLabel}>{t('zai.weekly')}</span>
                     {zai.weekly.used !== null && zai.weekly.limit !== null && (
-                      <span className={css.goPoints}>{fmt(zai.weekly.used, tFmt)} / {fmt(zai.weekly.limit, tFmt)}</span>
+                      <span className={css.goPoints}>{fmt(zai.weekly.used, tFn)} / {fmt(zai.weekly.limit, tFn)}</span>
                     )}
                     <span className={goPctClass(level)}>{pct}%</span>
                   </span>

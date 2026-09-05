@@ -621,6 +621,12 @@ export function hitRateOfDay(d: { input?: number | null; cacheRead?: number | nu
   return Math.round((cacheRead / denom) * 1000) / 10;
 }
 
+/** 平均每次调用：total / calls 取整；calls 为 0 时为 null。日期/会话/模型三表共用同一口径。 */
+export function avgPerCall(total: number, calls: number): number | null {
+  if (!calls || calls <= 0) return null;
+  return Math.round(total / calls);
+}
+
 /** 本地化的日期堆叠元信息：趋势图仅返回输入、输出、缓存三段，未传 t 时回落中文。 */
 export function getDateTokenMeta(t?: LocaleFn): readonly { key: DateTokenKey; label: string; color: string }[] {
   if (!t) return DATE_TOKEN_META;
