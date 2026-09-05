@@ -16,7 +16,8 @@ dsh-usage-stats/
 │   │   └── footer.png
 │   ├── API.md ← 服务端 HTTP 协议与偏好设置约定（随接口演进维护）
 │   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付三种形态：release / npm / tarball）
-│   └── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
+│   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
+│   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）
 ├── scripts/
 │   ├── css-modules-inline.mjs ← rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的 JS 模块。
 │   └── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
@@ -84,6 +85,7 @@ dsh-usage-stats/
 │   └── utils.ts ← 跨端共用的纯函数，host 与 client 两个 bundle 各自内联所需子集。
 ├── test/
 │   ├── client-bundle.mjs ← 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
+│   ├── pure.mjs ← 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
 │   └── smoke.mjs ← 用量统计服务端（Host）的独立冒烟测试（账本模式，自管理 sqlite 介质）。
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）

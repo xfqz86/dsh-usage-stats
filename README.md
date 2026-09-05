@@ -123,6 +123,7 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 ## 开发者
 
 - 工程规范与架构说明见 `AGENTS.md`
+- 风格经验（lint 之外的统一约定）见 `docs/STYLE.md`
 - 接口协议见 `docs/API.md`
 - 模块结构见 `docs/STRUCTURE.md`，由 `pnpm tree` 生成
 - 发布流程见 `docs/PUBLISH.md`

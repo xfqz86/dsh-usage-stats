@@ -94,18 +94,20 @@ export function apply(ctx: ClientContext): void {
 npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
 pnpm build
+node --experimental-strip-types test/pure.mjs
 node test/smoke.mjs
 node test/client-bundle.mjs
 ```
+- `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/日志解析/围栏/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
 - `smoke.mjs`：mock `webServer/sessionQuery/sessionPersistence`，真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→实时重放20条去重→rebuild一致→回环围栏→go-quota/deepseek-balance 结构化→空清单仍从介质重建394。
 - `client-bundle.mjs`：验证 `window.__ModuleLoader__.load` 注册、每 `*.module.css` 对应 `data-plugin-css` 样式含 scoped 类名。
 
 ## 10. 文档维护
 - `AGENTS.md` 为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它，结构/协议现状记 `docs/*` 或文件头注释。
-- `docs/STRUCTURE.md` 生成文件（`pnpm tree`），`docs/API.md` 随接口维护；`README` 面向用户；`AGENTS.local.md` 放本机私有与强时效事实。
+- `docs/STRUCTURE.md` 生成文件（`pnpm tree`），`docs/API.md` 随接口维护，`docs/STYLE.md` 为风格经验（lint 之外的统一约定，新会话先读）；`README` 面向用户；`AGENTS.local.md` 放本机私有与强时效事实。
 
 ## 11. 提交（Conventional Commits）
-格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；提交前须过 §9 四项。
+格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；提交前须过 §9 全项。
 
 ## 12. 交付物
 仅陈述最终确定的规则/架构/协议/实现，不写入过程备注与待定方案；过程内容走会话记录，不入库。
