@@ -15,6 +15,8 @@
  */
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 
+import { QUOTA_MIN_FETCH_MS, effectiveQuotaTtl } from '../utils.ts';
+
 import type { DeepSeekBalance, DeepSeekBalanceInfo } from '../types.ts';
 // 凭据中心类型与 ref 构造均来自 harness，遵循 AGENTS §0 禁止手写注入服务镜像类型。
 // 运行时值导入可接受：本插件运行于 dsh 基座，基座原生带有 @deepseek-ai/* 模块。
@@ -31,10 +33,8 @@ const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance';
 /** 浏览器 UA：避免被前置 Cloudflare 拦截，与 GoQuota 同款。 */
 const DEEPSEEK_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-/** 服务端强制下限：官方余额端点任何情况下不低于 3 分钟打一次，与客户端设置下限对齐。 */
-export const DEEPSEEK_MIN_FETCH_MS = 3 * 60 * 1000;
-/** 结果缓存上限：默认 5 分钟；客户端可按抓取间隔调短有效缓存。 */
-const CACHE_TTL_MS = 5 * 60 * 1000;
+/** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
+export const DEEPSEEK_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 DeepSeek API Key，仅走 DSH 凭据中心，支持 DEEPSEEK_API_KEY 等。 */
 export async function resolveDeepSeekKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
@@ -134,10 +134,7 @@ export async function queryDeepSeekBalance(
   force = false,
   credentials?: CredentialsService,
 ): Promise<DeepSeekBalance> {
-  const effectiveTtlMs =
-    typeof intervalMinutes === 'number' && Number.isFinite(intervalMinutes)
-      ? Math.min(CACHE_TTL_MS, Math.max(DEEPSEEK_MIN_FETCH_MS, Math.round(intervalMinutes * 60 * 1000)))
-      : CACHE_TTL_MS;
+  const effectiveTtlMs = effectiveQuotaTtl(intervalMinutes);
   const now = Date.now();
   if (!force && cache !== null && now - cache.at < effectiveTtlMs) return cache.value;
   if (force && cache !== null && now - cache.at < DEEPSEEK_MIN_FETCH_MS && inflight === null) {

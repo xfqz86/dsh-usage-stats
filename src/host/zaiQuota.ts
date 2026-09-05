@@ -19,6 +19,8 @@
  */
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 
+import { QUOTA_MIN_FETCH_MS, effectiveQuotaTtl } from '../utils.ts';
+
 import type { ZaiQuota, ZaiWebSearchQuota, ZaiWindow } from '../types.ts';
 // 凭据中心类型来自 harness，AGENTS §0 约定禁止手写注入服务镜像类型。
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials';
@@ -34,10 +36,8 @@ const ZAI_QUOTA_URL = 'https://api.z.ai/api/monitor/usage/quota/limit';
 /** 浏览器 UA：避免被前置 Cloudflare 拦截，与 GoQuota 同款。 */
 const ZAI_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-/** 服务端强制下限：官方额度端点任何情况下不低于 3 分钟打一次，与客户端设置下限对齐。 */
-export const ZAI_MIN_FETCH_MS = 3 * 60 * 1000;
-/** 结果缓存上限：默认 5 分钟；客户端可按抓取间隔调短有效缓存。 */
-const CACHE_TTL_MS = 5 * 60 * 1000;
+/** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
+export const ZAI_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 Z.ai API Key：仅走 DSH 凭据中心，经 ZAI_CODING_CN_API_KEY 到 ZAI_API_KEY。 */
 export async function resolveZaiKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
@@ -316,10 +316,7 @@ export async function queryZaiQuota(
   force = false,
   credentials?: CredentialsService,
 ): Promise<ZaiQuota> {
-  const effectiveTtlMs =
-    typeof intervalMinutes === 'number' && Number.isFinite(intervalMinutes)
-      ? Math.min(CACHE_TTL_MS, Math.max(ZAI_MIN_FETCH_MS, Math.round(intervalMinutes * 60 * 1000)))
-      : CACHE_TTL_MS;
+  const effectiveTtlMs = effectiveQuotaTtl(intervalMinutes);
   const now = Date.now();
   if (!force && cache !== null && now - cache.at < effectiveTtlMs) return cache.value;
   if (force && cache !== null && now - cache.at < ZAI_MIN_FETCH_MS && inflight === null) {

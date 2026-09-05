@@ -5,7 +5,7 @@
  * UsageAgg 单一定义在 types.ts，host 构建与 client 消费共用同一类型面，
  * 避免两端镜像漂移；splitModelKey 来自 utils.ts，host 与 client 共用。
  */
-import { splitModelKey } from '../utils.ts';
+import { SERIES_MAX_DAYS, splitModelKey } from '../utils.ts';
 
 import { metaOf } from './store.ts';
 
@@ -43,10 +43,7 @@ export function usageOf(agg: Agg): UsageAgg {
 /** 无用量会话的占位 usage。 */
 export const zeroUsage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
 
-/** 快照序列上限：与客户端 `all` 范围 366 天对齐，避免长历史下每 4s 全量序列化开销。 */
-const SERIES_MAX_DAYS = 366;
-
-/** 截断已排序序列至最近 N 天，调用方保证入参已按 t 升序。 */
+/** 截断已排序序列至共享上限（`SERIES_MAX_DAYS`，与客户端 `all` 范围对齐），避免长历史下每 4s 全量序列化开销。 */
 function truncateSeries(series: SeriesPoint[]): SeriesPoint[] {
   return series.length > SERIES_MAX_DAYS ? series.slice(series.length - SERIES_MAX_DAYS) : series;
 }

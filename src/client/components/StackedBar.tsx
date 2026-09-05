@@ -15,6 +15,7 @@ import { HIT_RATE_COLOR, buildDateStack, buildModelStack, fmtFull, getDateTokenM
 import css from './StackedBar.module.css';
 
 import type { SeriesPoint } from '../../types.ts';
+import type { LocaleFn } from '../locales.ts';
 import type { ModelStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
@@ -46,7 +47,7 @@ export function StackedBar(props: StackedBarProps) {
 
   const dateStack = useMemo(() => {
     if (!isDate || dateSeries == null || dateRange == null) return null;
-    return buildDateStack(dateSeries, dateRange, t as unknown as (k: string, p?: Record<string, unknown>) => string);
+    return buildDateStack(dateSeries, dateRange, t as unknown as LocaleFn);
   }, [isDate, dateSeries, dateRange, t]);
 
   const modelStack = useMemo(() => {
@@ -133,7 +134,7 @@ export function StackedBar(props: StackedBarProps) {
     if (isDate) {
       return (
         <>
-          {getDateTokenMeta(t as unknown as (k: string, p?: Record<string, unknown>) => string).map((meta) => (
+          {getDateTokenMeta(t as unknown as LocaleFn).map((meta) => (
             <span key={meta.key} className={css.legendItem}>
               <span className={css.legendDot} style={{ background: meta.color }} />
               <span>{meta.label}</span>

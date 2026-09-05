@@ -15,6 +15,8 @@
  */
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 
+import { QUOTA_MIN_FETCH_MS, effectiveQuotaTtl } from '../utils.ts';
+
 import type { GoQuota, GoWindow } from '../types.ts';
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials';
 
@@ -29,10 +31,8 @@ const GO_QUOTA_URL = 'https://opencode.ai/zen/go/v1/usage';
 /** 浏览器 UA：避免被 opencode.ai 前置 Cloudflare 以 error 1010 拦截。 */
 const GO_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-/** 服务端强制下限：官方额度端点任何情况下不低于 3 分钟打一次，与客户端设置下限对齐。 */
-export const GO_MIN_FETCH_MS = 3 * 60 * 1000;
-/** 结果缓存上限：默认 5 分钟；客户端可按抓取间隔调短有效缓存。 */
-const CACHE_TTL_MS = 5 * 60 * 1000;
+/** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
+export const GO_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 OpenCode Go API Key：仅走 DSH 凭据中心 OPENCODE_GO_API_KEY。 */
 export async function resolveGoKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
@@ -110,10 +110,7 @@ let inflight: Promise<GoQuota> | null = null;
  * @param credentials DSH 凭据中心，必选，仅 OPENCODE_GO_API_KEY。
  */
 export async function queryGoQuota(intervalMinutes?: number, force = false, credentials?: CredentialsService): Promise<GoQuota> {
-  const effectiveTtlMs =
-    typeof intervalMinutes === 'number' && Number.isFinite(intervalMinutes)
-      ? Math.min(CACHE_TTL_MS, Math.max(GO_MIN_FETCH_MS, Math.round(intervalMinutes * 60 * 1000)))
-      : CACHE_TTL_MS;
+  const effectiveTtlMs = effectiveQuotaTtl(intervalMinutes);
   const now = Date.now();
   if (!force && cache !== null && now - cache.at < effectiveTtlMs) return cache.quota;
   if (force && cache !== null && now - cache.at < GO_MIN_FETCH_MS && inflight === null) {

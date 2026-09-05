@@ -17,6 +17,7 @@ import { fmt, fmtFull, pctOf, usageTotal, filterModelsByRange, type ModelRange }
 
 import css from './ModelsTab.module.css';
 
+import type { LocaleFn } from '../locales.ts';
 import type { ModelStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
@@ -227,10 +228,10 @@ export function ModelsTab({
                       <td className={shared.cellText}>
                         {m.model} <span className={shared.sub}>· {m.provider}</span>
                       </td>
-                      <td className={shared.num}>{fmt(m.usage.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                      <td className={shared.num}>{fmt(m.usage.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                      <td className={shared.num}>{fmt(m.usage.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                      <td className={`${shared.num} ${shared.strong}`}>{fmt(total, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                      <td className={shared.num}>{fmt(m.usage.cacheRead, t as unknown as LocaleFn)}</td>
+                      <td className={shared.num}>{fmt(m.usage.input, t as unknown as LocaleFn)}</td>
+                      <td className={shared.num}>{fmt(m.usage.output, t as unknown as LocaleFn)}</td>
+                      <td className={`${shared.num} ${shared.strong}`}>{fmt(total, t as unknown as LocaleFn)}</td>
                       <td className={shared.num}>{hit == null ? '--' : pctOf(hit)}</td>
                       <td className={shared.num}>{fmtFull(m.calls)}</td>
                       <td className={shared.num}>{avg == null ? '--' : fmtFull(avg)}</td>

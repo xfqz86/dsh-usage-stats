@@ -34,6 +34,7 @@ import { useZaiQuota, type ZaiWindow } from '../useZaiQuota.ts';
 import css from './UsageStatsFooter.module.css';
 import { UsageStatsPanel } from './UsageStatsPanel.tsx';
 
+import type { LocaleFn } from '../locales.ts';
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 
 export type UsageStatsFooterProps =
@@ -197,7 +198,7 @@ function BalanceTipRow({ dot, label, amount }: { dot: string; label: string; amo
 
 export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const [open, setOpen] = useState(false);
-  const [data, err, refreshSnapshot] = useSnapshot(4000);
+  const [data, err, refreshSnapshot] = useSnapshot();
   // Go 额度、DeepSeek 余额与 Z.ai 额度抓取开关与间隔来自偏好设置，默认开启、间隔 5 分钟
   const [settings, updateSettings] = useGoSettings();
   const [go, refreshQuota] = useGoQuota(settings.goEnabled, settings.goFetchMinutes);
@@ -529,7 +530,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {zaiWindows.map((w) => {
             const pct = goPercent(w.win);
-            const tFmt = t as unknown as (k: string, p?: Record<string, unknown>) => string;
+            const tFmt = t as unknown as LocaleFn;
             const pointsText = w.win.used !== null && w.win.limit !== null
               ? `${fmt(w.win.used, tFmt)} / ${fmt(w.win.limit, tFmt)}`
               : undefined;
@@ -834,7 +835,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                 : (
                   <>
                     <span className={css.badgeCalls}>{fmtFull(todayCalls)}{t('panel.summary.callsSuffix')}</span>
-                    <span className={css.badgeTokens}>· {fmt(todayTokens, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</span>
+                    <span className={css.badgeTokens}>· {fmt(todayTokens, t as unknown as LocaleFn)}</span>
                     {missing && <span className={css.badgeErr}>{fmtFull(data?.failed ?? 0)}</span>}
                   </>
                 )}
@@ -895,7 +896,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
             <span className={css.goRailChipBox}>
               <span className={css.goRailChipLabel}>{t('footer.todayLabel')}</span>
               <span className={css.goRailChipPct} style={{ fontSize: 10, lineHeight: '12px', letterSpacing: '-0.2px' }}>
-                {err ? '--' : fmt(todayTokens, t as unknown as (k: string, p?: Record<string, unknown>) => string)}
+                {err ? '--' : fmt(todayTokens, t as unknown as LocaleFn)}
               </span>
             </span>
           </Tooltip>

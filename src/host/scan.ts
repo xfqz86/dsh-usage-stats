@@ -26,6 +26,9 @@ import type { SessionId, SessionEvent, SessionLogOffset } from '@deepseek-ai/dsh
 
 
 
+/** 扫描并发 worker 数：IO 等待为主，4 路并行兼顾吞吐与 sqlite 写竞争。 */
+const SCAN_WORKERS = 4;
+
 /** 复位聚合缓存，重建账本前调用：清空会话/模型/全量/日桶与去重水位与计数。 */
 export function resetStore(store: UsageStore): void {
   store.sessions.clear();
@@ -246,7 +249,7 @@ export async function scanOnce(
       }
     }
 
-    const n = Math.max(1, Math.min(4, idList.length || 1));
+    const n = Math.max(1, Math.min(SCAN_WORKERS, idList.length || 1));
     const workers: Promise<void>[] = [];
     for (let k = 0; k < n; k += 1) workers.push(worker());
     await Promise.all(workers.map((w) => w.catch((e) => { store.lastError = 'worker: ' + errorMessage(e); store.failed += 1; })));

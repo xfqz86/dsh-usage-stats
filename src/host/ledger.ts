@@ -303,8 +303,13 @@ export class Ledger {
   private closed = false;
   private aggSuspended = false;
   private inTransaction = false;
+  private readonly path: string;
 
-  constructor(private readonly path: string = ledgerDatabasePath()) {}
+  // 显式字段声明而非参数属性：保持源码仅含可擦除类型语法，
+  // `node --experimental-strip-types` 可直接执行（test/pure.mjs 依赖）。
+  constructor(path: string = ledgerDatabasePath()) {
+    this.path = path;
+  }
 
   /** 打开账本：建目录、建表、迁移，user_version 不匹配则清库，再载入 meta 缓存。 */
   open(): void {

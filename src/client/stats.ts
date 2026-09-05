@@ -5,12 +5,13 @@
  * SeriesPoint、UsageAgg 来自 types.ts，与 host 端共用，避免两端镜像漂移。
  */
 
-import { dateKeyOf, startOfDay } from '../utils.ts';
+import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, startOfDay } from '../utils.ts';
 
+import type { LocaleFn } from './locales.ts';
 import type { ModelStat, SeriesPoint, SessionStat, UsageAgg } from '../types.ts';
 
 /** 判断是否为英文环境：支持传入 locale 字符串或翻译函数 t。 */
-function isEnglishLocale(localeOrT?: string | ((key: string, params?: Record<string, unknown>) => string)): boolean {
+function isEnglishLocale(localeOrT?: string | LocaleFn): boolean {
   if (typeof localeOrT === 'function') {
     try {
       // 英文的 panel.summary.callsSuffix 为 ''，中文为 '次'
@@ -37,7 +38,7 @@ function decimals(v: number): number {
 }
 
 /** 紧凑 token 格式化：中文 1.2万 / 3.4亿，英文 1.2K / 3.4M / 1.2B。 */
-export function fmt(n: number | null | undefined, localeOrT?: string | ((key: string, params?: Record<string, unknown>) => string)): string {
+export function fmt(n: number | null | undefined, localeOrT?: string | LocaleFn): string {
   if (n == null || Number.isNaN(n)) return '--';
   const trim = (v: number, d: number): string => String(v.toFixed(d)).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
   const isEn = isEnglishLocale(localeOrT);
@@ -54,7 +55,7 @@ export function fmt(n: number | null | undefined, localeOrT?: string | ((key: st
 }
 
 /** 完整 token 计数，千分位，英文、中文均用 en-US 千分位以保持数字一致性。 */
-export function fmtFull(n: number | null | undefined, _localeOrT?: string | ((key: string, params?: Record<string, unknown>) => string)): string {
+export function fmtFull(n: number | null | undefined, _localeOrT?: string | LocaleFn): string {
   if (n == null || Number.isNaN(n)) return '--';
   return Math.round(n).toLocaleString('en-US');
 }
@@ -63,16 +64,16 @@ export function fmtFull(n: number | null | undefined, _localeOrT?: string | ((ke
 export function shortId(id: string): string {
   if (!id) return '--';
   const s = String(id);
-  return s.length > 10 ? s.slice(0, 6) + '…' + s.slice(-4) : s;
+  return s.length > 10 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
 }
 
-/** total = input + output + cacheRead + cacheWrite，reasoning 不计入。 */
+/** total = input + output + cacheRead + cacheWrite，reasoning 不计入；缺省/坏值按 0。 */
 export function dayTotal(b: SeriesPoint | Partial<UsageAgg>): number {
-  return (b.input ?? 0) + (b.output ?? 0) + (b.cacheRead ?? 0) + (b.cacheWrite ?? 0);
+  return (b.input || 0) + (b.output || 0) + (b.cacheRead || 0) + (b.cacheWrite || 0);
 }
 
 export function usageTotal(u: UsageAgg): number {
-  return u?.total ?? 0;
+  return u?.total || 0;
 }
 
 export function pctOf(v: number | null | undefined): string {
@@ -260,7 +261,7 @@ export function buildSet(series: SeriesPoint[], range: string): SeriesPoint[] {
   const zero = (t: number): SeriesPoint =>
     ({ t, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, calls: 0 });
   // 桶 key 从今天零点按本地日历逐日推进，Date.setDate，与 heatGridOf 同款，
-  // 不用 todayStart - i * 86400000 毫秒回推：夏令时切换日的相邻本地零点间隔
+  // 不用 todayStart - i * DAY_MS 毫秒回推：夏令时切换日的相邻本地零点间隔
   // 不是 24h，毫秒回推会让桶 key 整体漂移、匹配不上 host 端 startOfDay 的
   // 产出；非 DST 时区两者完全等价，t 仍为本地零点毫秒。
   const cursor = new Date(todayStart);
@@ -280,7 +281,7 @@ export function buildSet(series: SeriesPoint[], range: string): SeriesPoint[] {
   if (raw.length > 0) {
     let firstT = todayStart;
     raw.forEach((p) => { if (p.t != null && p.t < firstT) firstT = p.t; });
-    const diff = Math.round((todayStart - startOfDay(firstT)) / 86400000);
+    const diff = Math.round((todayStart - startOfDay(firstT)) / DAY_MS);
     spanDays = Math.max(1, diff + 1);
   }
   cursor.setDate(cursor.getDate() - (spanDays - 1));
@@ -509,7 +510,7 @@ export function buildModelStack(models: ModelStat[], range: ModelRange): ModelSt
     if (days.length > 0 && days[days.length - 1] !== todayStart) {
       // 若 n 计算与 cutoff 略有偏差，补齐到今天，极少数 DST 边界
       const last = days[days.length - 1];
-      const diff = Math.round((todayStart - last) / 86400000);
+      const diff = Math.round((todayStart - last) / DAY_MS);
       if (diff > 0 && diff < 3) {
         for (let k = 1; k <= diff; k += 1) {
           const dd = new Date(last);
@@ -533,13 +534,12 @@ export function buildModelStack(models: ModelStat[], range: ModelRange): ModelSt
       earliest = startOfDay(earliest);
     }
     const todayStart = startOfDay(Date.now());
-    let span = Math.max(1, Math.round((todayStart - earliest) / 86400000) + 1);
-    // 限制最多一年宽度，365 天，闰年 366 天，避免“全部”范围过宽
-    const MAX_DAYS = 366;
-    if (span > MAX_DAYS) {
-      span = MAX_DAYS;
+    let span = Math.max(1, Math.round((todayStart - earliest) / DAY_MS) + 1);
+    // 限制最多一年宽度（共享上限，闰年 366 天），避免“全部”范围过宽
+    if (span > SERIES_MAX_DAYS) {
+      span = SERIES_MAX_DAYS;
       const d0 = new Date(todayStart);
-      d0.setDate(d0.getDate() - (MAX_DAYS - 1));
+      d0.setDate(d0.getDate() - (SERIES_MAX_DAYS - 1));
       earliest = d0.getTime();
     }
     const d = new Date(earliest);
@@ -622,7 +622,7 @@ export function hitRateOfDay(d: { input?: number | null; cacheRead?: number | nu
 }
 
 /** 本地化的日期堆叠元信息：趋势图仅返回输入、输出、缓存三段，未传 t 时回落中文。 */
-export function getDateTokenMeta(t?: (key: string, params?: Record<string, unknown>) => string): readonly { key: DateTokenKey; label: string; color: string }[] {
+export function getDateTokenMeta(t?: LocaleFn): readonly { key: DateTokenKey; label: string; color: string }[] {
   if (!t) return DATE_TOKEN_META;
   try {
     return [
@@ -661,7 +661,7 @@ export interface DateStack {
 }
 
 /** 由日序列构建日期堆叠柱数据，横向滚动，复用 buildModelStack 的日历推进逻辑避免 DST 漂移。 */
-export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?: (key: string, params?: Record<string, unknown>) => string): DateStack {
+export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?: LocaleFn): DateStack {
   const byDate = new Map<number, SeriesPoint>();
   for (const p of series) if (p?.t != null) byDate.set(p.t, p);
   const days: number[] = [];
@@ -677,7 +677,7 @@ export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?
     }
     if (days.length > 0 && days[days.length - 1] !== todayStart) {
       const last = days[days.length - 1];
-      const diff = Math.round((todayStart - last) / 86400000);
+      const diff = Math.round((todayStart - last) / DAY_MS);
       if (diff > 0 && diff < 3) {
         for (let k = 1; k <= diff; k += 1) {
           const dd = new Date(last);
@@ -695,12 +695,12 @@ export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?
     }
     earliest = startOfDay(earliest);
     const todayStart = startOfDay(Date.now());
-    let span = Math.max(1, Math.round((todayStart - earliest) / 86400000) + 1);
-    const MAX_DAYS = 366;
-    if (span > MAX_DAYS) {
-      span = MAX_DAYS;
+    let span = Math.max(1, Math.round((todayStart - earliest) / DAY_MS) + 1);
+    // 与模型堆叠同款一年上限（共享常量），避免“全部”范围过宽
+    if (span > SERIES_MAX_DAYS) {
+      span = SERIES_MAX_DAYS;
       const d0 = new Date(todayStart);
-      d0.setDate(d0.getDate() - (MAX_DAYS - 1));
+      d0.setDate(d0.getDate() - (SERIES_MAX_DAYS - 1));
       earliest = d0.getTime();
     }
     const d = new Date(earliest);

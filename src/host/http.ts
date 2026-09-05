@@ -13,7 +13,7 @@ export function readJsonBody(req: IncomingMessage): Promise<unknown> {
     req.on('data', (chunk: Buffer) => {
       total += chunk.length;
       if (total > 1 << 20) {
-        reject(new Error('请求体过大'));
+        reject(new Error('request body too large'));
         req.destroy();
         return;
       }
@@ -22,7 +22,7 @@ export function readJsonBody(req: IncomingMessage): Promise<unknown> {
     req.on('end', () => {
       const text = Buffer.concat(chunks).toString('utf8');
       if (text.trim() === '') { resolve({}); return; }
-      try { resolve(JSON.parse(text)); } catch { reject(new Error('请求体不是合法 JSON')); }
+      try { resolve(JSON.parse(text)); } catch { reject(new Error('request body is not valid JSON')); }
     });
     req.on('error', reject);
   });

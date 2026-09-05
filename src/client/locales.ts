@@ -2,6 +2,12 @@
 
 export const NS = 'dsh-usage-stats';
 
+/**
+ * 本地化函数形态：纯函数（`fmt`、`getDateTokenMeta` 等）接收 t 时的统一类型，
+ * 调用方以 `t as unknown as LocaleFn` 传入，避免各处重复内联函数类型。
+ */
+export type LocaleFn = (key: string, params?: Record<string, unknown>) => string;
+
 /** 中文文案（源语言）。 */
 export const zh = {
   'footer.todayLabel': '今日',

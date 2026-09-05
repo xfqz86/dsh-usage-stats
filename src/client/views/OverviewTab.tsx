@@ -20,6 +20,7 @@ import css from './OverviewTab.module.css';
 import { UsageHeatmap } from './UsageHeatmap.tsx';
 
 import type { DeepSeekBalance, DeepSeekBalanceInfo, ZaiQuota } from '../../types.ts';
+import type { LocaleFn } from '../locales.ts';
 import type { GoQuota } from '../useGoQuota.ts';
 import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
@@ -221,7 +222,7 @@ export function OverviewTab({
             {zai.session && (() => {
               const pct = goPercent(zai.session);
               const level = goLevelOf(pct);
-              const tFmt = t as unknown as (k: string, p?: Record<string, unknown>) => string;
+              const tFmt = t as unknown as LocaleFn;
               return (
                 <div className={css.goTileRow} key="session">
                   <span className={css.goTileTop}>
@@ -244,7 +245,7 @@ export function OverviewTab({
             {zai.weekly && (() => {
               const pct = goPercent(zai.weekly);
               const level = goLevelOf(pct);
-              const tFmt = t as unknown as (k: string, p?: Record<string, unknown>) => string;
+              const tFmt = t as unknown as LocaleFn;
               return (
                 <div className={css.goTileRow} key="weekly">
                   <span className={css.goTileTop}>

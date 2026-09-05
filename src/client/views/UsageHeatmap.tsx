@@ -42,7 +42,7 @@ export function UsageHeatmap({
 
   const cellClass = (c: HeatGridCell): string => {
     const lvl = HEAT_LEVELS[c.lvl] ?? '';
-    const cls = `${css.hcell}${lvl ? ' ' + lvl : ''}`;
+    const cls = `${css.hcell}${lvl ? ` ${lvl}` : ''}`;
     return c.today ? `${cls} ${css.hcellToday}` : cls;
   };
 

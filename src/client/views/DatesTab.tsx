@@ -18,6 +18,7 @@ import { buildDateStack, fmt, fmtFull, fullDayLabel, hitRateOfDay, pctOf, type D
 import css from './DatesTab.module.css';
 
 import type { SeriesPoint } from '../../types.ts';
+import type { LocaleFn } from '../locales.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 const PAGE_SIZE = 20;
@@ -65,7 +66,7 @@ export function DatesTab({
   };
 
   // 按范围构建堆叠数据，固定窗口按日历推进，all 时从最早日到今日、最多 366 天
-  const stack = useMemo(() => buildDateStack(series, range, t as unknown as (k: string, p?: Record<string, unknown>) => string), [series, range, t]);
+  const stack = useMemo(() => buildDateStack(series, range, t as unknown as LocaleFn), [series, range, t]);
 
   // 范围切换时分页回到首位
   useEffect(() => {
@@ -184,10 +185,10 @@ export function DatesTab({
               return (
                 <tr key={d.t}>
                   <td className={shared.cellText}>{fullDayLabel(d.t)}</td>
-                  <td className={shared.num}>{fmt(d.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                  <td className={shared.num}>{fmt(d.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                  <td className={shared.num}>{fmt(d.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                  <td className={`${shared.num} ${shared.strong}`}>{fmt(d.total, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                  <td className={shared.num}>{fmt(d.cacheRead, t as unknown as LocaleFn)}</td>
+                  <td className={shared.num}>{fmt(d.input, t as unknown as LocaleFn)}</td>
+                  <td className={shared.num}>{fmt(d.output, t as unknown as LocaleFn)}</td>
+                  <td className={`${shared.num} ${shared.strong}`}>{fmt(d.total, t as unknown as LocaleFn)}</td>
                   <td className={shared.num}>{hit == null ? '--' : pctOf(hit)}</td>
                   <td className={shared.num}>{fmtFull(d.calls)}</td>
                   <td className={shared.num}>{avg == null ? '--' : fmtFull(avg)}</td>

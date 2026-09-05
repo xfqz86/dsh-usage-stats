@@ -8,6 +8,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 
+import { DAY_MS } from '../../utils.ts';
 import { Pagination } from '../components/Pagination.tsx';
 import { ThSortable, type SortDir } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
@@ -15,7 +16,8 @@ import { fmt, fmtFull, fullDayLabel, pctOf, shortId, usageTotal, groupSessions }
 
 import css from './SessionsTab.module.css';
 
-import type { SessionStat, UsageAgg  } from '../useSnapshot.ts';
+import type { LocaleFn } from '../locales.ts';
+import type { SessionStat, UsageAgg } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 const PAGE_SIZE = 20;
@@ -44,8 +46,8 @@ function formatLastActive(
   t: PropsLocale<'dsh-usage-stats'>['t'],
 ): string {
   if (!lastActive) return '--';
-  if (Date.now() - lastActive < 86400000) {
-    return t('time.today') + ' ' + new Date(lastActive).toTimeString().slice(0, 5);
+  if (Date.now() - lastActive < DAY_MS) {
+    return `${t('time.today')} ${new Date(lastActive).toTimeString().slice(0, 5)}`;
   }
   return fullDayLabel(lastActive);
 }
@@ -221,10 +223,10 @@ export function SessionsTab({
                       </span>
                       {hasChildren && <span className={css.badge}>{t('sessions.childrenCount', { n: g.childCount } as unknown as Record<string, unknown>)}</span>}
                     </td>
-                    <td className={shared.num}>{fmt(agg.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                    <td className={shared.num}>{fmt(agg.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                    <td className={shared.num}>{fmt(agg.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                    <td className={`${shared.num} ${shared.strong}`}>{fmt(usageTotal(agg), t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                    <td className={shared.num}>{fmt(agg.cacheRead, t as unknown as LocaleFn)}</td>
+                    <td className={shared.num}>{fmt(agg.input, t as unknown as LocaleFn)}</td>
+                    <td className={shared.num}>{fmt(agg.output, t as unknown as LocaleFn)}</td>
+                    <td className={`${shared.num} ${shared.strong}`}>{fmt(usageTotal(agg), t as unknown as LocaleFn)}</td>
                     <td className={shared.num}>{aggHit == null ? '--' : pctOf(aggHit)}</td>
                     <td className={shared.num}>{fmtFull(g.agg.calls)}</td>
                     <td className={shared.num}>{aggAvg == null ? '--' : fmtFull(aggAvg)}</td>
@@ -243,10 +245,10 @@ export function SessionsTab({
                             </span>
                             {c.title || shortId(c.id)} <span className={shared.sub}>· {shortId(c.id)}</span>
                           </td>
-                          <td className={shared.num}>{fmt(c.usage.cacheRead, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                          <td className={shared.num}>{fmt(c.usage.input, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                          <td className={shared.num}>{fmt(c.usage.output, t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
-                          <td className={shared.num}>{fmt(usageTotal(c.usage), t as unknown as (k: string, p?: Record<string, unknown>) => string)}</td>
+                          <td className={shared.num}>{fmt(c.usage.cacheRead, t as unknown as LocaleFn)}</td>
+                          <td className={shared.num}>{fmt(c.usage.input, t as unknown as LocaleFn)}</td>
+                          <td className={shared.num}>{fmt(c.usage.output, t as unknown as LocaleFn)}</td>
+                          <td className={shared.num}>{fmt(usageTotal(c.usage), t as unknown as LocaleFn)}</td>
                           <td className={shared.num}>{childHit == null ? '--' : pctOf(childHit)}</td>
                           <td className={shared.num}>{fmtFull(c.calls)}</td>
                           <td className={shared.num}>{childAvg == null ? '--' : fmtFull(childAvg)}</td>
