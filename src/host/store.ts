@@ -197,6 +197,9 @@ export function foldRecord(
     return;
   }
   if (ev === null) return;
+  // 零用量事件不入账本：foldLedgerEvent 同样会跳过，提前返回避免 DB 膨胀；
+  // 去重水位不受影响，此类事件本就不贡献统计。
+  if (ev.input + ev.output + ev.cacheRead + ev.cacheWrite + ev.reasoning <= 0) return;
   // 用量路径统一使用账本事件的会话 id，toLedgerEvent 已做 TEXT 归一，
   // 保证水位、meta 与聚合三处键一致。
   const sid = ev.sessionId;

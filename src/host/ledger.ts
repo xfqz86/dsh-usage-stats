@@ -249,10 +249,10 @@ export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/
   const usage = event.data?.usage;
   if (usage === null || typeof usage !== 'object') return null;
   const u = usage as { inputTokens?: unknown; outputTokens?: unknown; cacheReadTokens?: unknown; cacheWriteTokens?: unknown; reasoningTokens?: unknown };
-  // 归一化：非有限/负数一律按 0 处理，防止污染账本聚合。
+  // 归一化：非有限/负数一律按 0 处理，防止污染账本聚合；向下取整与 INTEGER 列语义对齐。
   const num = (v: unknown): number => {
     const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : 0;
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
   };
   const { provider, model } = splitModelKey(modelKeyOf(event));
   // TEXT 列归一：sessionId、provider、model 写入 sqlite 前清洗 NUL，与 meta
@@ -342,15 +342,9 @@ export class Ledger {
     const row = this.db.prepare('PRAGMA user_version').get() as { user_version?: unknown };
     const version = typeof row?.user_version === 'number' ? row.user_version : 0;
     if (version !== LEDGER_VERSION) {
-      if (version === 3) {
-        // 3 -> 4 增量迁移：session_meta 新增 parent_session / origin / delegation_depth 三列
-        try { this.db.exec("ALTER TABLE session_meta ADD COLUMN parent_session TEXT NOT NULL DEFAULT ''"); } catch {}
-        try { this.db.exec("ALTER TABLE session_meta ADD COLUMN origin TEXT NOT NULL DEFAULT ''"); } catch {}
-        try { this.db.exec('ALTER TABLE session_meta ADD COLUMN delegation_depth INTEGER NOT NULL DEFAULT 0'); } catch {}
-        console.warn(`[usage-stats] 账本 schema 升级 ${String(version)} -> ${String(LEDGER_VERSION)}，保留历史事件`);
-        this.db.exec(`PRAGMA user_version = ${LEDGER_VERSION}`);
-      } else if (version === 2) {
-        // 2 -> 4：2->3 为 agg 表增量，已通过 IF NOT EXISTS 完成 + 3->4 为 meta 三列增量
+      if (version === 3 || version === 2) {
+        // 2->4 与 3->4 均为增量迁移：2->3 为 agg 表增量（已由 IF NOT EXISTS 完成），
+        // 3->4 为 session_meta 新增 parent_session / origin / delegation_depth 三列。
         try { this.db.exec("ALTER TABLE session_meta ADD COLUMN parent_session TEXT NOT NULL DEFAULT ''"); } catch {}
         try { this.db.exec("ALTER TABLE session_meta ADD COLUMN origin TEXT NOT NULL DEFAULT ''"); } catch {}
         try { this.db.exec('ALTER TABLE session_meta ADD COLUMN delegation_depth INTEGER NOT NULL DEFAULT 0'); } catch {}

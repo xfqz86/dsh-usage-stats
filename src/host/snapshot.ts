@@ -41,7 +41,15 @@ export function usageOf(agg: Agg): UsageAgg {
 }
 
 /** 无用量会话的占位 usage。 */
-export const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+export const zeroUsage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+
+/** 快照序列上限：与客户端 `all` 范围 366 天对齐，避免长历史下每 4s 全量序列化开销。 */
+const SERIES_MAX_DAYS = 366;
+
+/** 截断已排序序列至最近 N 天，调用方保证入参已按 t 升序。 */
+function truncateSeries(series: SeriesPoint[]): SeriesPoint[] {
+  return series.length > SERIES_MAX_DAYS ? series.slice(series.length - SERIES_MAX_DAYS) : series;
+}
 
 /** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。 */
 export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | null, opts?: { limit?: number }): UsageSnapshot {
@@ -73,13 +81,13 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
   for (const [key, agg] of store.models) {
     const { provider, model } = splitModelKey(key);
     const dailyMap = store.modelDaily.get(key);
-    const series = dailyMap ? buildSeries(dailyMap) : [];
+    const series = dailyMap ? truncateSeries(buildSeries(dailyMap)) : [];
     models.push({ provider, model, calls: agg.calls, usage: usageOf(agg), series });
   }
   models.sort((a, b) => b.usage.total - a.usage.total);
 
   const allAgg = store.allAgg;
-  const allSeries = buildSeries(store.allDaily);
+  const allSeries = truncateSeries(buildSeries(store.allDaily));
   let current: UsageSnapshot['current'] = null;
   let currentSeries: SeriesPoint[] = [];
   if (sessionId) {

@@ -166,6 +166,7 @@ export async function scanOnce(
 
     // 2) 逐会话：RAW 优先，完整且不受解释器限制，失败则 harness 兜底。
     //    对于无 RAW 的会话，用 headerMap 的 cwd/createdAt 预填充 session_meta，避免 cwd/created_at/last_active 为空。
+    //    worker 取号 `idList[i]; i+=1` 在同步段内完成，await 之前无交错，单线程下无竞态，可安全 4 路并行。
     let i = 0;
     async function worker(): Promise<void> {
       while (i < idList.length) {
