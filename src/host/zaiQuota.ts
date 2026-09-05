@@ -17,42 +17,25 @@
  * 客户端按 status 本地化文案，不在服务端拼用户文案。
  * 本功能不写入 ledger，仅只读查询与内存缓存。
  */
-import { credentialRef } from '@deepseek-ai/dsh-credentials';
+import { QUOTA_MIN_FETCH_MS } from '../utils.ts';
 
-import { QUOTA_MIN_FETCH_MS, effectiveQuotaTtl } from '../utils.ts';
+import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
 
 import type { ZaiQuota, ZaiWebSearchQuota, ZaiWindow } from '../types.ts';
-// 凭据中心类型来自 harness，AGENTS §0 约定禁止手写注入服务镜像类型。
-import type { CredentialProvider } from '@deepseek-ai/dsh-credentials';
+import type { CredentialsService } from './quota.ts';
 
 /** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
 export type { ZaiQuota, ZaiWindow, ZaiWebSearchQuota } from '../types.ts';
-
-/** DSH 凭据中心服务，Context.credentials 合并类型，cordis 可选注入，运行时可能缺席。 */
-export type CredentialsService = CredentialProvider;
+export type { CredentialsService } from './quota.ts';
 
 /** Z.ai 官方额度端点，固定域名，参考 openusage ZAIUsageClient.quotaURL。 */
 const ZAI_QUOTA_URL = 'https://api.z.ai/api/monitor/usage/quota/limit';
-/** 浏览器 UA：避免被前置 Cloudflare 拦截，与 GoQuota 同款。 */
-const ZAI_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 /** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
 export const ZAI_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 Z.ai API Key：仅走 DSH 凭据中心，经 ZAI_CODING_CN_API_KEY 到 ZAI_API_KEY。 */
 export async function resolveZaiKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
-  if (credentials && typeof credentials.resolve === 'function') {
-    for (const name of ['ZAI_CODING_CN_API_KEY', 'ZAI_API_KEY']) {
-      try {
-        const ref = credentialRef(name);
-        const resolved = await credentials.resolve(ref);
-        if (resolved && typeof resolved.value === 'string' && resolved.value.trim().length > 0) return resolved.value.trim();
-      } catch {
-        // 凭据解析失败：继续尝试下一个名字
-      }
-    }
-  }
-  return null;
+  return resolveFirstKey(credentials, ['ZAI_CODING_CN_API_KEY', 'ZAI_API_KEY']);
 }
 
 /** 把 number/数字字符串归一为非负有限数，其余返回 null。 */
@@ -215,7 +198,7 @@ export async function fetchZaiQuota(credentials?: CredentialsService): Promise<Z
       headers: {
         authorization: `Bearer ${key}`,
         accept: 'application/json',
-        'user-agent': ZAI_UA,
+        'user-agent': QUOTA_UA,
       },
       signal: AbortSignal.timeout(15000),
     });
@@ -300,39 +283,13 @@ export async function fetchZaiQuota(credentials?: CredentialsService): Promise<Z
   }
 }
 
-let cache: { at: number; value: ZaiQuota } | null = null;
-let inflight: Promise<ZaiQuota> | null = null;
-
 /**
  * 带 TTL 缓存与单飞的额度查询，路由每次调用都走这里。
  *
- * @param intervalMinutes 客户端抓取间隔，单位分钟，有效缓存为
- *   min 5 分钟上限、max 3 分钟下限与请求间隔的较大值 —— 让实际打官方端点的频率与
- *   设置一致，且不短于 3 分钟，未提供时用默认 5 分钟。
+ * @param intervalMinutes 客户端抓取间隔，单位分钟；有效 TTL 见共享公式，
+ *   未提供时用默认 5 分钟。
  * @param force 为 true 时绕过 TTL 缓存强制重新抓取，概览 Z.ai 磁贴的立即刷新按钮用，仍走单飞，避免并发打官方端点。
  */
-export async function queryZaiQuota(
-  intervalMinutes?: number,
-  force = false,
-  credentials?: CredentialsService,
-): Promise<ZaiQuota> {
-  const effectiveTtlMs = effectiveQuotaTtl(intervalMinutes);
-  const now = Date.now();
-  if (!force && cache !== null && now - cache.at < effectiveTtlMs) return cache.value;
-  if (force && cache !== null && now - cache.at < ZAI_MIN_FETCH_MS && inflight === null) {
-    // force 距上次抓取过近且无进行中的请求：打官方端点频率受强制下限保护，
-    // 返回上一次结果即可，避免刷爆官方额度接口。
-    return cache.value;
-  }
-  if (inflight === null) {
-    inflight = fetchZaiQuota(credentials)
-      .then((value) => {
-        cache = { at: Date.now(), value };
-        return value;
-      })
-      .finally(() => {
-        inflight = null;
-      });
-  }
-  return inflight;
-}
+export const queryZaiQuota = createQuotaQuery(
+  (credentials?: CredentialsService) => fetchZaiQuota(credentials),
+);

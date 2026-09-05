@@ -13,43 +13,25 @@
  * 客户端按 status 本地化文案，不在服务端拼用户文案。
  * 本功能不写入 ledger，仅只读查询与内存缓存。
  */
-import { credentialRef } from '@deepseek-ai/dsh-credentials';
+import { QUOTA_MIN_FETCH_MS } from '../utils.ts';
 
-import { QUOTA_MIN_FETCH_MS, effectiveQuotaTtl } from '../utils.ts';
+import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
 
 import type { DeepSeekBalance, DeepSeekBalanceInfo } from '../types.ts';
-// 凭据中心类型与 ref 构造均来自 harness，遵循 AGENTS §0 禁止手写注入服务镜像类型。
-// 运行时值导入可接受：本插件运行于 dsh 基座，基座原生带有 @deepseek-ai/* 模块。
-import type { CredentialProvider } from '@deepseek-ai/dsh-credentials';
+import type { CredentialsService } from './quota.ts';
 
 /** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
 export type { DeepSeekBalance, DeepSeekBalanceInfo } from '../types.ts';
-
-/** DSH 凭据中心服务，为 Context.credentials 合并类型，cordis 可选注入，运行时可能缺席。 */
-export type CredentialsService = CredentialProvider;
+export type { CredentialsService } from './quota.ts';
 
 /** DeepSeek 官方余额端点，固定域名。 */
 const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance';
-/** 浏览器 UA：避免被前置 Cloudflare 拦截，与 GoQuota 同款。 */
-const DEEPSEEK_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 /** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
 export const DEEPSEEK_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 DeepSeek API Key，仅走 DSH 凭据中心，支持 DEEPSEEK_API_KEY 等。 */
 export async function resolveDeepSeekKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
-  if (credentials && typeof credentials.resolve === 'function') {
-    for (const name of ['DEEPSEEK_API_KEY', 'DEEPSEEK_APIKEY', 'DEEPSEEK_API_TOKEN', 'DEEPSEEK_TOKEN']) {
-      try {
-        const ref = credentialRef(name);
-        const resolved = await credentials.resolve(ref);
-        if (resolved && typeof resolved.value === 'string' && resolved.value.trim().length > 0) return resolved.value.trim();
-      } catch {
-        // 凭据解析失败：继续尝试下一个名字
-      }
-    }
-  }
-  return null;
+  return resolveFirstKey(credentials, ['DEEPSEEK_API_KEY', 'DEEPSEEK_APIKEY', 'DEEPSEEK_API_TOKEN', 'DEEPSEEK_TOKEN']);
 }
 
 /** 归一化单条余额明细，字段缺失或非法返回 null，不使整批失败。 */
@@ -86,7 +68,7 @@ export async function fetchDeepSeekBalance(credentials?: CredentialsService): Pr
     const response = await fetch(DEEPSEEK_BALANCE_URL, {
       headers: {
         authorization: `Bearer ${key}`,
-        'user-agent': DEEPSEEK_UA,
+        'user-agent': QUOTA_UA,
       },
       signal: AbortSignal.timeout(15000),
     });
@@ -117,40 +99,14 @@ export async function fetchDeepSeekBalance(credentials?: CredentialsService): Pr
   }
 }
 
-let cache: { at: number; value: DeepSeekBalance } | null = null;
-let inflight: Promise<DeepSeekBalance> | null = null;
-
 /**
  * 带 TTL 缓存与单飞的余额查询，路由每次调用都走这里。
  *
- * @param intervalMinutes 客户端抓取间隔，单位为分钟；有效缓存按 5 分钟上限与
- *   3 分钟下限、请求间隔经 min 与 max 组合计算 —— 让实际打官方端点的频率与
- *   设置一致，且不短于 3 分钟；未提供时用默认 5 分钟。
+ * @param intervalMinutes 客户端抓取间隔，单位为分钟；有效 TTL 见共享公式，
+ *   未提供时用默认 5 分钟。
  * @param force 为 true 时绕过 TTL 缓存强制重新抓取，供概览 DeepSeek 磁贴的立即
  *   刷新按钮使用；仍走单飞，避免并发打官方端点。
  */
-export async function queryDeepSeekBalance(
-  intervalMinutes?: number,
-  force = false,
-  credentials?: CredentialsService,
-): Promise<DeepSeekBalance> {
-  const effectiveTtlMs = effectiveQuotaTtl(intervalMinutes);
-  const now = Date.now();
-  if (!force && cache !== null && now - cache.at < effectiveTtlMs) return cache.value;
-  if (force && cache !== null && now - cache.at < DEEPSEEK_MIN_FETCH_MS && inflight === null) {
-    // force 距上次抓取过近且无进行中的请求：打官方端点频率受强制下限保护，
-    // 返回上一次结果即可，避免刷爆官方余额接口。
-    return cache.value;
-  }
-  if (inflight === null) {
-    inflight = fetchDeepSeekBalance(credentials)
-      .then((value) => {
-        cache = { at: Date.now(), value };
-        return value;
-      })
-      .finally(() => {
-        inflight = null;
-      });
-  }
-  return inflight;
-}
+export const queryDeepSeekBalance = createQuotaQuery(
+  (credentials?: CredentialsService) => fetchDeepSeekBalance(credentials),
+);

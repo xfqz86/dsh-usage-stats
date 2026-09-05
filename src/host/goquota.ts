@@ -13,39 +13,25 @@
  * 纯数据模块：请求失败 / 未配置 key 都返回带 status 的结构化结果，由
  * 客户端按 status 本地化文案，不在服务端拼用户文案。
  */
-import { credentialRef } from '@deepseek-ai/dsh-credentials';
+import { QUOTA_MIN_FETCH_MS } from '../utils.ts';
 
-import { QUOTA_MIN_FETCH_MS, effectiveQuotaTtl } from '../utils.ts';
+import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
 
 import type { GoQuota, GoWindow } from '../types.ts';
-import type { CredentialProvider } from '@deepseek-ai/dsh-credentials';
+import type { CredentialsService } from './quota.ts';
 
 /** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
 export type { GoQuota, GoWindow } from '../types.ts';
-
-/** DSH 凭据中心服务，为 Context.credentials 合并类型，cordis 可选注入，运行时可能缺席。 */
-export type CredentialsService = CredentialProvider;
+export type { CredentialsService } from './quota.ts';
 
 /** OpenCode Go 官方额度端点，固定域名。 */
 const GO_QUOTA_URL = 'https://opencode.ai/zen/go/v1/usage';
-/** 浏览器 UA：避免被 opencode.ai 前置 Cloudflare 以 error 1010 拦截。 */
-const GO_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 /** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
 export const GO_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 OpenCode Go API Key：仅走 DSH 凭据中心 OPENCODE_GO_API_KEY。 */
 export async function resolveGoKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
-  if (credentials && typeof credentials.resolve === 'function') {
-    try {
-      const ref = credentialRef('OPENCODE_GO_API_KEY');
-      const resolved = await credentials.resolve(ref);
-      if (resolved && typeof resolved.value === 'string' && resolved.value.trim().length > 0) return resolved.value.trim();
-    } catch {
-      // 凭据解析失败：返回无 key
-    }
-  }
-  return null;
+  return resolveFirstKey(credentials, ['OPENCODE_GO_API_KEY']);
 }
 
 /** 归一化单个额度窗口，包含 percent 和 resetsAt，字段缺失或非法返回 null。 */
@@ -68,7 +54,7 @@ export async function fetchGoQuota(credentials?: CredentialsService): Promise<Go
     const response = await fetch(GO_QUOTA_URL, {
       headers: {
         authorization: `Bearer ${key}`,
-        'user-agent': GO_UA,
+        'user-agent': QUOTA_UA,
       },
       signal: AbortSignal.timeout(15000),
     });
@@ -96,35 +82,13 @@ export async function fetchGoQuota(credentials?: CredentialsService): Promise<Go
   }
 }
 
-let cache: { at: number; quota: GoQuota } | null = null;
-let inflight: Promise<GoQuota> | null = null;
-
 /**
  * 带 TTL 缓存与单飞的额度查询，路由每次调用都走这里。
  *
- * @param intervalMinutes 客户端抓取间隔，单位分钟；有效缓存为 5 分钟上限
- *   与 3 分钟下限和请求间隔较大值之中的较小值，让实际打官方端点的频率与
- *   设置一致，且不短于 3 分钟；未提供时用默认 5 分钟。
+ * @param intervalMinutes 客户端抓取间隔，单位分钟；有效 TTL 见共享公式，
+ *   未提供时用默认 5 分钟。
  * @param force 为 true 时绕过 TTL 缓存强制重新抓取，供概览 Go 磁贴的“立即
  *   刷新”按钮使用；仍走单飞，避免并发打官方端点。
  * @param credentials DSH 凭据中心，必选，仅 OPENCODE_GO_API_KEY。
  */
-export async function queryGoQuota(intervalMinutes?: number, force = false, credentials?: CredentialsService): Promise<GoQuota> {
-  const effectiveTtlMs = effectiveQuotaTtl(intervalMinutes);
-  const now = Date.now();
-  if (!force && cache !== null && now - cache.at < effectiveTtlMs) return cache.quota;
-  if (force && cache !== null && now - cache.at < GO_MIN_FETCH_MS && inflight === null) {
-    // force 距上次抓取过近且无进行中的请求：打官方端点频率受强制下限保护，
-    // 返回上一次结果即可，避免刷爆官方额度接口。
-    return cache.quota;
-  }
-  if (inflight === null) {
-    inflight = fetchGoQuota(credentials).then((quota) => {
-      cache = { at: Date.now(), quota };
-      return quota;
-    }).finally(() => {
-      inflight = null;
-    });
-  }
-  return inflight;
-}
+export const queryGoQuota = createQuotaQuery((credentials?: CredentialsService) => fetchGoQuota(credentials));
