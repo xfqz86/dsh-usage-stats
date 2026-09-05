@@ -21,6 +21,7 @@
 
 - body `{ sessionId?: string, limit?: number, sessionsLimit?: number }`，带 sessionId 时返回对应会话的 `current`
   和 `series.current`，`limit` 和 `sessionsLimit` 为会话明细分页上限，取值范围为 `1..1000`，默认 `200`，浏览器端 `useSnapshot` 以 `500` 请求，超出截断。
+- `series.all`、`series.current` 与各模型 `series` 均截断至最近 366 天，与客户端 `all` 范围上限对齐，避免长历史下每 4s 全量序列化开销；聚合总量 `all`/`models[].usage` 不受截断影响，仍为全量。
 - 响应 `value` 字段为 `UsageSnapshot` 类型，类型单一定义在 `src/types.ts`，由 host 构建与 client 消费共用：
   - 统计元信息：`scanning` / `scans` / `failed` / `rawSessions` /
     `harnessSessions` / `foldedEvents` / `dedupSkipped` / `lastError` /

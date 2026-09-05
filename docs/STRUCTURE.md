@@ -35,7 +35,9 @@ dsh-usage-stats/
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
 │   │   │   ├── Tooltip.tsx ← 自实现的 Tooltip：基于 dsh 自带 `@deepseek-ai/dsh-client-ui-primitives/Tooltip` 的轻量修改版， 并已合并原 `FollowTooltip` 的鼠标跟随能力，通过 `follow` 参数控制。
-│   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
+│   │   │   ├── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
+│   │   │   ├── ZaiNoPlan.module.css ← Z.ai 未开通空态：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
+│   │   │   └── ZaiNoPlan.tsx ← Z.ai 未开通空态：品牌色图标徽标配短文案，概览磁贴与侧边栏 tooltip 共用。
 │   │   ├── views/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
@@ -92,6 +94,7 @@ dsh-usage-stats/
 ├── pnpm-lock.yaml ← 锁文件（不手改）
 ├── pnpm-workspace.yaml ← pnpm 工作区（含版本保鲜期白名单）
 ├── README.md ← 面向普通用户的功能说明
+├── screenshots.json
 ├── tsconfig.json ← TS 编译配置（严格模式）
 └── tsdown.config.ts ← 双 bundle 构建配置（host ESM + client CJS）
 ```

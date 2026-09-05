@@ -8,7 +8,7 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 - 详情面板按概览、日期、会话、模型、设置组织
 - OpenCode Go 额度，展示滚动 5 小时、本周、本月三档剩余额度
 - DeepSeek 余额，展示多币种余额
-- Z.ai 额度，展示滚动 5 小时与本周百分比
+- Z.ai 额度，展示滚动 5 小时与本周百分比，以及每月 Web 搜索次数
 
 <p align="center">
   <img src="docs/screenshot/footer.png" alt="侧边栏底部" width="320" />
