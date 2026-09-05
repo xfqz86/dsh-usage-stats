@@ -46,6 +46,25 @@
   flex: none;
 }
 
+/* 命中率折线图例：横线样例，与柱段方块区分 */
+.legendLine {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  flex: none;
+}
+
+/* 缓存命中率折线叠加：定位于柱区底部 100px 高度内，随横向滚动，透传鼠标事件 */
+.hitRateSvg {
+  position: absolute;
+  left: 4px;
+  bottom: 0;
+  height: 100px;
+  pointer-events: none;
+  z-index: 2;
+  overflow: visible;
+}
+
 .legendDate {
   max-width: 70%;
 }

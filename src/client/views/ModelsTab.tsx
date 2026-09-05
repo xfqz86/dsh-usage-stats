@@ -1,6 +1,6 @@
 /**
  * 模型 Tab：按模型/Provider 拆分表，含占比条，布局与会话 Tab 对齐。
- * 顶部为图表区，含饼图与堆叠柱，中间为靠右的时间范围筛选，位于图表与表格之间，默认全部；
+ * 顶部为图表区，含饼图与堆叠柱，中间为靠右的时间范围筛选，位于图表与表格之间，默认1年；
  * 表格列：模型 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比。
  * 过滤逻辑基于模型的按日细分 series，与饼图/堆叠柱共用同一过滤后切片。
  * 表头可排序，与 SessionsTab 同款交互，分页 20/页、容器与会话 Tab 对齐。
@@ -40,7 +40,7 @@ function avgOfModel(total: number, calls: number): number | null {
 /** 排序键：与表头一一对应，含模型文本、数值列与占比。 */
 type SortKey = 'model' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg' | 'share';
 
-/** 时间范围选项：值 + 文案键，与 locales 的 modelRange.* 对齐，默认全部。 */
+/** 时间范围选项：值 + 文案键，与 locales 的 modelRange.* 对齐，默认1年。 */
 const MODEL_RANGES: [ModelRange, string][] = [
   ['7d', 'modelRange.7d'],
   ['14d', 'modelRange.14d'],
@@ -58,7 +58,7 @@ export function ModelsTab({
   models: ModelStat[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
-  const [range, setRange] = useState<ModelRange>('all');
+  const [range, setRange] = useState<ModelRange>('365d');
   const [sortKey, setSortKey] = useState<SortKey>('total');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);

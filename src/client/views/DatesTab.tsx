@@ -1,7 +1,8 @@
 /**
  * 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
- * 顶部为按 token 类型堆叠的每日柱状图，使用 StackedBar mode="date" 横向滚动；
- * 中间为靠右的范围 chips，含 7d、14d、30d、90d、180d、365d 与全部，默认全部，位于图表与表格之间；
+ * 顶部为按输入、输出、缓存三段堆叠的每日柱状图并叠加缓存命中率折线，使用 StackedBar mode="date" 横向滚动；
+ * 柱高仅按展示三段求和（不含缓存写入与推理），tooltip 与表格的 total 仍为全口径 dayTotal；
+ * 中间为靠右的范围 chips，含 7d、14d、30d、90d、180d、365d 与全部，默认1年，位于图表与表格之间；
  * 底部为可排序分页的每日明细表格，含日期、缓存、输入、输出、总计、命中率、调用与每次调用列。
  * 独立成文件，一个组件一个文件。
  */
@@ -12,7 +13,7 @@ import { Pagination } from '../components/Pagination.tsx';
 import { StackedBar } from '../components/StackedBar.tsx';
 import { ThSortable, type SortDir } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { fmt, fmtFull, fullDayLabel, pctOf, buildDateStack, type DateRange } from '../stats.ts';
+import { buildDateStack, fmt, fmtFull, fullDayLabel, hitRateOfDay, pctOf, type DateRange } from '../stats.ts';
 
 import css from './DatesTab.module.css';
 
@@ -20,15 +21,6 @@ import type { SeriesPoint } from '../../types.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 const PAGE_SIZE = 20;
-
-/** 缓存命中率：cacheRead 除以 cacheRead 与 input 之和乘 100，保留 1 位小数，分母为 0 时为 null。 */
-function hitRateOfDay(d: { input?: number; cacheRead?: number }): number | null {
-  const input = d.input ?? 0;
-  const cacheRead = d.cacheRead ?? 0;
-  const denom = input + cacheRead;
-  if (denom <= 0) return null;
-  return Math.round((cacheRead / denom) * 1000) / 10;
-}
 
 /** 平均每次调用：total / calls 取整；calls 为 0 时为 null。 */
 function avgOfDay(total: number, calls: number): number | null {
@@ -39,7 +31,7 @@ function avgOfDay(total: number, calls: number): number | null {
 /** 排序键：与表头一一对应，含日期与数值列。 */
 type SortKey = 'date' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg';
 
-/** 时间范围选项：值与文案键，与 locales 的 range.* 对齐，默认全部。 */
+/** 时间范围选项：值与文案键，与 locales 的 range.* 对齐，默认1年。 */
 const DATE_RANGES: [DateRange, string][] = [
   ['7d', 'range.7d'],
   ['14d', 'range.14d'],
@@ -57,7 +49,7 @@ export function DatesTab({
   series: SeriesPoint[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
-  const [range, setRange] = useState<DateRange>('all');
+  const [range, setRange] = useState<DateRange>('365d');
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(1);

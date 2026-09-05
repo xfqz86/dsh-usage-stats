@@ -597,19 +597,31 @@ export function dateRangeCutoff(range: DateRange): number | null {
   return modelRangeCutoff(range);
 }
 
-/** 日期堆叠柱 token 键，与 UsageAgg 分量对应，reasoning 单列。 */
+/** 日期堆叠柱 token 键，与 UsageAgg 分量对应；日期趋势展示层仅用其中 input、output、cacheRead 三段。 */
 export type DateTokenKey = 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'reasoning';
 
-/** 日期堆叠柱的 token 类型与配色，与 total 分量对应，reasoning 单列也展示。 */
+/** 日期堆叠柱的 token 类型与配色：趋势图仅展示输入、输出、缓存三段，缓存写入与推理不在此展示。 */
 export const DATE_TOKEN_META: readonly { key: DateTokenKey; label: string; color: string }[] = [
   { key: 'input', label: '输入', color: '#4d6bfe' },
   { key: 'output', label: '输出', color: '#00b894' },
   { key: 'cacheRead', label: '缓存', color: '#fdcb6e' },
-  { key: 'cacheWrite', label: '缓存写入', color: '#e17055' },
-  { key: 'reasoning', label: '推理', color: '#a29bfe' },
 ];
 
-/** 本地化的日期堆叠元信息：根据 t 返回对应文案，未传 t 时回落中文。 */
+/** 缓存命中率折线颜色：与三段柱色（蓝/绿/黄）区分，且避开 MODEL_PALETTE 十色，
+ * 跨 Tab 不与模型饼图/堆叠色重叠；仅 date 模式出现，与 model 模式色板互斥。
+ * AGENTS §3 的 design-token 约束针对界面静态样式，图表数据色豁免见 MODEL_PALETTE 注释。 */
+export const HIT_RATE_COLOR = '#ff4757';
+
+/** 缓存命中率：cacheRead 除以 cacheRead 与 input 之和乘 100，保留 1 位小数，分母为 0 时为 null 断点。 */
+export function hitRateOfDay(d: { input?: number | null; cacheRead?: number | null }): number | null {
+  const input = d.input ?? 0;
+  const cacheRead = d.cacheRead ?? 0;
+  const denom = input + cacheRead;
+  if (denom <= 0) return null;
+  return Math.round((cacheRead / denom) * 1000) / 10;
+}
+
+/** 本地化的日期堆叠元信息：趋势图仅返回输入、输出、缓存三段，未传 t 时回落中文。 */
 export function getDateTokenMeta(t?: (key: string, params?: Record<string, unknown>) => string): readonly { key: DateTokenKey; label: string; color: string }[] {
   if (!t) return DATE_TOKEN_META;
   try {
@@ -617,8 +629,6 @@ export function getDateTokenMeta(t?: (key: string, params?: Record<string, unkno
       { key: 'input', label: t('table.input'), color: '#4d6bfe' },
       { key: 'output', label: t('table.output'), color: '#00b894' },
       { key: 'cacheRead', label: t('table.cacheRead'), color: '#fdcb6e' },
-      { key: 'cacheWrite', label: t('table.cacheWrite'), color: '#e17055' },
-      { key: 'reasoning', label: t('table.reasoning'), color: '#a29bfe' },
     ];
   } catch {
     return DATE_TOKEN_META;
@@ -717,10 +727,9 @@ export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?
       const v = tokenValues[meta.key];
       if (v > 0) segs.push({ key: meta.key, label: meta.label, value: v, color: meta.color });
     }
-    // 高度基准：堆叠总和，含 reasoning，保证各类型均可见
-    const stackSum = input + output + cacheRead + cacheWrite + reasoning;
-    if (stackSum > maxTotal) maxTotal = stackSum;
-    if (total > maxTotal) maxTotal = total;
+    // 高度基准：仅按展示三段求和，不含缓存写入与推理；total 口径保持 dayTotal 不变，仅展示层过滤
+    const visibleSum = input + output + cacheRead;
+    if (visibleSum > maxTotal) maxTotal = visibleSum;
     stackDays.push({ t, label: dayLabel(t), total, calls, input, output, cacheRead, cacheWrite, reasoning, segments: segs });
   }
   if (stackDays.length === 0) return { days: [], maxTotal: 1 };
