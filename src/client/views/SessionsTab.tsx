@@ -38,6 +38,18 @@ function avgOf(total: number, calls: number): number | null {
   return Math.round(total / calls);
 }
 
+/** 最近活跃文案：0 表未知，24 小时内显示“今天 HH:MM”，否则完整日期。 */
+function formatLastActive(
+  lastActive: number,
+  t: PropsLocale<'dsh-usage-stats'>['t'],
+): string {
+  if (!lastActive) return '--';
+  if (Date.now() - lastActive < 86400000) {
+    return t('time.today') + ' ' + new Date(lastActive).toTimeString().slice(0, 5);
+  }
+  return fullDayLabel(lastActive);
+}
+
 /** 会话 Tab：分页每页 20 条，子代理折叠，主会话前显示 + / −，子项不占页位，数据完整展示全分量。 */
 export function SessionsTab({
   sessionsList, t,
@@ -182,11 +194,7 @@ export function SessionsTab({
             {pageGroups.map((g) => {
               const isExpanded = expanded.has(g.main.id);
               const hasChildren = g.childCount > 0;
-              const when = g.main.lastActive
-                ? Date.now() - g.main.lastActive < 86400000
-                  ? t('time.today') + ' ' + new Date(g.main.lastActive).toTimeString().slice(0, 5)
-                  : fullDayLabel(g.main.lastActive)
-                : '--';
+              const when = formatLastActive(g.main.lastActive, t);
               const mainTitle = g.main.title || shortId(g.main.id);
               const agg = g.agg.usage;
               const aggHit = hitRateOf(agg);
@@ -224,11 +232,7 @@ export function SessionsTab({
                   </tr>
                   {isExpanded &&
                     g.children.map((c) => {
-                      const childWhen = c.lastActive
-                        ? Date.now() - c.lastActive < 86400000
-                          ? t('time.today') + ' ' + new Date(c.lastActive).toTimeString().slice(0, 5)
-                          : fullDayLabel(c.lastActive)
-                        : '--';
+                      const childWhen = formatLastActive(c.lastActive, t);
                       const childHit = hitRateOf(c.usage);
                       const childAvg = avgOf(usageTotal(c.usage), c.calls);
                       return (
