@@ -79,7 +79,7 @@
 - **缓存**：有效 TTL = `min(5 分钟, max(3 分钟, intervalMinutes))`；未带间隔
   默认 5 分钟；**单飞**，即并发请求只打一次官方端点；**不落账本**，仅内存缓存。
 - **归一化**：`data.limits` 逐条按 `type`、`rawType` 归类，`CREDIT_LIMIT` 和 `TOKENS_LIMIT` 为百分比窗口，按 `unit` 的实际时长归为 `session` 和 `weekly`，`TIME_LIMIT` 为 `webSearches`，`percentage` 缺失时该窗口视为非法，`currentValue` 和 `usage` 缺失时 `webSearches` 视为非法；`nextResetTime` 为 epoch 毫秒，统一转为 ISO `resetsAt`；`percent` 经 `Math.round` 夹到 0..100 后由前端 `goPercent` 和 `goLevelOf` 分档；非法条目按 `openusage` 的校验策略，若已识别类型但归一化失败则整批判为 `error`，否则按空数据返回 `ok`，三窗口为 `null`。
-- **语义**：无 key、401、403 → `no-key`；`success:false` 且 `msg` 含 `"coding plan"`，如 `"当前用户不存在coding plan"`，→ `no-plan`，为合法 key 但无 GLM Coding Plan，由客户文案提示订阅；非 2xx 除 401、403 外、超时、网络异常、JSON 结构非法、已识别窗口归一化失败 → `error`；成功 → `ok`，空 `limits:[]` 仍为 `ok` 且三窗口为 `null`，前端展示“暂无额度数据”。
+- **语义**：无 key、401、403 → `no-key`；`success:false` 且 `msg` 含 `"coding plan"`，如 `"当前用户不存在coding plan"`，→ `no-plan`，为合法 key 但无 GLM Coding Plan，前端展示“未开通 GLM Coding Plan”空态；非 2xx 除 401、403 外、超时、网络异常、JSON 结构非法、已识别窗口归一化失败 → `error`；成功 → `ok`，空 `limits:[]` 仍为 `ok` 且三窗口为 `null`，前端展示“暂无额度数据”。
 
 ## 4. POST /usage-stats/api/rebuild
 

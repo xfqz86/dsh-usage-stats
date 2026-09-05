@@ -304,7 +304,13 @@
   text-align: right;
 }
 
-.deepseekFetchedAt {
+/* ---- 磁贴底部更新时间：DeepSeek / Go / Z.ai 三卡共用 ----
+   磁贴为纵向 flex，margin-top:auto 把它钉到卡片最底部，
+   卡片高度不一时三卡时间戳仍对齐，顶部细线明确页脚分区。 */
+.tileFetchedAt {
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
   font-size: 10px;
   line-height: 14px;
   color: var(--dsw-alias-label-tertiary);

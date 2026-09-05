@@ -23,6 +23,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
 import { Tooltip } from '../components/Tooltip.tsx';
+import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
 import { useDeepSeekBalance } from '../useDeepSeekBalance.ts';
 import { useGoQuota, type GoWindow } from '../useGoQuota.ts';
@@ -504,7 +505,14 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     );
     if (zai.status !== 'ok') {
       if (zai.status === 'no-key') return wrap(t('zai.notConfigured'));
-      if (zai.status === 'no-plan') return wrap(t('zai.noPlan'));
+      if (zai.status === 'no-plan') {
+        return (
+          <div style={{ minWidth: 208, padding: '2px 0' }}>
+            <TipTitle>{t('zai.title')}</TipTitle>
+            <ZaiNoPlan text={t('zai.noPlan')} tone="tip" />
+          </div>
+        );
+      }
       return wrap(t('zai.unavailable'));
     }
     const webReset = zai.webSearches?.resetsAt
@@ -674,7 +682,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
-            <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+            <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
         </Tooltip>
@@ -684,7 +692,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
-            <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+            <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
         </Tooltip>
@@ -694,7 +702,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
           <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
-            <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+            <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
             <span className={css.goRailChipPct}>!</span>
           </span>
         </Tooltip>
@@ -703,7 +711,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     return (
       <Tooltip content={zaiTipContent} side="top" delayMs={400}>
         <span className={css.goRailChipBox}>
-          <span className={css.goRailChipLabel}>{t('zai.label')}</span>
+          <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
           <span className={css.goRailChipPct}>—</span>
         </span>
       </Tooltip>
