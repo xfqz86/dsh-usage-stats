@@ -102,7 +102,7 @@ jobs:
           ls -lh package/
           echo "versioned=$versioned" >> "$GITHUB_OUTPUT"
 
-      - name: Verify tarball (6 files, pruned package.json)
+      - name: Verify tarball (7 files, pruned package.json)
         uses: ./.github/actions/verify-pack
         with:
           path: ${{ steps.pack.outputs.versioned }}

@@ -1,5 +1,5 @@
 name: verify-pack
-description: Verify distribution contains only 6 files and pruned package.json
+description: Verify distribution contains only 7 files and pruned package.json
 author: xfqz86
 
 branding:

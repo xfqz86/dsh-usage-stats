@@ -1,5 +1,5 @@
 # 同步 release 分支（GitHub 安装路径 — 仅最终交付物）
-# 目标：release 分支仅包含最终交付物（lib/ + package.json(已剪枝) + cordis.patch.yml + README.md + LICENSE），
+# 目标：release 分支仅包含最终交付物（lib/ + package.json(已剪枝) + cordis.patch.yml + README.md + CHANGELOG.md + LICENSE），
 #   不含任何源码（src/、tsconfig、scripts、test、.github 等），满足：
 #     dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release
 #   dev 分支的源码安装仍通过 prepare 自构建（github:xfqz86/dsh-usage-stats），release 分支则为预构建的最小形态。
@@ -8,7 +8,7 @@
 #   - CI 在 main 分支成功后自动同步（workflow_run 监听 CI 的 completed 事件，仅 success 才执行）
 #   - 手动 workflow_dispatch（不受 CI 限制，用于应急重推）
 #
-# 实现：构建 lib（压缩，无 map）→ 剪枝 package.json → 组装 payload（5 项）→ 以 orphan/clean 方式覆盖 release 分支
+# 实现：构建 lib（压缩，无 map）→ 剪枝 package.json → 组装 payload（6 项）→ 以 orphan/clean 方式覆盖 release 分支
 name: sync-release-branch
 on:
   workflow_run:
@@ -68,9 +68,10 @@ jobs:
           cp package.json /tmp/payload/package.json
           cp cordis.patch.yml /tmp/payload/cordis.patch.yml
           cp README.md /tmp/payload/README.md
+          cp CHANGELOG.md /tmp/payload/CHANGELOG.md
           cp LICENSE /tmp/payload/LICENSE
 
-      - name: Verify payload (6 files, pruned package.json)
+      - name: Verify payload (7 files, pruned package.json)
         uses: ./.github/actions/verify-pack
         with:
           path: /tmp/payload
@@ -116,25 +117,26 @@ jobs:
           echo "cleaned release branch, now empty except .git"
           ls -la
 
-          # 写入 payload（仅 5 项）
+          # 写入 payload（仅 6 项）
           cp -r /tmp/payload/lib ./
           cp /tmp/payload/package.json ./
           cp /tmp/payload/cordis.patch.yml ./
           cp /tmp/payload/README.md ./
+          cp /tmp/payload/CHANGELOG.md ./
           cp /tmp/payload/LICENSE ./
 
           echo "=== release branch content ==="
           find . -mindepth 1 -maxdepth 1 ! -name '.git' | sort
           find . -type f | sort
-          ls -lh lib/ package.json cordis.patch.yml README.md LICENSE
+          ls -lh lib/ package.json cordis.patch.yml README.md CHANGELOG.md LICENSE
 
-          # 校验 release 分支内容：仅允许的 5 顶层 + lib 内 2 文件（无 map，已压缩）
-          if [ ! -f lib/index.js ] || [ ! -f lib/client.js ] || [ ! -f package.json ] || [ ! -f cordis.patch.yml ] || [ ! -f README.md ] || [ ! -f LICENSE ]; then
+          # 校验 release 分支内容：仅允许的 6 顶层 + lib 内 2 文件（无 map，已压缩）
+          if [ ! -f lib/index.js ] || [ ! -f lib/client.js ] || [ ! -f package.json ] || [ ! -f cordis.patch.yml ] || [ ! -f README.md ] || [ ! -f CHANGELOG.md ] || [ ! -f LICENSE ]; then
             echo "::error::release payload missing required files"
             exit 1
           fi
           if [ -f lib/client.js.map ]; then echo "::error::release contains client.js.map"; exit 1; fi
-          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'README.md' ! -name 'LICENSE' | grep -q .; then
+          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'README.md' ! -name 'CHANGELOG.md' ! -name 'LICENSE' | grep -q .; then
             echo "::error::release branch contains unexpected top-level files"
             find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' | sort
             exit 1
@@ -145,7 +147,7 @@ jobs:
           fi
 
           # 提交（即使 lib 已预构建，.gitignore 在 dev 中忽略 lib，但 release 分支已清空无 .gitignore，直接 add）
-          git add lib package.json cordis.patch.yml README.md LICENSE
+          git add lib package.json cordis.patch.yml README.md CHANGELOG.md LICENSE
           if git diff --cached --quiet; then
             echo "No changes to release branch — already up to date"
             exit 0
@@ -157,6 +159,6 @@ jobs:
       - name: Summary
         run: |
           echo "release branch synced — minimal deliverables only:"
-          echo "  lib/ package.json cordis.patch.yml README.md LICENSE"
+          echo "  lib/ package.json cordis.patch.yml README.md CHANGELOG.md LICENSE"
           echo "users can now install via:"
           echo "  dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release"
