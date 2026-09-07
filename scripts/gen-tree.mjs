@@ -23,6 +23,9 @@ const EXCLUDED = new Set([
   'AGENTS.local.md', 'CLAUDE.local.md', 'pnpm-debug.log',
 ])
 
+/** 点开头条目默认不入树（本机 / 工具目录），白名单内纳入：CI 与 git 规则属仓库内容。 */
+const DOT_ALLOW = new Set(['.github', '.gitignore'])
+
 /** .gitignore 路径（用于尊重 git 忽略规则）。 */
 const GITIGNORE_PATH = join(ROOT, '.gitignore')
 
@@ -31,12 +34,21 @@ const HEADER_EXTS = new Set(['.ts', '.tsx', '.js', '.mjs', '.css'])
 
 /** 非代码文件的固定职责备注（以相对仓库根路径为键；这些文件无块注释可提取）。 */
 const NOTES = {
+  '.gitignore': 'git 忽略规则（不入库清单：产物 / 锁目录 / 本机私有）',
+  '.github/actions/gate/action.yml': 'Gate 复合动作（gate-ci）：校验指定 SHA 的 CI job 是否已成功（release 发布前强制验证）',
+  '.github/actions/prune-package/action.yml': '剪枝复合动作：把 package.json 剪到发布所需最小字段白名单',
+  '.github/actions/setup/action.yml': '统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装',
+  '.github/actions/verify-pack/action.yml': '校验复合动作：交付物仅含白名单文件且 package.json 已剪枝',
+  '.github/workflows/ci.yml': 'CI：类型检查 / 构建 / 冒烟测试（每次 PR 与推送 dev/main 执行）',
+  '.github/workflows/release-branch.yml': '同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）',
+  '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）',
   'docs/API.md': '服务端 HTTP 协议与偏好设置约定（随接口演进维护）',
   'docs/STYLE.md': '风格经验沉淀（lint 之外的统一约定，新会话先读）',
   'docs/PUBLISH.md': '发布流程（GitHub Actions 交付三种形态：release / npm / tarball）',
   'docs/STRUCTURE.md': '生成文件：由 `pnpm tree` 重新生成，勿手改',
   'AGENTS.md': '工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）',
   'README.md': '面向普通用户的功能说明',
+  'CHANGELOG.md': '更新日志（每次发版同步记录功能更新与 Bug 修复）',
   'cordis.patch.yml': '组合包 patch（dsh.bundle.patch）：插入插件条目',
   'package.json': '组合包元数据 / exports / 构建脚本',
   'pnpm-lock.yaml': '锁文件（不手改）',
@@ -266,7 +278,9 @@ function annotationOf(rel, file) {
 
 /** 目录项按「目录在前、文件在后，各自按字典序」排列，并过滤 .gitignore 忽略项。 */
 function list(dir) {
-  const raw = readdirSync(dir).filter((name) => !EXCLUDED.has(name) && !name.startsWith('.'))
+  const raw = readdirSync(dir).filter(
+    (name) => !EXCLUDED.has(name) && (!name.startsWith('.') || DOT_ALLOW.has(name)),
+  )
   // 叠加 .gitignore 过滤（基于相对 POSIX 路径）
   const filtered = raw.filter((name) => {
     const rel = toPosix(join(dir, name).slice(ROOT.length + 1))

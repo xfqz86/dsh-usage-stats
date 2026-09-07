@@ -6,6 +6,23 @@
 
 ```
 dsh-usage-stats/
+├── .github/
+│   ├── actions/
+│   │   ├── gate/
+│   │   │   ├── action.yml ← Gate 复合动作（gate-ci）：校验指定 SHA 的 CI job 是否已成功（release 发布前强制验证）
+│   │   │   └── gate.mjs ← Gate — 校验指定 SHA 的 CI job 是否已成功（仅供 GitHub Action 使用） 通过 REST API 查询 check-runs，匹配 job 名（支持 "verify" 与 "CI / verify"）。
+│   │   ├── prune-package/
+│   │   │   ├── action.yml ← 剪枝复合动作：把 package.json 剪到发布所需最小字段白名单
+│   │   │   └── prune.mjs ← 剪枝 package.json 至发布所需最小字段集合
+│   │   ├── setup/
+│   │   │   └── action.yml ← 统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装
+│   │   └── verify-pack/
+│   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
+│   │       └── verify.mjs ← 校验交付物仅含 7 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
+│   └── workflows/
+│       ├── ci.yml ← CI：类型检查 / 构建 / 冒烟测试（每次 PR 与推送 dev/main 执行）
+│       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
+│       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
 ├── docs/
 │   ├── screenshot/
 │   │   ├── 01-overview.png
@@ -93,7 +110,9 @@ dsh-usage-stats/
 │   ├── pure.mjs ← 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
 │   └── smoke.mjs ← 用量统计服务端（Host）的独立冒烟测试（账本模式，自管理 sqlite 介质）。
+├── .gitignore ← git 忽略规则（不入库清单：产物 / 锁目录 / 本机私有）
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）
+├── CHANGELOG.md ← 更新日志（每次发版同步记录功能更新与 Bug 修复）
 ├── cordis.patch.yml ← 组合包 patch（dsh.bundle.patch）：插入插件条目
 ├── eslint.config.mjs ← @fileoverview ESLint flat config — Google TypeScript Style Guide 落地 覆盖 host（Node ESM）/ client（Browser CJS）/ scripts（Node ESM mjs）三类环境， 基于 eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic。
 ├── LICENSE
