@@ -127,6 +127,7 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 - 接口协议见 `docs/API.md`
 - 模块结构见 `docs/STRUCTURE.md`，由 `pnpm tree` 生成
 - 发布流程见 `docs/PUBLISH.md`
+- 更新日志见 `CHANGELOG.md`，每次发版同步记录功能更新与 Bug 修复
 
 ## License
 
