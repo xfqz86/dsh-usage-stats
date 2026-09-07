@@ -11,7 +11,7 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 - Z.ai 额度，展示滚动 5 小时与本周百分比，以及每月 Web 搜索次数
 
 <p align="center">
-  <img src="docs/screenshot/footer.png" alt="侧边栏底部" width="320" />
+  <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/footer.png" alt="侧边栏底部" width="320" />
   <br>
   <em>侧边栏底部</em>
 </p>
@@ -19,31 +19,31 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/screenshot/01-overview.png" alt="概览" />
+      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/01-overview.png" alt="概览" />
       <br>
       <sub>概览</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/screenshot/02-dates.png" alt="日期" />
+      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/02-dates.png" alt="日期" />
       <br>
       <sub>日期</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/screenshot/03-sessions.png" alt="会话" />
+      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/03-sessions.png" alt="会话" />
       <br>
       <sub>会话</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/screenshot/04-models.png" alt="模型" />
+      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/04-models.png" alt="模型" />
       <br>
       <sub>模型</sub>
     </td>
   </tr>
   <tr>
     <td align="center" colspan="2" width="50%">
-      <img src="docs/screenshot/05-settings.png" alt="设置" width="75%" />
+      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/05-settings.png" alt="设置" width="75%" />
       <br>
       <sub>设置</sub>
     </td>
