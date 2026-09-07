@@ -1,5 +1,5 @@
 /**
- * 校验交付物仅含 6 文件且 package.json 已剪枝（仅供 GitHub Action 使用）
+ * 校验交付物仅含 7 文件且 package.json 已剪枝（仅供 GitHub Action 使用）
  * 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
  */
 
@@ -80,9 +80,10 @@ function verifyTarball(tgzPath) {
   check(/^package\/package\.json$/, 'package.json missing in tarball')
   check(/^package\/cordis\.patch\.yml$/, 'cordis.patch.yml missing in tarball')
   check(/^package\/README\.md$/, 'README.md missing in tarball')
+  check(/^package\/CHANGELOG\.md$/, 'CHANGELOG.md missing in tarball')
   check(/^package\/LICENSE$/, 'LICENSE missing in tarball')
 
-  if (list.length !== 6) fail(`unexpected file count ${list.length}, expected 6 (lib/index.js + lib/client.js + package.json/cordis.patch.yml/README.md/LICENSE)\n${list.join('\n')}`)
+  if (list.length !== 7) fail(`unexpected file count ${list.length}, expected 7 (lib/index.js + lib/client.js + package.json/cordis.patch.yml/README.md/CHANGELOG.md/LICENSE)\n${list.join('\n')}`)
   if (list.some(p => p.includes('client.js.map'))) fail('client.js.map should not be in tarball')
   if (list.some(p => /^package\/(src\/|tsconfig|tsdown|scripts\/|test\/|docs\/|\.github\/)/.test(p))) {
     fail(`tarball contains unwanted src/tsconfig/scripts/test files:\n${list.join('\n')}`)
@@ -97,7 +98,7 @@ function verifyTarball(tgzPath) {
   const extra = Object.keys(j).filter(k => !ALLOW.has(k))
   if (extra.length) fail(`packed package.json has extra keys: ${extra.join(', ')} (allow: ${[...ALLOW].join(', ')})`)
   console.log(`packed package.json pruned ok: ${Object.keys(j).join(', ')}`)
-  console.log('tarball verify ok — only lib(2) + package.json(pruned) + LICENSE + cordis.patch.yml + README.md')
+  console.log('tarball verify ok — only lib(2) + package.json(pruned) + LICENSE + cordis.patch.yml + README.md + CHANGELOG.md')
 }
 
 function verifyPayload(dir) {
@@ -109,8 +110,8 @@ function verifyPayload(dir) {
     .filter(Boolean)
   console.log(files.join('\n'))
   const rel = files.map(f => f.replace(abs + '/', ''))
-  if (files.length !== 6) fail(`payload file count ${files.length}, expected 6 (lib/index.js, lib/client.js + package.json/cordis.patch.yml/README.md/LICENSE)\n${rel.join('\n')}`)
-  const need = ['lib/index.js', 'lib/client.js', 'package.json', 'cordis.patch.yml', 'README.md', 'LICENSE']
+  if (files.length !== 7) fail(`payload file count ${files.length}, expected 7 (lib/index.js, lib/client.js + package.json/cordis.patch.yml/README.md/CHANGELOG.md/LICENSE)\n${rel.join('\n')}`)
+  const need = ['lib/index.js', 'lib/client.js', 'package.json', 'cordis.patch.yml', 'README.md', 'CHANGELOG.md', 'LICENSE']
   for (const n of need) if (!rel.includes(n)) fail(`payload missing ${n}`)
   if (rel.some(p => p.includes('client.js.map'))) fail('payload contains client.js.map (should be no map)')
   if (rel.some(p => p.endsWith('.ts'))) fail(`payload contains .ts source:\n${rel.join('\n')}`)
@@ -120,7 +121,7 @@ function verifyPayload(dir) {
   const extra = Object.keys(j).filter(k => !ALLOW.has(k))
   if (extra.length) fail(`payload package.json has extra keys: ${extra.join(', ')}`)
   if (pkgJson.includes('"prepare"')) fail('prepare still in payload package.json')
-  console.log('payload verify ok — only lib(2) + package.json(pruned) + LICENSE + cordis.patch.yml + README.md')
+  console.log('payload verify ok — only lib(2) + package.json(pruned) + LICENSE + cordis.patch.yml + README.md + CHANGELOG.md')
 }
 
 function main() {

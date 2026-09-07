@@ -5,11 +5,11 @@
 | 形态 | 产物 | 安装 |
 |------|------|------|
 | GitHub 源码 | 仓库源码 + `prepare: tsdown` | `dsh plugin add github:xfqz86/dsh-usage-stats` |
-| GitHub 预构建 | `release` 分支（仅 `lib/` + `package.json` + `cordis.patch.yml` + `README.md` + `LICENSE`） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
+| GitHub 预构建 | `release` 分支（仅 `lib/` + `package.json` + `cordis.patch.yml` + `README.md` + `CHANGELOG.md` + `LICENSE`） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
 | npm | `@xfqz86/dsh-usage-stats` | `dsh plugin add @xfqz86/dsh-usage-stats` |
 | tarball | `xfqz86-dsh-usage-stats-*.tgz` + 固定别名 `xfqz86-dsh-usage-stats.tgz` | `dsh plugin add ./xxx.tgz` 或 `.../releases/latest/download/xfqz86-dsh-usage-stats.tgz` |
 
-交付物仅含 5 项（`lib/` 内为压缩后的 `index.js` / `client.js`，无 `*.map`，合计 6 文件）：`lib/`、`package.json`（剪枝后仅保留 `name/version/description/type/main/exports/files/engines/dsh/license` + `repository`）、`cordis.patch.yml`、`README.md`、`LICENSE`。
+交付物仅含 6 项（`lib/` 内为压缩后的 `index.js` / `client.js`，无 `*.map`，合计 7 文件）：`lib/`、`package.json`（剪枝后仅保留 `name/version/description/type/main/exports/files/engines/dsh/license` + `repository`）、`cordis.patch.yml`、`README.md`、`CHANGELOG.md`、`LICENSE`。
 
 ## 工作流
 
@@ -28,7 +28,7 @@ npx tsc --noEmit && pnpm build && node test/smoke.mjs && node test/client-bundle
 
 # 生产态校验
 NODE_ENV=production pnpm build
-pnpm pack --dry-run   # 应为 6 文件，无 *.map
+pnpm pack --dry-run   # 应为 7 文件，无 *.map
 ```
 
 ## 发布步骤
@@ -37,7 +37,7 @@ pnpm pack --dry-run   # 应为 6 文件，无 *.map
 
 ```bash
 git checkout main && git merge dev
-# 编辑 package.json version
+# 编辑 package.json version，并同步追加 CHANGELOG.md 该版本条目（功能更新与 Bug 修复，Unreleased 草稿后移并清空）
 git commit -am "chore: bump v0.2.0" && git push origin main  # 同步 release 分支
 
 git tag v0.2.0 && git push origin v0.2.0  # 触发 Release：发布 npm + GitHub Release

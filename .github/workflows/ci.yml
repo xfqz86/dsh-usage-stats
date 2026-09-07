@@ -48,7 +48,7 @@ jobs:
           mkdir -p /tmp/pack-test
           pnpm pack --pack-destination /tmp/pack-test
 
-      - name: Verify pack (6 files, pruned package.json)
+      - name: Verify pack (7 files, pruned package.json)
         uses: ./.github/actions/verify-pack
         with:
           path: /tmp/pack-test/*.tgz
