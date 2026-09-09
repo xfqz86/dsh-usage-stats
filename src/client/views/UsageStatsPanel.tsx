@@ -9,8 +9,8 @@
  *   - ModelsTab，模型，按模型拆分表格
  *   - SettingsTab，设置，含偏好设置，涉及 Go、DeepSeek 与 Z.ai、可折叠的账本操作与页脚
  *
- * 数据与底部按钮共用 /usage-stats/api/snapshot、/usage-stats/api/go-quota
- * 与 /usage-stats/api/deepseek-balance 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
+ * 数据与底部按钮共用 usageStats/snapshot、usageStats/go-quota
+ * 与 usageStats/deepseek-balance 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
  * 含 DatesTab 的曲线范围、SessionsTab 的会话展开等，不跨切换保留，
  * 重新进入对应 Tab 即重置为默认值。
  */
@@ -38,7 +38,7 @@ import css from './UsageStatsPanel.module.css';
 import type { DeepSeekBalance, ZaiQuota } from '../../types.ts';
 import type { UsageStatsKey } from '../locales.ts';
 import type { UsageSettings } from '../settings.ts';
-import type { GoQuota } from '../useGoQuota.ts';
+import type { GoQuota } from '../useQuota.ts';
 import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
@@ -50,6 +50,8 @@ export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-stats'> {
   data: UsageSnapshot | null
   /** 拉取失败，服务不可达或响应非 ok。 */
   err: boolean
+  /** TODO(诊断后删除)：快照失败的真实原因，临时展示用。 */
+  errDetail?: string | null
   /** OpenCode Go 订阅额度，底部按钮轮询；null 表示尚未加载或抓取被禁用。 */
   go: GoQuota | null
   /** DeepSeek 余额，底部按钮轮询；null 表示尚未加载或抓取被禁用。 */
@@ -96,6 +98,7 @@ export function UsageStatsPanel({
   open,
   data,
   err,
+  errDetail,
   go,
   deepseek,
   zai,
@@ -115,7 +118,8 @@ export function UsageStatsPanel({
   // 内容区渲染，避免嵌套三元
   function renderBody() {
     if (err) {
-      return <div className={shared.empty}>{t('state.unavailable')}</div>;
+      // TODO(诊断后删除)：括号内为真实失败原因，定位用。
+      return <div className={shared.empty}>{t('state.unavailable')}{errDetail ? ` (${errDetail})` : ''}</div>;
     }
     if (!value) {
       return <div className={shared.empty}>{t('state.loading')}</div>;

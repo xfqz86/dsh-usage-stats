@@ -25,11 +25,9 @@ import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
-import { useDeepSeekBalance } from '../useDeepSeekBalance.ts';
-import { useGoQuota, type GoWindow } from '../useGoQuota.ts';
 import { useGoSettings } from '../useGoSettings.ts';
+import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../useQuota.ts';
 import { useSnapshot } from '../useSnapshot.ts';
-import { useZaiQuota, type ZaiWindow } from '../useZaiQuota.ts';
 
 import css from './UsageStatsFooter.module.css';
 import { UsageStatsPanel } from './UsageStatsPanel.tsx';
@@ -200,7 +198,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   // 本地化函数单点转换，组件内统一用 tFn。
   const tFn = t as unknown as LocaleFn;
   const [open, setOpen] = useState(false);
-  const [data, err, refreshSnapshot] = useSnapshot();
+  const [data, err, refreshSnapshot, errDetail] = useSnapshot();
   // Go 额度、DeepSeek 余额与 Z.ai 额度抓取开关与间隔来自偏好设置，默认开启、间隔 5 分钟
   const [settings, updateSettings] = useGoSettings();
   const [go, refreshQuota] = useGoQuota(settings.goEnabled, settings.goFetchMinutes);
@@ -724,6 +722,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         open={open}
         data={data}
         err={err}
+        errDetail={errDetail}
         go={go}
         deepseek={deepseek}
         zai={zai}
