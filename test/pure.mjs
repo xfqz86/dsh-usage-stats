@@ -7,13 +7,13 @@
  */
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Readable } from 'node:stream';
 
 import { ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
 import { fetchDeepSeekBalance, queryDeepSeekBalance } from '../src/host/deepseekBalance.ts';
 import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
-import { hasUsageStatsHeader, isLoopbackHost, readJsonBody } from '../src/host/http.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
+import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
+import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
 import { createStore } from '../src/host/store.ts';
 import { snapshot } from '../src/host/snapshot.ts';
 import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
@@ -264,36 +264,67 @@ describe('logs：行解析', () => {
   });
 });
 
-describe('http：围栏与请求体', () => {
-  it('isLoopbackHost 仅放行回环', () => {
-    assert.equal(isLoopbackHost('127.0.0.1:3080'), true);
-    assert.equal(isLoopbackHost('127.0.0.5'), true);
-    assert.equal(isLoopbackHost('localhost'), true);
-    assert.equal(isLoopbackHost('LOCALHOST:80'), true);
-    assert.equal(isLoopbackHost('::1'), true);
-    assert.equal(isLoopbackHost('[::1]:3080'), true);
-    assert.equal(isLoopbackHost('127.0.0.1.evil.com'), false);
-    assert.equal(isLoopbackHost('192.168.1.1'), false);
-    assert.equal(isLoopbackHost(undefined), false);
-    assert.equal(isLoopbackHost(''), false);
+describe('remote：手写严格贡献', () => {
+  it('7 个一元方法与服务一致', () => {
+    assert.deepEqual([...METHOD_NAMES], [
+      'snapshot', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
+    ]);
+    assert.equal(USAGE_STATS_REMOTE.package, '@xfqz86/dsh-usage-stats');
+    assert.deepEqual(
+      USAGE_STATS_REMOTE.descriptors.map((d) => d.method),
+      [...METHOD_NAMES],
+    );
+    for (const d of USAGE_STATS_REMOTE.descriptors) {
+      assert.equal(d.service, 'usageStats');
+      assert.equal(d.namespace, 'usageStats');
+      assert.deepEqual(d.invocation, { kind: 'direct' });
+      assert.equal(d.cancellation, undefined);
+      for (const p of d.parameters) assert.equal(p.codec.mode, 'strict');
+      assert.equal(d.result.mode, 'strict');
+    }
   });
 
-  it('hasUsageStatsHeader 精确匹配', () => {
-    assert.equal(hasUsageStatsHeader({ 'x-dsh-usage-stats': 'dsh-usage-stats' }), true);
-    assert.equal(hasUsageStatsHeader({ 'x-dsh-usage-stats': ['a', 'dsh-usage-stats'] }), true);
-    assert.equal(hasUsageStatsHeader({}), false);
-    assert.equal(hasUsageStatsHeader({ 'x-dsh-usage-stats': 'other' }), false);
-    assert.equal(hasUsageStatsHeader(undefined), false);
+  it('请求 schema 收发合法、拒非法', () => {
+    const snap = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'snapshot');
+    assert.ok(snap && snap.parameters.length === 1);
+    const codec = snap.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    codec.schema.parse({ sessionId: null });
+    codec.schema.parse({ sessionId: 's-1', limit: 500 });
+    assert.throws(() => codec.schema.parse({ sessionId: 42 }));
+    assert.throws(() => codec.schema.parse({ sessionId: null, limit: 'x' }));
   });
 
-  it('readJsonBody 正常与空体', async () => {
-    assert.deepEqual(await readJsonBody(Readable.from([Buffer.from('{"a":1}')])), { a: 1 });
-    assert.deepEqual(await readJsonBody(Readable.from([Buffer.from('  ')])), {});
+  it('结果信封成功分支严格、错误分支透传', () => {
+    const quota = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'goQuota');
+    assert.ok(quota);
+    assert.equal(quota.result.mode, 'strict');
+    if (quota.result.mode !== 'strict') throw new Error('unreachable');
+    const { schema } = quota.result;
+    // 成功分支缺字段必须拒绝（值分支精确）。
+    assert.throws(() => schema.parse({ ok: true, value: {} }));
+    // 错误分支接受已知码与未知码（网关透传不断信封解析）。
+    schema.parse({ ok: false, error: { code: 'usageStats/busy', message: 'busy', details: { operation: 'rebuild' } } });
+    schema.parse({ ok: false, error: { code: 'gateway/internal', message: 'boom', details: {} } });
   });
+});
 
-  it('readJsonBody 非法与超限英文报错', async () => {
-    await assert.rejects(readJsonBody(Readable.from([Buffer.from('{bad')])), /not valid JSON/);
-    await assert.rejects(readJsonBody(Readable.from([Buffer.alloc(1_200_000)])), /too large/);
+describe('remote句柄：经 get 取命名空间服务', () => {
+  it('不暂存 ctx.remote：子 scope 里对暂存句柄的属性访问报 without-inject', async () => {
+    // 命名空间服务桩：只有 get 能拿到，remote 上故意不挂 usageStats 属性。
+    const ns = { snapshot: async () => ({ ok: true, value: {} }) };
+    let alive = false;
+    const fakeCtx = {
+      remote: { $mount: async () => { alive = true; return async () => { alive = false; }; } },
+      get: (key) => (alive && key === 'remote.usageStats' ? ns : undefined),
+    };
+    assert.throws(() => usageStatsRemote(), /尚未挂载/);
+    const dispose = await mountUsageStatsRemote(fakeCtx);
+    // 若实现改回暂存 ctx.remote 再读 .usageStats，这里拿到的是 undefined。
+    assert.equal(usageStatsRemote(), ns);
+    await dispose();
+    assert.throws(() => usageStatsRemote(), /尚未挂载/);
   });
 });
 
