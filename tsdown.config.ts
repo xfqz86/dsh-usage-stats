@@ -15,13 +15,50 @@
  * 源码结构：src/host 服务端，Node ESM 与 src/client 浏览器端 bundle
  * 分离，入口分别是 src/host/index.ts 与 src/client/index.ts。
  *
+ * 装饰器降级：@Remote 等标准装饰器经 decoratorLowering()（TypeScript
+ * transpileModule，与 harness typert 生成器插件的 transform 同原理）
+ * 降为 __esDecorate 辅助后打包，否则产物保留原生装饰器语法、
+ * Node 22 无法解析。只处理含装饰器的 TS 源文件。
+ *
  * 构建区分：
  * - 本地调试 `pnpm build`，`NODE_ENV` 非 production：不压缩、保留 sourcemap，便于跟踪问题
  * - 生产发布 `NODE_ENV=production pnpm build`，CI/release 使用：压缩 minify 且无 sourcemap，最终产物仅含压缩后的 2 个 js，无 map
  */
+import ts from 'typescript';
+
 import { cssModulesInline } from './scripts/css-modules-inline.mjs';
 
+
 import type { UserConfig } from 'tsdown';
+
+/** 匹配装饰器语法的源码才走 TypeScript 降级，其余文件原样。 */
+const DECORATOR_SYNTAX = /^\s*@[A-Za-z_$][\w$]*/m;
+
+/**
+ * 标准装饰器降级 rolldown 插件：harness 仓库内由 typert 生成器插件
+ * 顺手完成，本仓库独立构建故自备最小 transform。
+ */
+function decoratorLowering(): { name: string; transform: (code: string, id: string) => { code: string; map: string | undefined } | undefined } {
+  return {
+    name: 'dsh-usage-stats-decorator-lowering',
+    transform(code, id) {
+      const file = id.split('?', 1)[0] ?? id;
+      if (!/\.[cm]?tsx?$/.test(file) || !DECORATOR_SYNTAX.test(code)) return undefined;
+      const result = ts.transpileModule(code, {
+        fileName: file,
+        compilerOptions: {
+          target: ts.ScriptTarget.ES2024,
+          module: ts.ModuleKind.ESNext,
+          sourceMap: true,
+        },
+      });
+      return {
+        code: result.outputText.replace(/\n?\/\/# sourceMappingURL=.*$/u, '\n'),
+        map: result.sourceMapText,
+      };
+    },
+  };
+}
 
 /** 是否为生产构建：仅 `NODE_ENV=production` 时压缩并去掉 sourcemap，便于本地调试时保留可读性与映射。 */
 const isProd = process.env.NODE_ENV === 'production';
@@ -55,7 +92,10 @@ export default [
     clean: true,
     minify: isProd,
     sourcemap: !isProd,
-    // 服务端仅依赖 Node 内置 + 本地代码，不 bundled 任何 npm 包，@deepseek-ai/* 为 devDependencies，仅类型
+    plugins: [decoratorLowering()],
+    // 服务端仅依赖 Node 内置 + 本地代码 + DSH 基座机制值导入
+    //（typert-protocol 装饰器体系、cordis Service 符号，见 AGENTS §0 例外），
+    // 不 bundled 任何 npm 包，运行时由本包 node_modules 解析。
     // 设 neverBundle:true 可完全禁止 node_modules 打包，避免误引入值导致 cordis/cosmokit 等被内联
     deps: { neverBundle: true },
   },
