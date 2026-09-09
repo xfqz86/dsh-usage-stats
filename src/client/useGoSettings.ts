@@ -18,7 +18,7 @@ import {
   type UsageSettings,
 } from './settings.ts';
 
-/** 偏好设置 hook：读取即持久（localStorage），同时支持 Go 与 DeepSeek 两组偏好。 */
+/** 偏好设置 hook：读取即持久（localStorage），同时支持 Go、DeepSeek 与 Z.ai 三组偏好。 */
 export function useGoSettings(): [UsageSettings, (patch: Partial<UsageSettings>) => void] {
   const [settings, setSettings] = useState<UsageSettings>(() => loadUsageSettings());
   const isFirstRef = useRef(true);

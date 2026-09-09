@@ -6,7 +6,20 @@
 
 ## [Unreleased]
 
-暂无。下一版草稿在此累积，发版时移入对应版本小节并清空。
+### 新增
+
+- 后端接口迁入 `usageStats` 命名空间 7 个一元 `@Remote` 方法（`snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`），调用走网关 `POST /api/usageStats/<方法>`，信任与认证由网关载体统一处理
+
+### 变更
+
+- **BREAKING**：删除自建 `POST /usage-stats/api` 前缀路由与回环围栏、`x-dsh-usage-stats` 自定义头（`src/host/http.ts` 删除），服务端改类表单 `UsageStatsService`（Loader 实例化），客户端自挂载手写严格贡献后经 `ctx.get('remote.usageStats')` 取命名空间服务调用；升级后需重启 dsh 服务端
+- 构建：TypeScript 升至 6（标准装饰器原生类输出），tsdown 新增装饰器降级插件；客户端 bundle 内联 `zod` 编解码
+- 可选服务不再进 inject：`credentials` 改调用处 `ctx.get` 判空（cordis 对象写法的值为拦截配置，无“可选”语义）
+
+### 修复
+
+- 浏览器端取命名空间服务改走 `ctx.get('remote.usageStats')` 实时解析：暂存 `ctx.remote` 再读 `.usageStats` 会在子 scope 下报 `without inject`，导致快照与三路额度全部不可用（`src/client/remote.ts`；`pure` 新增句柄回归单测）
+- 注释文档与实现对齐：额度缺凭据直接返回 `no-key`（不读 env 与文件）、九表与去重与截断口径按实现修正，`README` 凭据别名与 `CHANGELOG` 链接同步
 
 ## [0.2.1] - 2026-09-06
 

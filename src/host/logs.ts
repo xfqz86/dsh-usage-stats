@@ -18,7 +18,7 @@ export function getSessionsRoot(): string {
 }
 
 /** 持久化的会话种子记录：会话头（SessionHeader）序列化后带
- *  `type: 'session'` 标记，作为日志第一行。 */
+ *  `type: 'session'` 标记。 */
 export type SessionSeedRecord = SessionHeader & { type: 'session' };
 
 /** 解析一行 NDJSON：会话事件、会话种子记录，或空行/坏行返回 null。 */

@@ -5,7 +5,8 @@
  *
  * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测。
  *
- * 统计口径：assistant/message 事件且其 data.usage.inputTokens 为数字；
+ * 统计口径：assistant/message 事件且 data.usage 为对象即视为可用，
+ * 数值归一（非有限/负数按 0、向下取整）在 ledger 层完成；
  * total = input + output + cacheRead + cacheWrite，reasoning 单列，不计入 total。
  */
 import type { Agg } from '../types.ts';
@@ -15,7 +16,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session';
 /** 聚合计数结构定义在 types.ts，与 client 端 UsageAgg 统一。 */
 export type { Agg } from '../types.ts';
 
-/** 会话级状态：聚合与去重水位，title、cwd、createdAt 在账本 meta。 */
+/** 会话级状态：聚合与去重水位，标题与归属字段在账本 meta。 */
 export interface SessionInfo {
   daily: Map<number, Agg>
   allAgg: Agg
@@ -44,7 +45,7 @@ export function ink(agg: Agg, u: TokenUsage): void {
   agg.calls += 1;
 }
 
-/** 类型守卫：携带可折叠 usage 的 assistant/message 事件。 */
+/** 类型守卫：携带 usage 候选的 assistant/message 事件（零用量也为 true，是否折叠由后续判断）。 */
 export function usable(
   event: SessionEvent,
 ): event is SessionEvent<'assistant/message'> & { data: { usage: TokenUsage } } {

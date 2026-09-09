@@ -1,11 +1,12 @@
 /**
- * 浏览器端插件偏好设置：OpenCode Go 额度与 DeepSeek 余额监控的偏好设置。
+ * 浏览器端插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控的偏好设置。
  *
  * 纯逻辑模块，无 React，负责：
  *   - 偏好形状 `UsageSettings` 与默认值；
  *   - localStorage 的读取 loadUsageSettings，含类型、边界校验与兜底，与
  *     写入 saveUsageSettings；
- *   - 抓取间隔的夹取规则 clampGoFetchMinutes、clampDeepSeekFetchMinutes，整数分钟，下限 3。
+ *   - 抓取间隔的夹取规则 clampGoFetchMinutes、clampDeepSeekFetchMinutes、
+ *     clampZaiFetchMinutes，整数分钟，下限 3。
  *
  * 写入失败时如隐私模式等情况，静默降级为仅当前会话生效，不抛错。
  */

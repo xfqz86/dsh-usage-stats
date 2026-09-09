@@ -10,16 +10,14 @@
  *     序事件再按毫秒时间戳区分。结构化列主键，列顺序为 t、session_id、seq。
  *     无 time 的畸形事件以"当天内确定性毫秒偏移"入账：同日重放幂等，
  *     跨日重放理论上可能重复——防御路径罕见可接受。
- *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/
- *     lastActive，初始化扫描抄录、实时 session/title 事件更新。
- *   - `agg_*` 预统计表：派生聚合的物化视图，见 §5 预统计，与 events 同库
+ *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/lastActive/parentSession/origin/delegationDepth，初始化扫描抄录、实时 session/title 事件更新。
+ *   - `agg_*` 预统计表（agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint 共 7 张）：派生聚合的物化视图，见 §5 预统计，与 events 同库
  *     事务一致，避免重启时重放全量事件。
  *   - `PRAGMA user_version` = LEDGER_VERSION：结构不兼容时清空重建
  *     ，事件表为空后下次启动全量重扫 —— 账本结构升级的安全网。
  *
- * 所有读写同步：append / setMeta 即写即持久，自动提交，崩溃后重启从
- * sqlite 恢复，无需周期性对账；会话元数据在内存缓存一份供快照读取。
- * 预统计表与事件表同库事务，保证聚合与原始事件一致性。
+ * 所有读写同步：append / setMeta 即写即持久，自动提交，崩溃后重启从 sqlite 恢复；会话元数据在内存缓存一份供快照读取。
+ * 预统计表与事件表同库但独立提交，崩溃窗口的缺口由启动对账或 rebuild 修复。
  */
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -244,7 +242,7 @@ function sanitizeSqlText(value: string): string {
   return value.includes('\u0000') ? value.replaceAll('\u0000', '\ufffd') : value;
 }
 
-/** 会话事件转换为账本事件，无 usage 时返回 null。 */
+/** 会话事件转换为账本事件，usage 缺失或非对象时返回 null；零用量由调用方丢弃。 */
 export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/message'>): LedgerEvent | null {
   const usage = event.data?.usage;
   if (usage === null || typeof usage !== 'object') return null;
@@ -265,9 +263,8 @@ export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/
   if (typeof rawT === 'number' && Number.isFinite(rawT) && rawT > 0) {
     t = rawT;
   } else {
-    // 无 time 时用内容哈希生成"当天内确定性毫秒偏移"：落在今天 [1s, 当日末]
-    // 区间内，保证同一事件同日重放幂等，主键 upsert 收敛，且不同事件仍可
-    // 区分；避免旧方案落入 1970 年附近，把客户端 'all' 日桶拉长到两万天。
+    // 无 time 时用内容哈希生成当天内确定性毫秒偏移：落在今天零点后 1 秒起约 23 小时 20 分钟内，
+    // 保证同一事件同日重放幂等，主键 upsert 收敛，且不同事件仍可区分，避免把客户端 'all' 日桶拉长。
     // 幂等边界：跨日重放理论上会另落一日产生重复——该分支仅防御畸形事件
     // ，真实事件均带 time，罕见可接受。
     let hashStr = '';
@@ -291,7 +288,7 @@ export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/
 }
 
 /**
- * 自管理 SQLite 账本：events / session_meta 两表；读走内存缓存 + 按需
+ * 自管理 SQLite 账本：events / session_meta / agg_* 共 9 表；读走内存缓存 + 按需
  * SELECT，写同步即持久，自动提交。测试注入 DSH_HOME 即可隔离介质。
  * 新增 agg_* 预统计表：对不会再变动的历史数据做物化聚合，启动时优先
  * 加载预统计，仅重放少量未密封账本，显著降低冷启动时间。
@@ -621,7 +618,7 @@ export class Ledger {
     }));
   }
 
-  /** 清空事件流与元数据，重建账本用，保留表结构。 */
+  /** 清空全部 9 表事件流、元数据与预统计，重建账本用，保留表结构。 */
   clear(): void {
     this.assertOpen();
     this.db.exec('DELETE FROM events');
@@ -739,7 +736,7 @@ export class Ledger {
     });
   }
 
-  /** 从预统计加载内存聚合，快速启动路径，无需重放全量事件，返回是否命中。 */
+  /** 从预统计加载内存聚合，快速启动路径；modelDaily 缺失时回放 events 重建并回写，返回是否命中。 */
   loadAggregates(store: UsageStore): boolean {
     this.assertOpen();
     const totalRow = this.stmts.getAggTotal.get() as Record<string, unknown> | undefined;
@@ -895,7 +892,7 @@ export class Ledger {
     this.stmts.upsertCheckpoint.run(key, value);
   }
 
-  /** 密封指定日期之前的预统计，将历史数据物化，启动时仅加载增量。 */
+  /** 记录密封边界（仅写 checkpoint，不物化；物化由 persistAggregates 完成）。 */
   sealUntil(dayStart: number): void {
     this.assertOpen();
     this.setCheckpoint('sealed_until', dayStart);

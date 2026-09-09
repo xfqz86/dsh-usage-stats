@@ -1,27 +1,26 @@
-# JSON API 与运行时协议
+# Remote API 与运行时协议
 
-本插件 Host 服务端暴露的 HTTP 协议与客户端偏好设置的完整约定。随接口演进
-维护；AGENTS.md 只保留不变量，包括 POST only、回环围栏、注入清单，不重复本文件
-细节。类型单一事实来源在 `src/types.ts`。
+本插件 Host 服务端暴露的 `usageStats` 命名空间 Remote 协议与客户端偏好
+设置的完整约定。随接口演进维护；AGENTS.md 只保留不变量，包括命名空间、
+方法表、注入清单，不重复本文件细节。类型单一事实来源在 `src/types.ts`，
+Client 严格编解码在 `src/remote/contribution.ts`。
 
 ## 1. 通用约定
 
-- 路由前缀 `/usage-stats/api`，**仅 POST**，body `application/json`。
-- 每次调用先过**回环围栏**，仅 127.0.0.1、localhost、::1、127.x 网段 Host
-  可访问，可防 DNS 重绑定和跨站探测；非回环返回 403
-  `{ ok: false, error: { code: 'forbidden' } }`。
-- 所有请求必须携带请求头 `x-dsh-usage-stats: dsh-usage-stats`，缺失或不匹配
-  返回 403 `{ ok: false, error: { code: 'forbidden' } }`，可防跨站 CSRF，浏览器
-  跨站 fetch 无法在不触发 preflight 的前提下携带自定义头。
-- 成功响应 `{ ok: true, value }`；失败 `{ ok: false, error: { code, message } }`。
-- 非 POST → 405 `method-error`；未知方法 / 路径含斜杠 → 404 `not-found`；
-  执行异常 → `writeError`，状态码为 5xx。
+- 命名空间 `usageStats`，7 个一元方法：`snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；
+  调用经 `ctx.get('remote.usageStats')` 取命名空间服务后调用（本仓库由 `usageStatsRemote()` 封装），
+  传输为网关 `POST /api/usageStats/<方法>`，信任与认证由网关载体统一处理（Host/Origin 围栏 + 浏览器会话 cookie）。禁止暂存 `ctx.remote` 再读 `.usageStats`。
+- 成功响应 `{ ok: true, value }`；失败 `{ ok: false, error: { code, message, details } }`；
+  业务失败码为 `usageStats/busy`（写操作并发），未归类异常由网关折为 `gateway/internal`。
+- Host 侧走 @Remote 装饰器标记 + 实时服务绑定的 SRC 分发（与 dev 模式同源），
+  Client 侧挂载手写严格贡献（独立仓库跑不了 harness 生成器管线，见
+  `src/remote/contribution.ts` 头注释）；只改实现体不动贡献，改签名必须同步。
 
-## 2. POST /usage-stats/api/snapshot
+## 2. usageStats/snapshot
 
-- body `{ sessionId?: string, limit?: number, sessionsLimit?: number }`，带 sessionId 时返回对应会话的 `current`
-  和 `series.current`，`limit` 和 `sessionsLimit` 为会话明细分页上限，取值范围为 `1..1000`，默认 `200`，浏览器端 `useSnapshot` 以 `500` 请求，超出截断。
-- `series.all`、`series.current` 与各模型 `series` 均截断至最近 366 天，与客户端 `all` 范围上限对齐，避免长历史下每 4s 全量序列化开销；聚合总量 `all`/`models[].usage` 不受截断影响，仍为全量。
+- request `{ sessionId: string | null, limit?: number }`，带 sessionId 时返回对应会话的 `current`
+  和 `series.current`，`limit` 为会话明细分页上限，取值范围为 `1..1000`，默认 `200`，浏览器端 `useSnapshot` 以 `500` 请求，超出截断。
+- `series.all` 与各模型 `series` 均截断至最近 366 天，与客户端 `all` 范围上限对齐，避免长历史下全量序列化开销；`series.current` 为指定会话序列，不截断；聚合总量 `all`/`models[].usage` 不受截断影响，仍为全量。
 - 响应 `value` 字段为 `UsageSnapshot` 类型，类型单一定义在 `src/types.ts`，由 host 构建与 client 消费共用：
   - 统计元信息：`scanning` / `scans` / `failed` / `rawSessions` /
     `harnessSessions` / `foldedEvents` / `dedupSkipped` / `lastError` /
@@ -30,7 +29,7 @@
   - `models[]` 按模型拆分，元素含 `provider`、`model`、`calls`、`usage`、`series`，`series` 为该模型按日 `SeriesPoint[]`，供浏览器端范围筛选与堆叠柱使用，旧快照可能缺省；
   - `sessionsList[]` 为会话明细，按 `lastActive` 倒序，已分页截断，每项含 `id`、`title`、`cwd`、`createdAt`、`lastActive`、`calls`、`usage`、`parentSession`、`origin`、`delegationDepth`，后三者为子代理归属，序列化为 `string|null`、`string|null`、`number`。
 
-## 3. POST /usage-stats/api/go-quota
+## 3. usageStats/goQuota
 
 - 目的：OpenCode Go 订阅额度，包含滚动 5 小时、本周、本月 `percent` 和 `resetsAt`。
 - body `{ intervalMinutes?: number, force?: boolean }` —— `intervalMinutes` 是
@@ -48,7 +47,7 @@
 - **语义**：无 key、401、403 → `no-key`；请求失败或结构非法 → `error`；
   成功 → `ok`。
 
-## 3.1 POST /usage-stats/api/deepseek-balance
+## 3.1 usageStats/deepseekBalance
 
 - 目的：DeepSeek 余额，包含当前余额 `is_available` 和多币种 `balance_infos`，每项含 `currency`、`total_balance`、`granted_balance`、`topped_up_balance`，金额为字符串，预留今日消耗 `todayAmount`、`todayCurrency`，v1 固定为 `null`。
 - body `{ intervalMinutes?: number, force?: boolean }` —— `intervalMinutes` 是
@@ -65,7 +64,7 @@
 - **归一化**：`balance_infos` 逐条经 `normalizeBalanceInfo` 过滤，`currency` 非空字符串才保留，金额 `string|number` 统一为字符串，缺失回退为 `"0.00"`，非法条目丢弃不使整批失败。
 - **语义**：无 key、401、403 → `no-key`；`is_available === false` → `ok` + `isAvailable: false`，余额不可用由 Client 文案区分，不归为 `error`；非 2xx 除 401、403 外、超时、网络异常、JSON 结构非法 → `error`；成功 → `ok`，`balances` 可能为空数组，此时 Client 展示“暂无余额明细”并以本地今日用量降级，`todayAmount` 和 `todayCurrency` 在 v1 固定为 `null`，Client 以本地今日 tokens 和 calls 降级展示并标注本地 hint。
 
-## 3.2 POST /usage-stats/api/zai-quota
+## 3.2 usageStats/zaiQuota
 
 - 目的：Z.ai 智谱额度，包含滚动 5 小时、本周 `percent` 和 `resetsAt`，以及每月 Web 搜索 `used`、`limit` 和 `resetsAt`，计划名 `plan` 来自 `data.level`。
 - body `{ intervalMinutes?: number, force?: boolean }` —— `intervalMinutes` 是
@@ -82,18 +81,18 @@
 - **归一化**：`data.limits` 逐条按 `type`、`rawType` 归类，`CREDIT_LIMIT` 和 `TOKENS_LIMIT` 为百分比窗口，按 `unit` 的实际时长归为 `session` 和 `weekly`，`TIME_LIMIT` 为 `webSearches`，`percentage` 缺失时该窗口视为非法，`currentValue` 和 `usage` 缺失时 `webSearches` 视为非法；`nextResetTime` 为 epoch 毫秒，统一转为 ISO `resetsAt`；`percent` 经 `Math.round` 夹到 0..100 后由前端 `goPercent` 和 `goLevelOf` 分档；非法条目按 `openusage` 的校验策略，若已识别类型但归一化失败则整批判为 `error`，否则按空数据返回 `ok`，三窗口为 `null`。
 - **语义**：无 key、401、403 → `no-key`；`success:false` 且 `msg` 含 `"coding plan"`，如 `"当前用户不存在coding plan"`，→ `no-plan`，为合法 key 但无 GLM Coding Plan，前端展示“未开通 GLM Coding Plan”空态；非 2xx 除 401、403 外、超时、网络异常、JSON 结构非法、已识别窗口归一化失败 → `error`；成功 → `ok`，空 `limits:[]` 仍为 `ok` 且三窗口为 `null`，前端展示“暂无额度数据”。
 
-## 4. POST /usage-stats/api/rebuild
+## 4. usageStats/rebuild
 
 - 清空 sqlite 全量表 `events`、`session_meta`、`agg_total`、`agg_daily`、`agg_model`、`agg_model_daily`、`agg_session`、`agg_session_daily`、`agg_checkpoint` 共 9 张，复位聚合缓存 → 全量重扫日志导入
   → 物化预统计并将密封边界推进至今日零点 → `{ rebuilt: true, foldedEvents }`。设置页有入口，需二次确认。
 
-## 4.1 POST /usage-stats/api/clear
+## 4.1 usageStats/clear
 
 - 清空 sqlite 全量表，同 rebuild 共 9 张，复位聚合缓存 → `{ cleared: true, foldedEvents }`，
   **不重扫**，与重建的区别为重建会重新读取历史会话而清零不会，统计直接归零。
   设置页有入口，需二次确认。
 
-## 4.2 POST /usage-stats/api/seal
+## 4.2 usageStats/seal
 
 - 手动触发预统计密封：物化当前内存聚合至 `agg_*` 物化表，并将密封边界推进至今日零点。
 - 用于将“不会再变动的历史数据”预统计进数据库，后续启动仅需加载物化表 + 少量增量事件，显著加快冷启动。
@@ -108,17 +107,17 @@
   - `goEnabled` 默认 `true`，关闭则**不再轮询** go-quota，侧边栏与模态窗
     均不显示 Go 额度；
   - `showGoInSidebar` 默认 `true`，只门控侧边栏底部 Go 芯片，含宽列和 rail，模态窗内额度详情仍可见；
-  - `goFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `POST /usage-stats/api/go-quota` 请求体的
+  - `goFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `usageStats/goQuota` 请求的
     `intervalMinutes`，服务端据此调整 TTL；
   - `deepseekEnabled` 默认 `true`，关闭则**不再轮询** deepseek-balance，侧边栏与模态窗
     均不显示 DeepSeek 余额；
   - `showDeepSeekInSidebar` 默认 `true`，只门控侧边栏底部 DeepSeek 芯片，含宽列多币种 `totalBalance` 和今日用量及 rail 迷你芯片，模态窗内余额详情仍可见；
-  - `deepseekFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `POST /usage-stats/api/deepseek-balance` 请求体的
+  - `deepseekFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `usageStats/deepseekBalance` 请求的
     `intervalMinutes`，服务端据此调整 TTL；
   - `zaiEnabled` 默认 `true`，关闭则**不再轮询** zai-quota，侧边栏与模态窗
     均不显示 Z.ai 额度；
   - `showZaiInSidebar` 默认 `true`，只门控侧边栏底部 Z.ai 芯片，含宽列 `5h`、`周` 百分比和 `Web 搜索` 次数及 rail 迷你芯片，模态窗内额度详情仍可见；
-  - `zaiFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `POST /usage-stats/api/zai-quota` 请求体的
+  - `zaiFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `usageStats/zaiQuota` 请求的
     `intervalMinutes`，服务端据此调整 TTL。
 - 关闭 `goEnabled` 时，Go 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改；关闭 `deepseekEnabled` 时，DeepSeek 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改；关闭 `zaiEnabled` 时，Z.ai 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改，三组独立联动。
-- 纯浏览器端持久化，不落账本，刷新页面后仍生效；通过 `useGoSettings`、`useZaiQuota` 等读写，同实现，局部合并、持久化与多间隔夹取。
+- 纯浏览器端持久化，不落账本，刷新页面后仍生效；偏好经 `useGoSettings` 读写，额度经 `useGoQuota`、`useDeepSeekBalance`、`useZaiQuota` 轮询，局部合并、持久化与多间隔夹取。

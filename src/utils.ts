@@ -1,14 +1,14 @@
 /**
- * 跨端共用的纯函数，host 与 client 两个 bundle 各自内联所需子集。
+ * 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
  *
- * 本模块只放纯函数；协议类型 GoWindow、GoQuota、UsageAgg、Agg、
+ * 本模块只放纯函数与数值常量；协议类型 GoWindow、GoQuota、UsageAgg、Agg、
  * SeriesPoint 定义在 types.ts。这里是插件
- * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、NDJSON 行解析、错误消息提取、模型键拆分、Go 额度档位等。
+ * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、单行 JSON 解析、错误消息提取、模型键拆分、Go 额度档位等。
  *
  * 设计约束：
  *   - 只允许纯 JS 运行时能力 Date、Math、JSON、String，禁止 import
  *     node 内置模块，会破坏浏览器端 bundle，或 react、harness 包，会破坏
- *     服务端 bundle；
+ *     服务端 bundle（import type 例外，构建时剥离）；
  *   - 归属说明：聚合口径与折叠 agg.ts、store.ts，账本存储 ledger.ts，
  *     会话发现 logs.ts，客户端格式化、分桶、图表几何 client/stats.ts
  *     等仍留在各自模块，这里只放「多文件共用的」部分。
@@ -22,7 +22,7 @@ export function startOfDay(timeMs: number): number {
   return d.getTime();
 }
 
-/** 本地日期键 YYYY-MM-DD，账本事件分片名与客户端日期标签共用。 */
+/** 本地日期键 YYYY-MM-DD，客户端日期标签用。 */
 export function dateKeyOf(t: number): string {
   const d = new Date(t);
   const pad = (v: number): string => String(v).padStart(2, '0');

@@ -6,15 +6,18 @@
 
 harness 每个包已导出完整精确的类型（`Context`/`ClientContext`/`SessionEvent`/`TokenUsage`/`PropsRuntime`/`InjectFace`/`Modal` 等），**禁止**为 `ctx/slots/locale/session/primitives/注入服务` 手写结构、最小接口或 ambient 镜像；**必须** `import type` harness 导出，用法与 `packages/extensions/ui-cordis` 等一致。
 
-实现：`@deepseek-ai/*` 已发布至 npm（版本对齐见 `AGENTS.local.md`），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 仅 `devDependencies`，服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。例外：服务端额度/余额查询允许值导入 `credentialRef`（`@deepseek-ai/dsh-credentials`），DSH 基座原生提供该模块，`tsdown` host 侧 `neverBundle` 不打包，npm 发布后仍由基座解析，不随包安装。
+实现：`@deepseek-ai/*` 已发布至 npm（版本对齐见 `AGENTS.local.md`），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 仅 `devDependencies`，服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。例外（值导入，`tsdown` host 侧 `neverBundle` 不打包、运行时由本包 `node_modules` 解析）：服务端额度/余额查询的 `credentialRef`（`@deepseek-ai/dsh-credentials`）；Remote 体系的 `TypertRemoteService/Remote/RemoteError`（`@deepseek-ai/dsh-typert-protocol`）与 `Service` 符号（`@deepseek-ai/cordis`，仅 `[Service.init]` 键）；Client 贡献 `src/remote/contribution.ts` 内联的 `zod`（随浏览器 bundle 打包）。
 
-服务端范式：
+服务端范式（类表单服务，Loader 实例化）：
 ```ts
+import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import type {} from '@deepseek-ai/dsh-host-webserver'        // ctx.webServer
 import type {} from '@deepseek-ai/dsh-session-query'         // ctx.sessionQuery
-export function apply(ctx: Context): void { /* 直接 ctx.webServer，无 ctx.get */ }
+export default class UsageStatsService extends TypertRemoteService {
+  static inject = ['sessionQuery', 'sessionPersistence']     // 全必需；可选服务不进 inject，调用处 ctx.get 判空
+  @Remote('snapshot') snapshot(request: SnapshotRequest): UsageSnapshot { /* ... */ }
+}
 ```
 浏览器端范式：
 ```ts
@@ -22,11 +25,15 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'       // PropsLocale/PropsRuntime + ctx.slots
 import { Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 export type Props = PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-stats'>
-export function apply(ctx: ClientContext): void {
+export const inject = ['slots', 'locale', 'remote']
+export async function apply(ctx: ClientContext): Promise<void> {
+  const disposeMount = await mountUsageStatsRemote(ctx)
+  ctx.effect(() => disposeMount, 'dsh-usage-stats: remote 挂载')
   ctx.locale.register(NS, { zh, en })
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({...}, props => <Comp {...props} />))
 }
 ```
+取命名空间服务必须经挂载上下文 `get('remote.usageStats')`（本仓库由 `usageStatsRemote()` 封装，每次调用实时解析），禁止暂存 `ctx.remote` 再读 `.usageStats`。
 文案字典按 `ui-cordis` 范式：`NS + zh satisfies Record<string,string> + UsageStatsKey=keyof typeof zh + declare module LocaleNamespaceMap + en satisfies Record<UsageStatsKey,string>`，`t('key')` 全量校验。
 
 ## 1. 术语
@@ -42,13 +49,13 @@ export function apply(ctx: ClientContext): void {
 - **不使用 `any`**；`ctx` 用 harness 类型，业务数据用明确接口；类型仅定义 harness 未提供的（如 `UsageSnapshot`）。
 - **风格与检查**：遵循 **Google TypeScript Style Guide**；`eslint.config.mjs`（flat config，`eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic`，分 `host/client/scripts` 三类 overrides）为唯一事实来源；新增代码须 `npx eslint .` 零 `errors`。
 - 纯逻辑置于无 React 模块（`src/utils.ts`/`src/host/agg.ts`/`src/client/stats.ts`）便于测试。
-- **tsx 一组件一文件**（如 `OverviewTab/DatesTab/SessionsTab` 各独立）；**协议类型集中 `src/types.ts`**（零运行时，host/client 各自 re-export），`src/utils.ts` 仅纯函数。
+- **tsx 一组件一文件**（如 `OverviewTab/DatesTab/SessionsTab` 各独立）；**协议类型集中 `src/types.ts`**（零运行时，host/client 各自 re-export），`src/utils.ts` 仅纯函数与共享常量。
 - **样式用 CSS Modules**（`*.module.css` + `import css`），与 `ui-sidebar/primitives` 一致；界面静态样式颜色一律 `var(--dsw-alias-*)`，图表数据驱动调色板（`MODEL_PALETTE`/`DATE_TOKEN_META`/`HIT_RATE_COLOR`，集中定义于 `src/client/stats.ts`，`fill` 属性不解析 `var()`）为唯一豁免；禁止字符串 CSS。独立 bundle 由 `scripts/css-modules-inline.mjs`（lightningcss）编译内联为 `<style data-plugin-css>`。
-- **组件归属**：可复用通用组件归 `src/client/components`，`src/client/views` 仅 Tab 级视图。
+- **组件归属**：可复用通用组件归 `src/client/components`，`src/client/views` 含 Tab 级视图及其专属子视图与入口壳（HeroTile/UsageHeatmap 为概览子视图，UsageStatsFooter/UsageStatsPanel 为入口壳）。
 - **注释中文**，标识符/类型/错误消息英文；文档中文。
 
 ## 4. 项目结构
-目录与职责见 `docs/STRUCTURE.md`（`pnpm tree` 生成，勿手改）。入口：`src/host/index.ts`（Host）、`src/client/index.ts`（Client）；共用 `src/types.ts`（类型）、`src/utils.ts`（纯函数）。各文件职责以头部注释为准。
+目录与职责见 `docs/STRUCTURE.md`（`pnpm tree` 生成，勿手改）。入口：`src/host/index.ts`（Host）、`src/client/index.ts`（Client）；共用 `src/types.ts`（类型）、`src/utils.ts`（纯函数与共享常量）。各文件职责以头部注释为准。
 
 ## 5. 架构：自管理 SQLite 账本 + 派生聚合缓存
 
@@ -56,7 +63,7 @@ export function apply(ctx: ClientContext): void {
 
 存储直接 `node:sqlite:DatabaseSync`（Node≥22 同步 API），落盘 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`（`DSH_HOME` 默认 `~/.dsh`，`logs.ts` 解析；测试注入 `DSH_HOME` 隔离）。
 
-**九表**（同库事务，同步读写，即写即持久）：
+**九表**（同库、同步读写、独立提交，即写即持久）：
 - **events**：`(t, session_id, seq, provider, model, input/output/cache_read/cache_write/reasoning)`，`PK(t,session_id,seq)` 天然幂等 `ON CONFLICT DO UPDATE`；`t` 缺失时当天确定性毫秒偏移。约束：TEXT 禁 `\0`，内存键 `provider\0model` 写时 `splitModelKey` 拆列，标题/cwd 等先 `sanitizeSqlText`（`\0→\uFFFD`）。
 - **session_meta**：`(session_id PK, title, cwd, created_at, last_active, parent_session, origin, delegation_depth)`，初始化抄录、运行时由 `session/title` 与 `session/event` 头补齐，内存 `metaCache` 供快照；`user_version 3→4`增量补三列。
 - **agg_***：`agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint` 预统计物化视图，批量扫描 `aggSuspended` 挂起、结束 `persistAggregates` 一次物化并 `sealUntil(今日零点)`。
@@ -64,12 +71,12 @@ export function apply(ctx: ClientContext): void {
 
 **数据流**：
 1. **openLedger**：建目录/表、迁移、载入 meta、预编译 `LedgerStatements`。
-2. **scanOnce**：会话 id 全集=磁盘 `findSessionLogs(深度≤3)` ∪ harness 清单；4 路 worker，优先 `persistence.readRaw`（纯 JS zstd），回退 `sessionQuery.readSession`；经 `foldRecord` 共用路径，`running` 防重入。
-3. **实时增量**：`ctx.on('session/event')` → `foldRecord` → `foldLedgerEvent` + `incrementAgg`，按 `maxSeq` 去重（`seq=-1` 按 PK 存在性），补齐 `parentSession/origin/depth/cwd/createdAt`。
+2. **scanOnce**：会话 id 全集=磁盘 `findSessionLogs(深度≤3)` ∪ harness 清单；4 路 worker，优先 `persistence.readRaw`（纯 JS zstd），回退 `sessionQuery.readSession`；经 `foldRecord` 共用路径，`running` 防重入（`force` 持锁重入除外）。
+3. **实时增量**：`ctx.on('session/event')` → `foldRecord` → `foldLedgerEvent` + `incrementAgg`，经 seq 水位、seq=-1 主键、`append` 返回值三层去重，补齐 `parentSession/origin/depth/cwd/createdAt`。
 4. **重启恢复**：`bootstrap()` 优先 `hasAggregates→rebuildWithDelta`（加载 `agg_*` + 补 `sealedUntil` 后增量），其次 `hasEvents→rebuildFromEvents`，否则全量扫描；日志删除仍可从介质恢复。
-5. **重建**：`POST /usage-stats/api/rebuild` → `ledger.clear()`+`resetStore`+`scanOnce`；`clear` 仅清库，`seal` 手动物化。
+5. **重建**：`usageStats/rebuild` → `ledger.clear()`+`resetStore`+`scanOnce`；`clear` 仅清库，`seal` 手动物化。
 
-**折叠语义**：`foldRecord` 处理种子/`title`/`usable(data.usage存在)` 事件，零用量事件直接丢弃不入账本；按水位去重后 `append`+`foldLedgerEvent` 折入日桶/总桶/模型并更新 `maxSeq/lastActive`；`foldLedgerEvent` 归一非有限/负数→0并向下取整，若传 `ledger` 则同步 `incrementAgg`（失败仅 `lastError`）。
+**折叠语义**：`foldRecord` 处理种子/`title`/`usable(data.usage存在)` 事件，零用量事件直接丢弃不入账本；经三层去重后 `append`+`foldLedgerEvent` 折入日桶/总桶/模型、模型×日并更新 `maxSeq/lastActive`（`seq>=0` 才推进水位）；`foldLedgerEvent` 归一非有限/负数→0并向下取整，若传 `ledger` 则同步 `incrementAgg`（失败仅 `lastError`）。
 
 ## 6. 统计口径
 - 数据源：`assistant/message` 且 `data.usage` 存在（`toLedgerEvent` 非有限/负数→0并向下取整，零用量直接丢弃不入账本）。
@@ -77,17 +84,17 @@ export function apply(ctx: ClientContext): void {
 - 按模型：`data.message.source.provider/model`，缺失 `unknown`。
 - 按会话：标题/`cwd`/创建时间/最近活跃。
 - 本地日划分：`startOfDay`（`utils.ts` 唯一来源，避免 UTC 漂移）。
-- 展示口径：日期趋势柱仅堆叠输入/输出/缓存三段（柱高按三段求和，`total` 字段仍为全口径），缓存命中率=`cacheRead/(cacheRead+input)`；快照序列截断至最近 366 天。
+- 展示口径：日期趋势柱仅堆叠输入/输出/缓存三段（柱高按三段求和，`total` 字段仍为全口径），缓存命中率=`cacheRead/(cacheRead+input)`；快照 `series.all`/`models[].series` 截断至最近 366 天（`series.current` 不截断）。
 
 ## 7. 构建（tsdown 双 bundle + CSS 内联）
 - `lib/index.js`（Host, Node ESM，`@xfqz86/dsh-usage-stats`）：仅 Node 内置+本地，DSH 服务 cordis 注入。
 - `lib/client.js`（Browser CJS 闭包 `window.__ModuleLoader__.load({id,factory})`）：`externals` 复刻冻结表（`react/primitives/slots` 等），其余内联；非 `production` 保留 sourcemap。
 - CSS：`scripts/css-modules-inline.mjs`（lightningcss `cssModules`）将 `*.module.css` 编译为 scoped 映射+`<style data-plugin-css>` 注入（源码仍真实 CSS Modules）。
 
-## 8. 运行时与 JSON API
-- **注入**：`inject={webServer,sessionQuery,sessionPersistence:必需, credentials:可选}`；先挂实时监听再 `bootstrap`。
-- **路由**：`ctx.webServer.register({kind:'prefix', path:'/usage-stats/api', handler})` 仅 `POST`，先回环围栏（防 DNS 重绑定）+ CSRF 自定义头围栏。
-- 协议细节（`snapshot/go-quota/deepseek-balance/zai-quota/rebuild/clear/seal`、TTL、偏好字段）见 `docs/API.md`；快照 `series`/`models[].series` 截断至最近 366 天。
+## 8. 运行时与 Remote API
+- **注入**：`static inject=['sessionQuery', 'sessionPersistence']`（全必需）；`credentials` 可选不进 inject，调用处 `ctx.get` 判空，缺席时额度查询直接返回 `no-key`，不读 env 与文件；先挂实时监听再 `bootstrap`。
+- **接口**：`UsageStatsService`（`usageStats` 命名空间，7 个一元 `@Remote` 方法）经网关 `POST /api/usageStats/<方法>` 调用，信任与认证由网关载体统一处理，不注册 HTTP 路由、不自建围栏。Host 侧 SRC 分发（装饰器标记+实时绑定），Client 侧自挂载 `src/remote/contribution.ts` 的手写严格贡献（独立仓库跑不了 harness 生成器管线）；只改实现体不动贡献，改签名必须同步。浏览器端取命名空间服务必须经挂载上下文 `get('remote.usageStats')`（本仓库由 `src/client/remote.ts` 的 `usageStatsRemote()` 封装，每次调用实时解析），**禁止**暂存 `ctx.remote` 再读 `.usageStats`——插件行跑在子 scope，暂存句柄在 hooks（fiber 之外）读属性报 `without inject`（命名空间服务挂在父级）。
+- 协议细节（`snapshot/goQuota/deepseekBalance/zaiQuota/rebuild/clear/seal`、TTL、偏好字段）见 `docs/API.md`；快照 `series.all`/`models[].series` 截断至最近 366 天（`series.current` 不截断）。
 
 ## 9. 验证（每次改动必须）
 ```bash
@@ -95,11 +102,11 @@ npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
 pnpm build
 node --experimental-strip-types test/pure.mjs
-node test/smoke.mjs
+node --experimental-strip-types test/smoke.mjs
 node test/client-bundle.mjs
 ```
-- `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/日志解析/围栏/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
-- `smoke.mjs`：mock `webServer/sessionQuery/sessionPersistence`，真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→实时重放20条去重→rebuild一致→回环围栏→go-quota/deepseek-balance 结构化→空清单仍从介质重建394。
+- `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/日志解析/手写严格贡献（方法表/收发合法拒非法/信封分支）/命名空间句柄（经 `get` 取、不暂存 `ctx.remote`）/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
+- `smoke.mjs`：真实 cordis `Context` + mock `sessionQuery/sessionPersistence`（凭据中心缺席时额度查询直接返回 `no-key`），真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→@Remote 标记存活→实时重放20条去重→真实结果过 zod 信封→rebuild 并发 `usageStats/busy`→rebuild一致→三额度 no-key→seal→空清单仍从介质重建394→clear 归零。
 - `client-bundle.mjs`：验证 `window.__ModuleLoader__.load` 注册、每 `*.module.css` 对应 `data-plugin-css` 样式含 scoped 类名。
 
 ## 10. 文档维护

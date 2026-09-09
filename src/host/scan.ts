@@ -1,7 +1,7 @@
 /**
  * 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id
- * 全集逐会话读取，经 foldRecord 写入账本，自管理 sqlite 的 events、
- * session_meta 表并折叠聚合缓存。RAW 优先，persistence.readRaw 直接返回
+ * 全集逐会话读取，经 foldRecord 写入账本（events、session_meta 共 9 表，
+ * 含 agg_* 预统计）并折叠聚合缓存。RAW 优先，persistence.readRaw 直接返回
  * 后端解码后的原始 JSONL 文本，纯 JS zstd 解码，无 CLI 依赖，后端不支持
  * 原始工件时走 harness 兜底，通过 sessionQuery.readSession、
  * persistence.readFrom 实现；4 路 worker 并行。
@@ -65,7 +65,7 @@ export function tryLoadAggregates(store: UsageStore, ledger: Ledger): boolean {
 
 /**
  * 密封历史预统计：将当前内存聚合全量物化至 DB，并将密封边界推进至今日零点。
- * 供 scanOnce 完成或显式 seal 调用。
+ * 供显式 seal 调用；scanOnce 仅在有扫描且有折叠事件时调用。
  */
 export function sealAggregates(store: UsageStore, ledger: Ledger): void {
   try {
@@ -79,7 +79,7 @@ export function sealAggregates(store: UsageStore, ledger: Ledger): void {
   } catch {}
 }
 
-/** 扫描一轮全部会话并将其写入账本，初始与重建共用，防重入由 store.running 保证。
+/** 扫描一轮全部会话并将其写入账本，初始与重建共用，防重入由 store.running 保证（force 持锁重入除外）。
  *  整轮无失败会话时清除历史错误标记，自愈，日志可读性恢复后自动消失。
  *  批量导入期间挂起逐条物化，完成后一次 bulk 物化，兼顾写入吞吐与启动加速。 */
 export async function scanOnce(
@@ -108,7 +108,7 @@ export async function scanOnce(
     const query = ctx.sessionQuery;
     const persist = ctx.sessionPersistence;
 
-    // 1) 会话 id 全集 = 磁盘原始日志 ∪ harness 会话清单；同时收集 header 的 cwd/createdAt 以便在无 RAW 时仍能填充 session_meta。
+    // 1) 会话 id 全集 = 磁盘原始日志 ∪ harness 会话清单；同时收集 header 的 cwd/createdAt/parentSession/origin/delegationDepth 以便在无 RAW 时仍能填充 session_meta。
     const logPaths = new Map<string, string>();
     findSessionLogs(getSessionsRoot(), 0, logPaths);
     const ids = new Set<string>(logPaths.keys());
@@ -270,7 +270,7 @@ export async function scanOnce(
 }
 
 /** 从账本事件流重建聚合缓存，启动加载账本已有事件时用，元数据已在 ledger。
- *  清空现有聚合后按事件流全量重折；maxSeq 水位在 foldLedgerEvent 内重建，
+ *  清空现有聚合后按事件流全量重折；seq>=0 的 maxSeq 水位在 foldLedgerEvent 内重建，seq=-1 靠主键与 lastActive，
  *  实时路径随后可对历史事件去重。
  *  批量重建期间挂起逐条预统计，结束后统一物化以加速后续启动。 */
 export function rebuildFromEvents(store: UsageStore, ledger: Ledger): void {
@@ -295,12 +295,12 @@ export function rebuildFromEvents(store: UsageStore, ledger: Ledger): void {
 }
 
 /**
- * 增量重建：优先从预统计加载聚合，并对密封边界之后的账本事件无条件按
- * 会话水位比对补齐，补齐后推进密封边界。
+ * 增量重建：优先从预统计加载聚合，sealedUntil>0 时对边界之后的账本事件按
+ * 会话水位比对补齐（调用方过滤，fold 本身不去重），补齐后推进密封边界。
  *
  * 对账必须无条件执行，不设跨日前置条件：实时路径 ledger.append 与
  * incrementAgg 是两个独立提交，中间崩溃会在 events 表留下「已入账但聚合
- * 缺失」的事件；旧实现仅跨日才对账，这部分用量当日不可见。启动时始终
+ * 缺失」的事件。启动时始终
  * 重放 sealedUntil 之后的窗口，即上次密封以来的增量，量级约为当日事件数，
  * 水位之下的事件一律跳过 —— 重复调用不翻倍，rebuildFromEvents 路径不受影响。
  * 不变量与已知限制：密封边界之前维持「events 存在 ⇒ 聚合已收」；若进程恰在

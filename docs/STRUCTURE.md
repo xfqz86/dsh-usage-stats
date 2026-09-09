@@ -75,41 +75,41 @@ dsh-usage-stats/
 │   │   │   ├── UsageStatsFooter.tsx ← 用量统计的侧边栏底部动作：渲染在 `sidebar.footer.action` 列表插槽设置按钮上方的今日统计触发器。
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。
 │   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，采用 Tab 化布局。
-│   │   ├── api.ts ← /usage-stats/api/* 的浏览器端调用约定：全部 POST 必须携带的请求头。
+│   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定。
 │   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
-│   │   ├── settings.ts ← 浏览器端插件偏好设置：OpenCode Go 额度与 DeepSeek 余额监控的偏好设置。
+│   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口。
+│   │   ├── settings.ts ← 浏览器端插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控的偏好设置。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
 │   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
-│   │   ├── useDeepSeekBalance.ts ← DeepSeek 余额轮询，浏览器端。
-│   │   ├── useGoQuota.ts ← OpenCode Go 订阅额度轮询，浏览器端实现。
 │   │   ├── useGoSettings.ts ← 偏好设置的 React hook（浏览器端）。
 │   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
-│   │   ├── useQuota.ts ← 额度轮询共享 hook 工厂（浏览器端）。
+│   │   ├── useQuota.ts ← 额度轮询 hooks（浏览器端）：共享轮询骨架 useQuota + Go/DeepSeek/Z.ai 三路薄包装。
 │   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
-│   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
-│   │   └── useZaiQuota.ts ← Z.ai 额度轮询，浏览器端实现。
+│   │   └── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
 │   ├── host/
 │   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink， 事件守卫 usable、modelKeyOf。
 │   │   ├── deepseekBalance.ts ← DeepSeek 余额查询：通过 `GET https://api.deepseek.com/user/balance` 获取当前余额。
 │   │   ├── goquota.ts ← OpenCode Go 订阅额度查询：滚动 5 小时 / 本周 / 本月三档用量百分比 与重置时间，端点为 `GET https://opencode.ai/zen/go/v1/usage`。
-│   │   ├── http.ts ← JSON API 的 HTTP 辅助：请求体读取、JSON 响应写出、回环信任围栏与 CSRF 自定义头围栏。
-│   │   ├── index.ts ← 用量统计的服务端 Host 插件入口：账本模式装配，自管理 sqlite 介质。
+│   │   ├── index.ts ← 用量统计的服务端 Host 插件入口：default 导出服务类，由 Loader 实例化。
 │   │   ├── ledger.ts ← 原始事件流账本 Ledger：用量事件的唯一事实来源 —— 自管理 SQLite。
 │   │   ├── logs.ts ← 会话日志的目录发现与 NDJSON 解析。
 │   │   ├── quota.ts ← 额度查询共享基元（服务端）：浏览器 UA、key 回退解析、TTL 缓存单飞工厂。
-│   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，经 foldRecord 写入账本，自管理 sqlite 的 events、 session_meta 表并折叠聚合缓存。
-│   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 /usage-stats/api/snapshot 的响应 value，纯函数，不触碰 HTTP、ctx。
-│   │   ├── store.ts ← 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、全量维度组织。
+│   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，经 foldRecord 写入账本（events、session_meta 共 9 表， 含 agg_* 预统计）并折叠聚合缓存。
+│   │   ├── service.ts ← 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露 usageStats 命名空间的 7 个一元 Remote 方法。
+│   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 usageStats/snapshot 的结果 value，不触碰传输层与 ctx。
+│   │   ├── store.ts ← 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、模型×日、全量维度组织。
 │   │   └── zaiQuota.ts ← Z.ai 智谱额度查询：滚动 5 小时、每周 7 天百分比与每月 Web 搜索次数，端点为 GET https://api.z.ai/api/monitor/usage/quota/limit。
+│   ├── remote/
+│   │   └── contribution.ts ← usageStats 命名空间的手写严格 Remote 贡献。
 │   ├── css-modules.d.ts ← CSS Modules 的类型声明（与 harness 的 ui-primitives 同款）： `import css from './X.module.css'` 得到 scoped 类名映射。
 │   ├── types.ts ← 跨端共用的协议类型，host 与 client 两个 bundle 各自内联所需子集。
-│   └── utils.ts ← 跨端共用的纯函数，host 与 client 两个 bundle 各自内联所需子集。
+│   └── utils.ts ← 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
 ├── test/
 │   ├── client-bundle.mjs ← 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
 │   ├── pure.mjs ← 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
-│   └── smoke.mjs ← 用量统计服务端（Host）的独立冒烟测试（账本模式，自管理 sqlite 介质）。
+│   └── smoke.mjs ← 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
 ├── .gitignore ← git 忽略规则（不入库清单：产物 / 锁目录 / 本机私有）
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）
 ├── CHANGELOG.md ← 更新日志（每次发版同步记录功能更新与 Bug 修复）

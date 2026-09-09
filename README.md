@@ -105,8 +105,8 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 需展示额度时，在 DSH 凭据中心配置对应 Key：
 
 - OpenCode Go：`OPENCODE_GO_API_KEY`
-- DeepSeek：`DEEPSEEK_API_KEY`
-- Z.ai：`ZAI_API_KEY` 或 `ZAI_CODING_CN_API_KEY`
+- DeepSeek：`DEEPSEEK_API_KEY`（兼容 `DEEPSEEK_APIKEY`、`DEEPSEEK_API_TOKEN`、`DEEPSEEK_TOKEN`）
+- Z.ai：`ZAI_CODING_CN_API_KEY` 或 `ZAI_API_KEY`（前者优先）
 
 ## 统计口径
 
