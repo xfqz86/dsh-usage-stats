@@ -187,6 +187,7 @@ export function UsageStatsPanel({
             type="button"
             className={css.close}
             onClick={onClose}
+            aria-label={t('panel.close')}
           >
             <IconCloseOutline16 size={14} />
           </button>
