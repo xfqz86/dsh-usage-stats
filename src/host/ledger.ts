@@ -11,8 +11,8 @@
  *     无 time 的畸形事件以"当天内确定性毫秒偏移"入账：同日重放幂等，
  *     跨日重放理论上可能重复——防御路径罕见可接受。
  *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/lastActive/parentSession/origin/delegationDepth，初始化扫描抄录、实时 session/title 事件更新。
- *   - `agg_*` 预统计表（agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint 共 7 张）：派生聚合的物化视图，见 §5 预统计，与 events 同库
- *     事务一致，避免重启时重放全量事件。
+ *   - `agg_*` 预统计表（agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint 共 7 张）：派生聚合的物化视图，见 §5 预统计；与 events 同库但各自提交，
+ *     命中时直接加载即可，无需重放全量事件。
  *   - `PRAGMA user_version` = LEDGER_VERSION：结构不兼容时清空重建
  *     ，事件表为空后下次启动全量重扫 —— 账本结构升级的安全网。
  *

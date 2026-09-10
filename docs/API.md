@@ -7,9 +7,12 @@ Client 严格编解码在 `src/remote/contribution.ts`。
 
 ## 1. 通用约定
 
-- 命名空间 `usageStats`，7 个一元方法：`snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；
-  调用经 `ctx.get('remote.usageStats')` 取命名空间服务后调用（本仓库由 `usageStatsRemote()` 封装），
-  传输为网关 `POST /api/usageStats/<方法>`，信任与认证由网关载体统一处理（Host/Origin 围栏 + 浏览器会话 cookie）。禁止暂存 `ctx.remote` 再读 `.usageStats`。
+- 命名空间 `usageStats`，7 个一元（unary，一问一答，区别于流式）方法：
+  `snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
+  `rebuild`/`clear`/`seal` **无请求参数**（贡献里 `parameters: []`），其余各带一个具名 request。
+  调用经 `ctx.get('remote.usageStats')` 取命名空间服务后调用（本仓库由 `usageStatsRemote()` 封装）；
+  线路上走客户端 Connection 的 RPC：`POST /api/usageStats/<方法>`，请求体为
+  `{ type:'client-request', rpcId, method, payload:{ args } }`，信任与认证由网关载体统一处理（Host/Origin 围栏 + 浏览器会话 cookie）。禁止暂存 `ctx.remote` 再读 `.usageStats`。
 - 成功响应 `{ ok: true, value }`；失败 `{ ok: false, error: { code, message, details } }`；
   业务失败码为 `usageStats/busy`（写操作并发），未归类异常由网关折为 `gateway/internal`。
 - Host 侧走 @Remote 装饰器标记 + 实时服务绑定的 SRC 分发（与 dev 模式同源），

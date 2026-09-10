@@ -8,15 +8,21 @@
 
 ### 新增
 
-- 后端接口迁入 `usageStats` 命名空间 7 个一元 `@Remote` 方法（`snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`），调用走网关 `POST /api/usageStats/<方法>`，信任与认证由网关载体统一处理
+- 后端接口迁入 `usageStats` 命名空间 7 个一元 `@Remote` 方法（`snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`），调用经客户端 Connection 的 RPC（`POST /api/usageStats/<方法>`），信任与认证由网关载体统一处理
 
 ### 变更
 
 - **BREAKING**：删除自建 `POST /usage-stats/api` 前缀路由与回环围栏、`x-dsh-usage-stats` 自定义头（`src/host/http.ts` 删除），服务端改类表单 `UsageStatsService`（Loader 实例化），客户端自挂载手写严格贡献后经 `ctx.get('remote.usageStats')` 取命名空间服务调用；升级后需重启 dsh 服务端
 - 构建：TypeScript 升至 6（标准装饰器原生类输出），tsdown 新增装饰器降级插件；客户端 bundle 内联 `zod` 编解码
 - 可选服务不再进 inject：`credentials` 改调用处 `ctx.get` 判空（cordis 对象写法的值为拦截配置，无“可选”语义）
+- harness 版本对齐到 `0.1.5-rc.2`（npm `next` 标签，当前基座发布线）：`@deepseek-ai/*` devDependencies 与 `pnpm-workspace.yaml` 白名单同步，逐包核对类型/实现与基座一致（`session`/`persistence`/`session-query`/`typert-protocol`/`credentials`/`ui-slots`/`ui-renderer`/`locale`/`sidebar`/`api-gateway` 无差异，客户端冻结模块表仍是九项）
+- 提示气泡拆两路：纯文字提示改用基座 `@deepseek-ai/dsh-client-ui-primitives` 的 `Tooltip`；需要多行排版或鼠标跟随时才用本仓 `components/Tooltip.tsx`，其 `label` 兼容分支删除、只保留富内容插槽（基座 Tooltip 当前只接受纯文本，未支持富内容）
 
 ### 修复
+
+- **悬浮卡片内容改为 CSS Modules**：额度明细、热力图单元格与比例条三处提示气泡的静态排版此前写在内联 `style` 里（近百处），现集中为 `UsageStatsCommon.module.css` 的 `tip*` 类共用，只有进度条宽度、档位色与圆点色等随数据的值留在行内；视觉不变，深浅主题仍走同一套白色透明度叠加（详见 `docs/STYLE.md §8`）
+- **弹窗关闭按钮补无障碍名**：用量统计模态窗右上角关闭按钮只有图标，读屏抓不到名称，现补 `aria-label`（`panel.close`，中英双语已在字典中）
+- 注释按当前实现校正：账本预统计表与 events 表是「同库、各自提交」而非同一事务；网关调用写明走客户端 Connection 的 RPC（`POST /api/usageStats/<方法>` + `client-request` 信封）；文档区分「一元（unary，区别于流式）」与「无请求参数」（`rebuild`/`clear`/`seal`）
 
 - **深色模式白色色块**：设置 Tab 的分组头部、计数徽标、图标底与开关滑块引用了 harness 主题根本没有的 token（`--dsw-alias-bg-subtle`/`bg-fill`/`brand-bg`/`state-success-bg`），声明在计算值阶段失效后落到写死的浅色兜底（`#f6f7f9` 等），于是浅色模式正常、深色模式变成白条。现改用真实存在的 token（`interactive-bg-hover`/`border-l3`/`label-primary-foreground` 与 `color-mix` 品牌、成功色底），并新增 `test/styles.mjs` 对照主题包校验全部样式变量，写死兜底不再允许（详见 `docs/STYLE.md §8`）
 - **深色模式黑带**：卡片底色由 harness 的 Modal 用 `bg-layer-2` 铺设，而窗内头部、Tab 栏、吸顶表头、分页条、磁贴卡片、图表卡与输入框都用 `bg-base`（浅色下同为白色、深色下比卡片暗一档），深色模式里于是出现几条比卡片更黑的横带；现统一为 `bg-layer-2`

@@ -1,9 +1,11 @@
 /**
  * usageStats 命名空间的浏览器端调用约定。
  *
- * 经 usageStatsRemote 取命名空间服务后调用（网关统一信任与认证，
- * 传输为 POST /api/usageStats/<方法>），返回信封为
- * { ok:true,value } | { ok:false,error }，调用方按 ok 分支即可。
+ * 经 usageStatsRemote 取命名空间服务后调用。线路上走客户端 Connection 的
+ * RPC：`POST /api/usageStats/<方法>`，请求体为 `{ type:'client-request',
+ * rpcId, method, payload:{ args } }`，同一 rpcId 的响应里再带
+ * `{ ok:true, value } | { ok:false, error }` 信封，调用方按 ok 分支即可；
+ * 信任与认证由网关载体统一处理（Host/Origin 围栏 + 浏览器会话 cookie）。
  * 方法表与信封的单一来源为 src/remote/contribution.ts，本模块只定义
  * 快照轮询常量与 rebuild/clear 共用的调用封装。
  */
