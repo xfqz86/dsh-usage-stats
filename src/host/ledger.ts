@@ -32,7 +32,7 @@ import type { UsageStore } from './store.ts';
 import type { SessionEvent } from '@deepseek-ai/dsh-session';
 
 /** 账本 schema 版本，PRAGMA user_version，结构不兼容时自动清库重建。 */
-export const LEDGER_VERSION = 4;
+export const LEDGER_VERSION = 5;
 /** 归属目录名，位于 storages 下，与插件同名。 */
 export const LEDGER_DIR_NAME = 'dsh-usage-stats';
 /** 账本 sqlite 文件名。 */

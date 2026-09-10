@@ -1,27 +1,33 @@
 /**
  * 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id
  * 全集逐会话读取，经 foldRecord 写入账本（events、session_meta 共 9 表，
- * 含 agg_* 预统计）并折叠聚合缓存。RAW 优先，persistence.readRaw 直接返回
- * 后端解码后的原始 JSONL 文本，纯 JS zstd 解码，无 CLI 依赖，后端不支持
- * 原始工件时走 harness 兜底，通过 sessionQuery.readSession、
- * persistence.readFrom 实现；4 路 worker 并行。
+ * 含 agg_* 预统计）并折叠聚合缓存。harness 读取经 sessionQuery.readSession、
+ * persistence.open+read 实现；两路都被拒绝（如旧代次会话的
+ * SessionFormatUnsupportedError）或返回空事件时，回退用 rawlog 自读磁盘最高
+ * 代次日志兜底，使被迁移拒绝的旧会话仍纳入统计；4 路 worker 并行。
  *
  * 语义：只在账本需要初始化，首启无事件或显式重建时运行；平时数据来自
  * 实时 session/event 监听，每次写入同步落盘，无需周期性对账。
  * 预统计：批量导入期间挂起逐条物化，完成后一次 bulk 物化 agg_* 表，
  * 后续启动可直接从预统计加载，仅重放少量未密封事件，显著加速冷启动。
- * 扫描报告，rawSessions、harnessSessions、failed 记录最近一次导入结果。
+ * 扫描报告，rawSessions（raw 兜底命中）、harnessSessions（harness 命中）、
+ * failed 记录最近一次导入结果。
  */
+import { readFileSync } from 'node:fs';
+
 import { errorMessage, startOfDay  } from '../utils.ts';
 
 import { newAgg } from './agg.ts';
 import { findSessionLogs, getSessionsRoot, parseLogLines } from './logs.ts';
-import { foldLedgerEvent, foldRecord } from './store.ts';
+import { decodeSessionLog } from './rawlog.ts';
+import { foldLedgerEvent, foldRecord, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from './store.ts';
 
 import type { Ledger } from './ledger.ts';
+import type { SessionLogFile } from './logs.ts';
 import type { UsageStore } from './store.ts';
 import type { Context } from '@deepseek-ai/cordis';
-import type { SessionId, SessionEvent, SessionLogOffset } from '@deepseek-ai/dsh-session';
+import type { SessionId, SessionEvent } from '@deepseek-ai/dsh-session';
+import type { SessionHandle } from '@deepseek-ai/dsh-session-persistence';
 
 
 
@@ -109,7 +115,7 @@ export async function scanOnce(
     const persist = ctx.sessionPersistence;
 
     // 1) 会话 id 全集 = 磁盘原始日志 ∪ harness 会话清单；同时收集 header 的 cwd/createdAt/parentSession/origin/delegationDepth 以便在无 RAW 时仍能填充 session_meta。
-    const logPaths = new Map<string, string>();
+    const logPaths = new Map<string, SessionLogFile>();
     findSessionLogs(getSessionsRoot(), 0, logPaths);
     const ids = new Set<string>(logPaths.keys());
     const headerMap = new Map<string, { cwd?: string; createdAt?: number; parentSession?: string; origin?: string; delegationDepth?: number }>();
@@ -140,15 +146,18 @@ export async function scanOnce(
     }
     if (persist) {
       try {
-        const headers = await persist.list();
-        if (Array.isArray(headers)) {
-          for (const header of headers) {
-            if (header && typeof header.id === 'string') {
-              ids.add(header.id);
+        const snapshots = await persist.list();
+        if (Array.isArray(snapshots)) {
+          for (const snap of snapshots) {
+            // 新基座 list 返回快照（id 嵌于 .header），兼容旧直 header 形态。
+            const header = (snap as { header?: unknown }).header ?? snap;
+            if (header && typeof (header as { id?: unknown }).id === 'string') {
+              const hid = (header as { id: string }).id;
+              ids.add(hid);
               const h = header as { cwd?: unknown; createdAt?: unknown; parentSession?: unknown; origin?: unknown; delegationDepth?: unknown };
               if (typeof h.cwd === 'string' || typeof h.createdAt === 'number' || typeof h.parentSession === 'string' || typeof h.origin === 'string' || typeof h.delegationDepth === 'number') {
-                if (!headerMap.has(header.id)) {
-                  headerMap.set(header.id, {
+                if (!headerMap.has(hid)) {
+                  headerMap.set(hid, {
                     cwd: typeof h.cwd === 'string' ? h.cwd : undefined,
                     createdAt: typeof h.createdAt === 'number' ? h.createdAt : undefined,
                     parentSession: typeof h.parentSession === 'string' ? h.parentSession : undefined,
@@ -159,7 +168,7 @@ export async function scanOnce(
               }
             }
           }
-          if (headers.length > 0) store.scanError = null;
+          if (snapshots.length > 0) store.scanError = null;
         }
       } catch (e) {
         store.scanError = 'persistence.list: ' + errorMessage(e);
@@ -167,14 +176,15 @@ export async function scanOnce(
     }
     const idList: string[] = [...ids];
 
-    // 2) 逐会话：RAW 优先，完整且不受解释器限制，失败则 harness 兜底。
-    //    对于无 RAW 的会话，用 headerMap 的 cwd/createdAt 预填充 session_meta，避免 cwd/created_at/last_active 为空。
+    // 2) 逐会话：harness 读取经 sessionQuery.readSession / persistence.open+read 实现，
+    //    两路失败或空事件时回退 rawlog 自读磁盘最高代次日志兜底（旧代次会话）。
+    //    对于无原文可读的会话，用 headerMap 的 cwd/createdAt 预填充 session_meta，避免 cwd/created_at/last_active 为空。
     //    worker 取号 `idList[i]; i+=1` 在同步段内完成，await 之前无交错，单线程下无竞态，可安全 4 路并行。
     let i = 0;
     async function worker(): Promise<void> {
       while (i < idList.length) {
         const id = idList[i]; i += 1;
-        // 预填充 header 元数据，若有则填充，保证即使无 RAW、无 seed 记录时也不为空
+        // 预填充 header 元数据，若有则填充，保证即使无 seed 记录时也不为空
         const hdr = headerMap.get(id);
         if (hdr && (hdr.cwd !== undefined || hdr.createdAt !== undefined || hdr.parentSession !== undefined
           || hdr.origin !== undefined || hdr.delegationDepth !== undefined)) {
@@ -188,48 +198,39 @@ export async function scanOnce(
           });
         }
         try {
-          // 2a) RAW 优先：后端原样工件，readRaw 返回解码后的完整 JSONL
-          //     文本，zstd 物理编码由后端纯 JS 解码，无 CLI 依赖。
-          //     会话 id 来自磁盘发现时，可能尚未物化 → readRaw 返回 undefined。
-          let rawContent: string | null = null;
-          if (persist && persist.supportsRawArtifacts) {
-            try {
-              const raw = await persist.readRaw(id as SessionId);
-              if (raw && typeof raw.content === 'string') rawContent = raw.content;
-            } catch (e) {
-              store.lastError = 'raw ' + shortOf(id) + ': ' + errorMessage(e);
-            }
-          }
-          if (rawContent !== null) {
-            for (const record of parseLogLines(rawContent)) {
-              try { foldRecord(store, ledger, id, record); } catch (e) {
-                store.lastError = 'record ' + shortOf(id) + ': ' + errorMessage(e);
-              }
-            }
-            store.rawSessions += 1;
-            didScan = true;
-            continue;
-          }
-          // 2b) harness 兜底：sessionQuery.readSession / persistence.readFrom
-          let events: SessionEvent[] | null = null;
+          // harness 读取：sessionQuery.readSession / persistence.open+read（读句柄用后关闭）。
+          // 两路都按 inheritedEventCount 丢掉 fork 继承前缀：子会话日志物理包含父会话历史，
+          // 重复折入会把父的用量在子会话下再算一遍。
+          let events: readonly SessionEvent[] | null = null;
           if (query) {
             try {
               const snap = await query.readSession(id as SessionId);
-              events = snap && Array.isArray(snap.events) ? snap.events : null;
+              if (snap && Array.isArray(snap.events)) {
+                events = liveEventsOf(snap.events, inheritedCountOf(snap.inheritedEventCount));
+              }
             } catch (e) {
               store.lastError = 'readSession ' + shortOf(id) + ': ' + errorMessage(e);
               events = null;
             }
           }
           if (events === null && persist) {
+            let handle: SessionHandle | null = null;
             try {
-              const r = await persist.readFrom(id as SessionId, 0 as unknown as SessionLogOffset);
-              events = r && Array.isArray(r.events) ? r.events : [];
+              handle = await persist.open(id as SessionId, 'read');
+              const r = await handle.read(0);
+              events = r && Array.isArray(r.events)
+                ? liveEventsOf(r.events, inheritedCountOf(handle.inheritedEventCount))
+                : [];
             } catch (e) {
-              store.lastError = 'readFrom ' + shortOf(id) + ': ' + errorMessage(e);
+              store.lastError = 'persistence.read ' + shortOf(id) + ': ' + errorMessage(e);
               events = null;
+            } finally {
+              if (handle) {
+                try { await handle.close(); } catch {}
+              }
             }
           }
+          let folded = false;
           if (events && events.length) {
             for (const event of events) {
               try { foldRecord(store, ledger, id, event); } catch (e) {
@@ -238,8 +239,35 @@ export async function scanOnce(
             }
             store.harnessSessions += 1;
             didScan = true;
-          } else if (events === null) {
-            // 只有 RAW 与 harness 都报错才算失败；空会话，events 为空数组时不算。
+            folded = true;
+          }
+          // raw 兜底：harness 两路都拒绝（旧代次会话的 SessionFormatUnsupportedError）
+          // 或返回空事件时，自读磁盘最高代次日志（多帧 zstd 由 rawlog 逐帧解码）逐记录折叠。
+          // 仅在上方未折入任何事件时执行，两路互斥；同 seq 另有账本主键与水位幂等兜底。
+          if (!folded) {
+            const log = logPaths.get(id);
+            if (log) {
+              try {
+                const records = parseLogLines(decodeSessionLog(readFileSync(log.path), log.compression));
+                // 原始日志无 harness 元数据，按 session/end-seed 的 inherited 标记求继承前缀。
+                const live = liveEventsOf(records, inheritedPrefixOf(records));
+                if (live.length > 0) {
+                  for (const record of live) {
+                    try { foldRecord(store, ledger, id, record); } catch (e) {
+                      store.lastError = 'record ' + shortOf(id) + ': ' + errorMessage(e);
+                    }
+                  }
+                  store.rawSessions += 1;
+                  didScan = true;
+                  folded = true;
+                }
+              } catch (e) {
+                store.lastError = 'raw ' + shortOf(id) + ': ' + errorMessage(e);
+              }
+            }
+          }
+          // 只有两路 harness 读取都报错且 raw 兜底也拿不到记录才算失败；空会话，events 为空数组时不算。
+          if (!folded && events === null) {
             store.failed += 1;
           }
         } catch (e) {

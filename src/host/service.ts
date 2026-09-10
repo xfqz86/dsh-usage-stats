@@ -20,7 +20,7 @@ import { queryGoQuota } from './goquota.ts';
 import { Ledger } from './ledger.ts';
 import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregates } from './scan.ts';
 import { snapshot } from './snapshot.ts';
-import { createStore, foldRecord } from './store.ts';
+import { createStore, foldRecord, inheritedCountOf } from './store.ts';
 import { queryZaiQuota } from './zaiQuota.ts';
 
 // 仅类型导入：把注入服务合并进 Context、把 session/title 事件合并进
@@ -115,6 +115,9 @@ export default class UsageStatsService extends TypertRemoteService {
           if (typeof hdr.createdAt === 'number' && Number.isFinite(hdr.createdAt)) patch.createdAt = hdr.createdAt;
           if (Object.keys(patch).length > 0) ledger.setMeta(id, patch);
         }
+        // fork 继承前缀属于父会话：seq 落在 inheritedEventCount 之前的事件不折，
+        // 避免父的用量在子会话下重复计入（与扫描路径同口径）。
+        if (typeof event.seq === 'number' && event.seq < inheritedCountOf((session as { inheritedEventCount?: unknown }).inheritedEventCount)) return;
         foldRecord(store, ledger, id, event);
       } catch (e) {
         // 写账本失败记日志，不打断事件循环；账本/内存保持上次成功点。
