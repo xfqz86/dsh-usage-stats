@@ -18,6 +18,10 @@
 
 ### 修复
 
+- **压缩上下文的调用不再漏统计**：dsh 压缩会话会发起一次独立 summarize 调用，用量落在 `compaction/summary` 事件的 `data.usage`（模型身份在 `data.provider`/`data.model`，不经 agent loop、不与 `assistant/message` 重复），此前只认 `assistant/message` 导致整条调用丢失。现两类计量事件统一入账，`assistant/attempt` 仍不收（流式中间态，与同 turn 的 message 重复）；账本 `LEDGER_VERSION` 5→6，旧库自动清空重扫。本机实测补回 7 次调用 / 129.99 万 token
+- **fork 子会话重复计数**：被 fork 的子会话日志物理包含父会话的历史事件，此前整份折叠导致父的用量在子会话名下再算一遍。现按 harness 的 `inheritedEventCount`（原始日志路径按 `session/end-seed` 的 `inherited` 标记）只折自有事件，实时监听同口径；本机实测排除 2,972 条重复 / 4.45 亿 token。账本 `LEDGER_VERSION` 4→5，旧库自动清空重扫
+- **旧格式会话不再漏统计**：新版 dsh 对 v0/v2 会话的格式迁移 fail-closed（`SessionFormatUnsupportedError`），本机实测 66 个旧会话的用量完全读不到。新增 `src/host/rawlog.ts`（多帧 zstd 解码 + 代次命名解析），扫描在 harness 两路读取失败或为空时自读磁盘原始日志兜底，命中计入 `rawSessions`；`findSessionLogs` 由只认 `session.jsonl.zstd` 改为按代次择优（v0/vN/未压缩），补回仅存 v2/v3 的目录
+- harness 0.1.5 对齐：`@deepseek-ai/*` 升至 `0.1.5-alpha.2`，移除已下线的 `dsh-client-runtime`，`ClientContext` 改 `Context as ClientContext`（`@deepseek-ai/cordis`），slots 类型取自 `dsh-client-ui-renderer/client`；会话读取改 `persistence.open+read`（`supportsRawArtifacts/readRaw/readFrom` 已删）；客户端 external 复刻基座 `PLATFORM_MODULES` 九项
 - 浏览器端取命名空间服务改走 `ctx.get('remote.usageStats')` 实时解析：暂存 `ctx.remote` 再读 `.usageStats` 会在子 scope 下报 `without inject`，导致快照与三路额度全部不可用（`src/client/remote.ts`；`pure` 新增句柄回归单测）
 - 注释文档与实现对齐：额度缺凭据直接返回 `no-key`（不读 env 与文件）、九表与去重与截断口径按实现修正，`README` 凭据别名与 `CHANGELOG` 链接同步
 

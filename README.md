@@ -110,11 +110,12 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 
 ## 统计口径
 
-- 数据源为 `assistant/message` 事件中携带 `data.usage` 的记录
+- 数据源为携带 `data.usage` 的记录：对话调用 `assistant/message`，压缩上下文的调用 `compaction/summary`
 - `total = input + output + cacheRead + cacheWrite`，`reasoning` 单列
-- 按模型维度取 `provider` 与 `model`，缺失记为 `unknown`
+- 按模型维度取 `provider` 与 `model`（对话调用在 `message.source`，压缩调用在事件顶层），缺失记为 `unknown`
 - 按会话维度记录标题、工作目录、创建与最近活跃时间
 - 按本地自然日划分日期
+- 不含会话标题自动生成等辅助调用的用量：dsh 只记录这类调用的请求，不记录返回的用量
 
 ## 数据存储
 

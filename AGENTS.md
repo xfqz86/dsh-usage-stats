@@ -21,8 +21,9 @@ export default class UsageStatsService extends TypertRemoteService {
 ```
 浏览器端范式：
 ```ts
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-slots'       // PropsLocale/PropsRuntime + ctx.slots
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'  // ctx.slots（PropsRuntime/PropsLocale/InjectFace）
+import type {} from '@deepseek-ai/dsh-api-gateway/client'         // ctx.remote
 import { Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 export type Props = PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-stats'>
 export const inject = ['slots', 'locale', 'remote']
@@ -67,24 +68,28 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - **events**：`(t, session_id, seq, provider, model, input/output/cache_read/cache_write/reasoning)`，`PK(t,session_id,seq)` 天然幂等 `ON CONFLICT DO UPDATE`；`t` 缺失时当天确定性毫秒偏移。约束：TEXT 禁 `\0`，内存键 `provider\0model` 写时 `splitModelKey` 拆列，标题/cwd 等先 `sanitizeSqlText`（`\0→\uFFFD`）。
 - **session_meta**：`(session_id PK, title, cwd, created_at, last_active, parent_session, origin, delegation_depth)`，初始化抄录、运行时由 `session/title` 与 `session/event` 头补齐，内存 `metaCache` 供快照；`user_version 3→4`增量补三列。
 - **agg_***：`agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint` 预统计物化视图，批量扫描 `aggSuspended` 挂起、结束 `persistAggregates` 一次物化并 `sealUntil(今日零点)`。
-- **版本**：`PRAGMA user_version=LEDGER_VERSION=4`；仅 `2→3/3→4` 增量保留数据，其余 `DROP` 重建（空表触发全量重扫）。
+- **版本**：`PRAGMA user_version=LEDGER_VERSION=6`；仅 `2→3/3→4` 增量保留数据，其余 `DROP` 重建（空表触发全量重扫）；统计口径变化也必须递增，否则历史事件不会被补录（见 §6 数据源）。
 
 **数据流**：
 1. **openLedger**：建目录/表、迁移、载入 meta、预编译 `LedgerStatements`。
-2. **scanOnce**：会话 id 全集=磁盘 `findSessionLogs(深度≤3)` ∪ harness 清单；4 路 worker，优先 `persistence.readRaw`（纯 JS zstd），回退 `sessionQuery.readSession`；经 `foldRecord` 共用路径，`running` 防重入（`force` 持锁重入除外）。
+2. **scanOnce**：会话 id 全集=磁盘 `findSessionLogs(深度≤3，按代次择优)` ∪ harness 清单；4 路 worker，优先 harness 读取（`sessionQuery.readSession` → `persistence.open+read`），失败或空时回退自读磁盘原始日志（`rawlog` 多帧 zstd 解码，覆盖 harness 迁移拒绝的旧格式）；两路都按 fork 继承前缀过滤（`store.ts` 的 `liveEventsOf`），经 `foldRecord` 共用路径，`running` 防重入（`force` 持锁重入除外）。
 3. **实时增量**：`ctx.on('session/event')` → `foldRecord` → `foldLedgerEvent` + `incrementAgg`，经 seq 水位、seq=-1 主键、`append` 返回值三层去重，补齐 `parentSession/origin/depth/cwd/createdAt`。
 4. **重启恢复**：`bootstrap()` 优先 `hasAggregates→rebuildWithDelta`（加载 `agg_*` + 补 `sealedUntil` 后增量），其次 `hasEvents→rebuildFromEvents`，否则全量扫描；日志删除仍可从介质恢复。
 5. **重建**：`usageStats/rebuild` → `ledger.clear()`+`resetStore`+`scanOnce`；`clear` 仅清库，`seal` 手动物化。
 
 **折叠语义**：`foldRecord` 处理种子/`title`/`usable(data.usage存在)` 事件，零用量事件直接丢弃不入账本；经三层去重后 `append`+`foldLedgerEvent` 折入日桶/总桶/模型、模型×日并更新 `maxSeq/lastActive`（`seq>=0` 才推进水位）；`foldLedgerEvent` 归一非有限/负数→0并向下取整，若传 `ledger` 则同步 `incrementAgg`（失败仅 `lastError`）。
 
+**fork 继承前缀**：被 fork 的子会话日志物理包含父会话的历史事件，由 `session/end-seed`（`data.inherited: true`）标记分界。统计只取自有部分——harness 两路读 `inheritedEventCount`，原始日志路径用 `inheritedPrefixOf` 求标记；不做这层过滤会把父的用量在子会话名下重复计入（`store.ts` 的 `inheritedCountOf`/`inheritedPrefixOf`/`liveEventsOf`，实时监听同样按 `session.inheritedEventCount` 跳过）。
+
 ## 6. 统计口径
-- 数据源：`assistant/message` 且 `data.usage` 存在（`toLedgerEvent` 非有限/负数→0并向下取整，零用量直接丢弃不入账本）。
+- 数据源：带 `data.usage` 的计量事件——对话调用 `assistant/message` 与压缩调用 `compaction/summary`（`toLedgerEvent` 非有限/负数→0并向下取整，零用量直接丢弃不入账本）。
+- **跨会话不重复**：fork 继承前缀属于父会话，子会话只统计 `inheritedEventCount` 之后的自有事件（见 §5 fork 继承前缀）；同一会话按最高代次文件只折一次。
 - `total=input+output+cacheRead+cacheWrite`，`reasoning` 单列。
-- 按模型：`data.message.source.provider/model`，缺失 `unknown`。
+- 按模型：`assistant/message` 取 `data.message.source.provider/model`，`compaction/summary` 取 `data.provider`/`data.model`，缺失 `unknown`；`assistant/attempt` 不收（用量是流式中间态，与同 turn 的 `assistant/message` 重复）。
 - 按会话：标题/`cwd`/创建时间/最近活跃。
 - 本地日划分：`startOfDay`（`utils.ts` 唯一来源，避免 UTC 漂移）。
 - 展示口径：日期趋势柱仅堆叠输入/输出/缓存三段（柱高按三段求和，`total` 字段仍为全口径），缓存命中率=`cacheRead/(cacheRead+input)`；快照 `series.all`/`models[].series` 截断至最近 366 天（`series.current` 不截断）。
+- **不计入项（数据源边界，非本仓可补）**：会话标题生成的辅助调用——`session/title-llm-request` 只记请求，harness 取标题文本后丢弃响应 usage，日志里没有用量可折；重试被替换的中间尝试与无 `assistant/message` 的中断流——用量只存在于 `assistant/chunk`/`assistant/attempt` 的 stream 里，与最终 `assistant/message` 同源，按 message 折叠避免双计（dsh 自身 token 投影同样不计）。
 
 ## 7. 构建（tsdown 双 bundle + CSS 内联）
 - `lib/index.js`（Host, Node ESM，`@xfqz86/dsh-usage-stats`）：仅 Node 内置+本地，DSH 服务 cordis 注入。
@@ -105,8 +110,8 @@ node --experimental-strip-types test/pure.mjs
 node --experimental-strip-types test/smoke.mjs
 node test/client-bundle.mjs
 ```
-- `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/日志解析/手写严格贡献（方法表/收发合法拒非法/信封分支）/命名空间句柄（经 `get` 取、不暂存 `ctx.remote`）/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
-- `smoke.mjs`：真实 cordis `Context` + mock `sessionQuery/sessionPersistence`（凭据中心缺席时额度查询直接返回 `no-key`），真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→@Remote 标记存活→实时重放20条去重→真实结果过 zod 信封→rebuild 并发 `usageStats/busy`→rebuild一致→三额度 no-key→seal→空清单仍从介质重建394→clear 归零。
+- `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/计量事件判定与模型身份（`usable` 收对话与压缩调用、拒 `assistant/attempt`；`modelKeyOf` 两处取源）/日志解析/rawlog 代次与多帧 zstd/fork 继承前缀（`inheritedCountOf`/`inheritedPrefixOf`/`liveEventsOf`）/手写严格贡献（方法表/收发合法拒非法/信封分支）/命名空间句柄（经 `get` 取、不暂存 `ctx.remote`）/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
+- `smoke.mjs`：真实 cordis `Context` + mock `sessionQuery/sessionPersistence`（凭据中心缺席时额度查询直接返回 `no-key`），真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→@Remote 标记存活→实时重放20条去重→真实结果过 zod 信封→rebuild 并发 `usageStats/busy`→rebuild一致→三额度 no-key→seal→空清单仍从介质重建394→clear 归零。另有三个独立 `DSH_HOME` 用例：旧代次会话 raw 兜底（`SessionFormatUnsupportedError` → 自读最高代次，只折一次）、fork 继承前缀过滤（query 与 raw 两路都只折自有事件）、压缩调用计入（`compaction/summary` 的用量计入总量与模型拆分，缺 usage/零用量不入账，实时路径同样接纳）。
 - `client-bundle.mjs`：验证 `window.__ModuleLoader__.load` 注册、每 `*.module.css` 对应 `data-plugin-css` 样式含 scoped 类名。
 
 ## 10. 文档维护
