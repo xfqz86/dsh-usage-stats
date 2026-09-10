@@ -135,7 +135,7 @@
 .tip {
   position: absolute;
   pointer-events: none;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
   padding: 6px 8px;

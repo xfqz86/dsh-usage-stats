@@ -75,14 +75,14 @@
 
 /* 饼图中心空心（可选甜甜圈效果，若需实心可隐藏） */
 .center {
-  fill: var(--dsw-alias-bg-base);
+  fill: var(--dsw-alias-bg-layer-2);
 }
 
 /* 提示气泡（复用 DatesTab 的 tip 风格，但此组件自绘定位） */
 .tip {
   position: absolute;
   pointer-events: none;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 8px;
   padding: 6px 8px;
