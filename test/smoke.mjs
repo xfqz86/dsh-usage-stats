@@ -11,18 +11,22 @@
  *   - rebuild 并发返回 usageStats/busy，clear/seal 语义正确；
  *   - 三路额度在凭据中心缺席时确定性 no-key，不产生任何真实外网请求；
  *   - 重启恢复：重开同一 sqlite 文件、会话清单返回空，仍能从介质重建统计
- *     （不依赖重扫日志）。
+ *     （不依赖重扫日志）；
+ *   - 旧代次会话兼容：harness 两路以 SessionFormatUnsupportedError 拒绝时，raw 兜底
+ *     自读磁盘最高代次原始日志（多帧 zstd / 未压缩明文）把用量折入账本，只折最高代次。
  * 信任与认证由网关载体统一处理，本测试只覆盖业务语义。
  *
  * 运行 `node --experimental-strip-types test/smoke.mjs`：lib 内 Remote
  * 服务为构建产物，贡献（zod）直引 src 源码。
  */
-import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { zstdCompressSync } from 'node:zlib'
 
 import { Context, Service as CordisService } from '@deepseek-ai/cordis'
+import { SessionFormatUnsupportedError } from '@deepseek-ai/dsh-session-persistence'
 import { remoteErrorOf, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 
 import UsageStatsService from '../lib/index.js'
@@ -61,17 +65,19 @@ const sessionQuery = {
   async listSessions() { return [{ header: { id: SESSION_ID } }, { header: { id: OTHER_ID } }] },
   async readSession(id) { return { events: id === SESSION_ID ? events : [] } },
 }
-// persistence 后端 mock：声明支持原始工件（readRaw），解码/输出来自预提取的真实事件。
+// persistence 后端 mock：新基座 open(id,'read')+handle.read(0)+close 形态，
+// list 返回含 header 的快照（与 SessionPersistenceSnapshot 同形）。
 const sessionPersistence = {
-  async list() { return [{ id: SESSION_ID }, { id: OTHER_ID }] },
-  async readFrom(id) { return { events: id === SESSION_ID ? events : [] } },
-  supportsRawArtifacts: true,
-  async readRaw(id) {
-    if (id !== SESSION_ID) return undefined
+  async list() {
+    return [
+      { header: { id: SESSION_ID }, revision: 0 },
+      { header: { id: OTHER_ID }, revision: 0 },
+    ]
+  },
+  async open(id) {
     return {
-      meta: { id, version: 1 },
-      filename: 'session.jsonl',
-      content: events.map((e) => JSON.stringify(e)).join('\n'),
+      async read() { return { events: id === SESSION_ID ? events : [] } },
+      async close() {},
     }
   },
 }
@@ -171,6 +177,12 @@ if (snap.foldedEvents !== EXPECTED_FOLDED) {
   console.error(`FAIL: 快照 foldedEvents=${String(snap.foldedEvents)}，应为 ${String(EXPECTED_FOLDED)}`)
   process.exit(1)
 }
+// 主场景的 DSH_HOME 下没有 sessions 目录，磁盘发现为空 → raw 兜底不触发，
+// rawSessions 应为 0（raw 兜底本身的回归用例见文件末尾的旧代次会话用例）。
+if (snap.rawSessions !== 0) {
+  console.error(`FAIL: rawSessions=${String(snap.rawSessions)}，主场景无磁盘会话文件，应恒为 0`)
+  process.exit(1)
+}
 console.log(JSON.stringify({
   scanning: snap.scanning,
   sessions: snap.sessions,
@@ -179,8 +191,8 @@ console.log(JSON.stringify({
   sessionsList: snap.sessionsList.map((s) => ({ id: s.id, title: s.title, cwd: s.cwd, calls: s.calls, total: s.usage.total })),
   seriesPoints: snap.series.all.length,
   foldedEvents: snap.foldedEvents,
-  rawSessions: snap.rawSessions,       // RAW 优先路径（persistence.readRaw）命中的会话数
-  harnessSessions: snap.harnessSessions, // harness 兜底路径命中的会话数
+  rawSessions: snap.rawSessions,       // raw 兜底命中的会话数（主场景无磁盘文件，恒为 0）
+  harnessSessions: snap.harnessSessions, // harness 路径命中的会话数（query.readSession / persistence.open+read）
 }, null, 2))
 
 // 实时去重测试：经 session/event 重放同样的事件，总数不应翻倍
@@ -288,7 +300,10 @@ if (sealed.sealed !== true || sealed.foldedEvents !== EXPECTED_FOLDED) {
 // 重启恢复路径：重开同一 sqlite 文件、会话清单返回空 → 账本有事件 →
 // 直接从介质重建聚合缓存（不重扫日志）
 const emptyQuery = { async listSessions() { return [] }, async readSession() { return { events: [] } } }
-const emptyPersist = { async list() { return [] }, async readFrom() { return { events: [] } }, supportsRawArtifacts: true, async readRaw() { return undefined } }
+const emptyPersist = {
+  async list() { return [] },
+  async open() { throw new Error('not found') },
+}
 const reopened = await mount(emptyQuery, emptyPersist)
 // 重开介质后同样轮询等待从预统计重建完成（替代固定 sleep，慢机稳健）
 const snap4 = await (async () => {
@@ -323,6 +338,334 @@ if (cleared.cleared !== true || snap5.all.calls !== 0 || snap5.foldedEvents !== 
 }
 
 await mounted.dispose()
+
+// ===== 旧代次会话的 raw 兜底回归用例（独立 DSH_HOME，不触碰上面的 394 基线）=====
+// 等价真实场景：同一会话目录里同时存在 v0 与 v2 两份日志（低代次是高代次的迁移
+// 前缀，两份都折会重复计数），harness 两路读取都以 SessionFormatUnsupportedError
+// 拒绝；另有一个只在磁盘、未进 harness 清单的明文会话，验证 id 全集 = 磁盘 ∪ 清单。
+// 断言：用量经 raw 兜底折入账本、rawSessions 自增、harnessSessions 为 0，且只折最高代次。
+{
+  const legacyHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-legacy-'))
+  const LEGACY_ID = 'session-1f4d0a3e-5c7b-4a1d-9f3e-2b6c8d0e4a71'
+  const DISK_ONLY_ID = 'session-7c2b9d10-3f5a-4c8e-9b1d-6a2e5f8c4310'
+  const LEGACY_CWD = '/Users/example/legacy-workspace'
+  const LEGACY_CREATED_AT = 1785000000000
+  const workspaceDir = join(legacyHome, 'sessions', '--Users-example-legacy-workspace--')
+
+  /** 记录数组 → append-only 的多帧 zstd 拼接（每行一帧，与 harness 落盘写法一致）。 */
+  const zstdFrames = (records) =>
+    Buffer.concat(records.map((r) => zstdCompressSync(Buffer.from(`${JSON.stringify(r)}\n`, 'utf8'))))
+  const seed = (version, id) => ({
+    type: 'session', version, id, createdAt: LEGACY_CREATED_AT, cwd: LEGACY_CWD, isSeeded: true, delegationDepth: 0,
+  })
+  const usageOf = (seq, time, u) => ({
+    type: 'assistant/message',
+    seq,
+    time,
+    data: { usage: u, message: { source: { provider: 'opencode-go', model: 'deepseek-v4-flash' } } },
+  })
+
+  // LEGACY_ID：v0（1205 token，低代次、必须被忽略）+ v2（6300 token，最高代次、命中）
+  const legacyDir = join(workspaceDir, LEGACY_ID)
+  mkdirSync(legacyDir, { recursive: true })
+  writeFileSync(join(legacyDir, 'session.jsonl.zstd'), zstdFrames([
+    seed(0, LEGACY_ID),
+    usageOf(1, LEGACY_CREATED_AT + 1000, { inputTokens: 1100, outputTokens: 100, cacheReadTokens: 5 }),
+  ]))
+  writeFileSync(join(legacyDir, 'session.v2.jsonl.zstd'), zstdFrames([
+    seed(2, LEGACY_ID),
+    usageOf(1, LEGACY_CREATED_AT + 1000, { inputTokens: 2000, outputTokens: 100 }),
+    usageOf(2, LEGACY_CREATED_AT + 2000, { inputTokens: 4000, outputTokens: 200 }),
+  ]))
+  // 非规范名（session.lock）：代次解析 -1，必须被忽略，不得当成会话日志读入
+  writeFileSync(join(legacyDir, 'session.lock'), Buffer.from('not a session log'))
+
+  // DISK_ONLY_ID：未压缩明文 v0，且不在 harness 清单里，只能靠磁盘发现 + raw 兜底统计
+  const diskOnlyDir = join(workspaceDir, DISK_ONLY_ID)
+  mkdirSync(diskOnlyDir, { recursive: true })
+  writeFileSync(join(diskOnlyDir, 'session.jsonl'), [
+    JSON.stringify(seed(0, DISK_ONLY_ID)),
+    JSON.stringify(usageOf(1, LEGACY_CREATED_AT + 3000, { inputTokens: 500, outputTokens: 50 })),
+    '',
+  ].join('\n'))
+
+  /** harness 的真实拒绝形态：旧代次日志不被当前构建解释。 */
+  const refusal = (id) => new SessionFormatUnsupportedError(
+    `session "${id}" uses log format v0, older than the supported v3, and this build ships no upgrade path for it`,
+  )
+  const legacyQuery = {
+    async listSessions() { return [{ header: { id: LEGACY_ID, createdAt: LEGACY_CREATED_AT, cwd: LEGACY_CWD } }] },
+    async readSession(id) { throw refusal(id) },
+  }
+  const legacyPersist = {
+    async list() { return [{ header: { id: LEGACY_ID }, revision: 0 }] },
+    async open(id) { throw refusal(id) },
+  }
+
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = legacyHome
+  const legacyMounted = await mount(legacyQuery, legacyPersist)
+  const snapLegacy = await (async () => {
+    const deadline = Date.now() + 10_000
+    for (;;) {
+      const s = legacyMounted.svc.snapshot({ sessionId: null })
+      assertEnvelope('snapshot', s)
+      if (s.foldedEvents > 0) return s
+      if (Date.now() > deadline) throw new Error('等待旧代次会话 raw 兜底折叠超时')
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  })()
+  const byId = new Map(snapLegacy.sessionsList.map((s) => [s.id, s]))
+  const legacy = byId.get(LEGACY_ID)
+  const diskOnly = byId.get(DISK_ONLY_ID)
+  console.log('legacy raw fallback:', JSON.stringify({
+    foldedEvents: snapLegacy.foldedEvents,
+    rawSessions: snapLegacy.rawSessions,
+    harnessSessions: snapLegacy.harnessSessions,
+    sessions: snapLegacy.sessionsList.map((s) => ({ id: s.id, calls: s.calls, total: s.usage.total, cwd: s.cwd })),
+  }, null, 2))
+  // 三处用量：v2 的 6300 + 明文会话的 550；v0 的 1205 不得计入
+  if (snapLegacy.foldedEvents !== 3 || snapLegacy.all.calls !== 3 || snapLegacy.all.usage.total !== 6850) {
+    console.error(`FAIL: raw 兜底折叠数/用量不符：foldedEvents=${String(snapLegacy.foldedEvents)} calls=${String(snapLegacy.all.calls)} total=${String(snapLegacy.all.usage.total)}，应为 3 / 3 / 6850`)
+    process.exit(1)
+  }
+  if (snapLegacy.rawSessions !== 2 || snapLegacy.harnessSessions !== 0) {
+    console.error(`FAIL: rawSessions=${String(snapLegacy.rawSessions)} harnessSessions=${String(snapLegacy.harnessSessions)}，应为 2 / 0`)
+    process.exit(1)
+  }
+  if (!legacy || legacy.calls !== 2 || legacy.usage.total !== 6300 || legacy.cwd !== LEGACY_CWD) {
+    console.error(`FAIL: 旧会话未按最高代次折叠（应只折 v2 的 2 条 / 6300 token）：${JSON.stringify(legacy)}`)
+    process.exit(1)
+  }
+  if (!diskOnly || diskOnly.calls !== 1 || diskOnly.usage.total !== 550) {
+    console.error(`FAIL: 仅磁盘存在的明文会话未折入：${JSON.stringify(diskOnly)}`)
+    process.exit(1)
+  }
+  await legacyMounted.dispose()
+  process.env.DSH_HOME = previousHome
+  rmSync(legacyHome, { recursive: true, force: true })
+}
+
+// ===== fork 继承前缀回归用例（独立 DSH_HOME，不触碰上面的 394 基线与旧代次用例）=====
+// 等价真实场景：子会话日志的物理前缀是从父会话复制来的历史事件（`session/end-seed`
+// 带 `inherited: true` 标记分界），harness 读取会连前缀一起返回。若整份日志折叠，
+// 父会话的用量会在子会话名下再算一遍，总量虚高。断言只折自有部分：
+//   query 路径按 snapshot.inheritedEventCount 过滤；raw 兜底按 inherited 标记过滤。
+{
+  const forkHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-fork-'))
+  const PARENT_ID = 'session-9b1f2c3d-4e5a-4b6c-8d7e-1f2a3b4c5d6e'
+  const CHILD_QUERY_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
+  const CHILD_RAW_ID = 'session-b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
+  const FORK_CWD = '/Users/example/fork-workspace'
+  const FORK_CREATED_AT = 1785200000000
+  const forkWorkspace = join(forkHome, 'sessions', '--Users-example-fork-workspace--')
+
+  const zstdFrames = (records) =>
+    Buffer.concat(records.map((r) => zstdCompressSync(Buffer.from(`${JSON.stringify(r)}\n`, 'utf8'))))
+  const forkHeader = (id, parent) => ({
+    type: 'session',
+    version: 2,
+    id,
+    createdAt: FORK_CREATED_AT,
+    cwd: FORK_CWD,
+    isSeeded: Boolean(parent),
+    delegationDepth: parent ? 1 : 0,
+    ...(parent ? { parentSession: parent } : {}),
+  })
+  const forkUsage = (seq, input) => ({
+    type: 'assistant/message',
+    seq,
+    time: FORK_CREATED_AT + (seq + 1) * 1000,
+    data: { usage: { inputTokens: input }, message: { source: { provider: 'opencode-go', model: 'deepseek-v4-flash' } } },
+  })
+  const endSeed = (seq) => ({ type: 'session/end-seed', seq, time: FORK_CREATED_AT + seq * 1000 + 1, data: { inherited: true } })
+
+  // 父会话：3 条自有用量，共 1500 token
+  const parentEvents = [forkHeader(PARENT_ID, null), forkUsage(0, 500), forkUsage(1, 500), forkUsage(2, 500)]
+  // 子会话（query 路径）：继承父的 3 条（1500 token）+ 标记 + 自有 1 条（100 token）
+  const childQueryEvents = [
+    forkHeader(CHILD_QUERY_ID, PARENT_ID),
+    forkUsage(0, 500), forkUsage(1, 500), forkUsage(2, 500),
+    endSeed(3),
+    forkUsage(4, 100),
+  ]
+  // 子会话（raw 路径）：harness 两路拒绝，磁盘 v2 日志含继承前缀 2 条（2000 token）+ 自有 1 条（300 token）
+  const childRawDir = join(forkWorkspace, CHILD_RAW_ID)
+  mkdirSync(childRawDir, { recursive: true })
+  writeFileSync(join(childRawDir, 'session.v2.jsonl.zstd'), zstdFrames([
+    forkHeader(CHILD_RAW_ID, PARENT_ID),
+    forkUsage(0, 1000), forkUsage(1, 1000),
+    endSeed(2),
+    forkUsage(3, 300),
+  ]))
+
+  const forkRefusal = (id) => new SessionFormatUnsupportedError(
+    `session "${id}" uses log format v2, older than the supported v3, and this build ships no upgrade path for it`,
+  )
+  const forkQuery = {
+    async listSessions() {
+      return [
+        { header: { id: PARENT_ID, createdAt: FORK_CREATED_AT, cwd: FORK_CWD } },
+        { header: { id: CHILD_QUERY_ID, createdAt: FORK_CREATED_AT, cwd: FORK_CWD, parentSession: PARENT_ID, delegationDepth: 1 } },
+        { header: { id: CHILD_RAW_ID, createdAt: FORK_CREATED_AT, cwd: FORK_CWD, parentSession: PARENT_ID, delegationDepth: 1 } },
+      ]
+    },
+    async readSession(id) {
+      if (id === PARENT_ID) return { events: parentEvents, inheritedEventCount: 0 }
+      if (id === CHILD_QUERY_ID) return { events: childQueryEvents, inheritedEventCount: 4 }
+      throw forkRefusal(id)
+    },
+  }
+  const forkPersist = {
+    async list() {
+      return [
+        { header: { id: PARENT_ID }, revision: 0 },
+        { header: { id: CHILD_QUERY_ID }, revision: 0 },
+        { header: { id: CHILD_RAW_ID }, revision: 0 },
+      ]
+    },
+    async open(id) { throw forkRefusal(id) },
+  }
+
+  const previousForkHome = process.env.DSH_HOME
+  process.env.DSH_HOME = forkHome
+  const forkMounted = await mount(forkQuery, forkPersist)
+  const snapFork = await (async () => {
+    const deadline = Date.now() + 10_000
+    for (;;) {
+      const s = forkMounted.svc.snapshot({ sessionId: null })
+      assertEnvelope('snapshot', s)
+      if (s.foldedEvents >= 5) return s
+      if (Date.now() > deadline) throw new Error('等待 fork 继承前缀用例折叠超时')
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  })()
+  const forkById = new Map(snapFork.sessionsList.map((s) => [s.id, s]))
+  const forkChildQuery = forkById.get(CHILD_QUERY_ID)
+  const forkChildRaw = forkById.get(CHILD_RAW_ID)
+  console.log('fork inherited prefix:', JSON.stringify({
+    foldedEvents: snapFork.foldedEvents,
+    all: snapFork.all.usage.total,
+    sessions: snapFork.sessionsList.map((s) => ({ id: s.id, calls: s.calls, total: s.usage.total })),
+  }, null, 2))
+  // 父 3 条（1500）+ 子 query 自有 1 条（100）+ 子 raw 自有 1 条（300）；继承段一律不计
+  if (snapFork.foldedEvents !== 5 || snapFork.all.calls !== 5 || snapFork.all.usage.total !== 1900) {
+    console.error(`FAIL: fork 继承前缀被重复计入：foldedEvents=${String(snapFork.foldedEvents)} calls=${String(snapFork.all.calls)} total=${String(snapFork.all.usage.total)}，应为 5 / 5 / 1900`)
+    process.exit(1)
+  }
+  if (!forkChildQuery || forkChildQuery.calls !== 1 || forkChildQuery.usage.total !== 100) {
+    console.error(`FAIL: query 路径子会话未按 inheritedEventCount 过滤继承前缀：${JSON.stringify(forkChildQuery)}`)
+    process.exit(1)
+  }
+  if (!forkChildRaw || forkChildRaw.calls !== 1 || forkChildRaw.usage.total !== 300) {
+    console.error(`FAIL: raw 兜底路径子会话未按 inherited 标记过滤继承前缀：${JSON.stringify(forkChildRaw)}`)
+    process.exit(1)
+  }
+  await forkMounted.dispose()
+  process.env.DSH_HOME = previousForkHome
+  rmSync(forkHome, { recursive: true, force: true })
+}
+
+// ===== 压缩调用计入用例（独立 DSH_HOME，不触碰上面的 394 基线与其他用例）=====
+// 上下文压缩会发起一次独立 summarize 调用，用量落在 `compaction/summary` 的
+// data.usage，模型身份在 data.provider/data.model（该调用不经 agent loop，
+// 不与 assistant/message 重复）。断言它计入总量与模型拆分，而缺 usage、
+// 零用量的压缩事件不入账；实时路径同样接纳。
+{
+  const compactHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-compact-'))
+  const COMPACT_ID = 'c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f'
+  const COMPACT_CWD = '/Users/example/compact-workspace'
+  const COMPACT_AT = 1785300000000
+  const COMPACT_PROVIDER = 'zai-coding-cn'
+  const COMPACT_MODEL = 'glm-5.3-flash'
+
+  const compactMessage = (seq, input) => ({
+    type: 'assistant/message',
+    seq,
+    time: COMPACT_AT + (seq + 1) * 1000,
+    data: { usage: { inputTokens: input }, message: { source: { provider: 'opencode-go', model: 'deepseek-v4-flash' } } },
+  })
+  const compactSummary = (seq, usage) => ({
+    type: 'compaction/summary',
+    seq,
+    time: COMPACT_AT + (seq + 1) * 1000,
+    data: {
+      compactionId: `compaction-${seq}`,
+      summary: [],
+      shadowedRange: { start: 0, end: 0 },
+      shadowedSeqs: [],
+      shadowedTokenCount: 0,
+      provider: COMPACT_PROVIDER,
+      model: COMPACT_MODEL,
+      ...(usage === undefined ? {} : { usage }),
+    },
+  })
+  const compactEvents = [
+    { type: 'session', version: 3, id: COMPACT_ID, createdAt: COMPACT_AT, cwd: COMPACT_CWD },
+    compactMessage(0, 1000),
+    // 压缩调用：200 + 50 + 3000 = 3250
+    compactSummary(1, { inputTokens: 200, outputTokens: 50, cacheReadTokens: 3000 }),
+    // 后端未上报 usage：不计
+    compactSummary(2, undefined),
+    // 零用量：不入账本
+    compactSummary(3, { inputTokens: 0, outputTokens: 0 }),
+    compactMessage(4, 700),
+  ]
+  const compactQuery = {
+    async listSessions() {
+      return [{ header: { id: COMPACT_ID, createdAt: COMPACT_AT, cwd: COMPACT_CWD } }]
+    },
+    async readSession(id) {
+      if (id !== COMPACT_ID) throw new Error(`压缩用例收到意外会话 ${id}`)
+      return { events: compactEvents, inheritedEventCount: 0 }
+    },
+  }
+  const compactPersist = {
+    async list() { return [{ header: { id: COMPACT_ID }, revision: 0 }] },
+    async open(id) { throw new Error(`压缩用例不应走持久化路径：${id}`) },
+  }
+
+  const previousCompactHome = process.env.DSH_HOME
+  process.env.DSH_HOME = compactHome
+  const compactMounted = await mount(compactQuery, compactPersist)
+  const snapCompact = await (async () => {
+    const deadline = Date.now() + 10_000
+    for (;;) {
+      const s = compactMounted.svc.snapshot({ sessionId: null })
+      assertEnvelope('snapshot', s)
+      if (s.foldedEvents >= 3) return s
+      if (Date.now() > deadline) throw new Error('等待压缩调用用例折叠超时')
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  })()
+  const compactModel = snapCompact.models.find((m) => m.provider === COMPACT_PROVIDER && m.model === COMPACT_MODEL)
+  console.log('compaction usage:', JSON.stringify({
+    foldedEvents: snapCompact.foldedEvents,
+    all: snapCompact.all.usage.total,
+    models: snapCompact.models.map((m) => ({ key: `${m.provider}/${m.model}`, calls: m.calls, total: m.usage.total })),
+  }, null, 2))
+  // 1000 + 3250（压缩调用）+ 700 = 4950，三条计量事件
+  if (snapCompact.foldedEvents !== 3 || snapCompact.all.calls !== 3 || snapCompact.all.usage.total !== 4950) {
+    console.error(`FAIL: 压缩调用未按口径入账：foldedEvents=${String(snapCompact.foldedEvents)} calls=${String(snapCompact.all.calls)} total=${String(snapCompact.all.usage.total)}，应为 3 / 3 / 4950`)
+    process.exit(1)
+  }
+  if (!compactModel || compactModel.calls !== 1 || compactModel.usage.total !== 3250) {
+    console.error(`FAIL: 压缩调用未计入模型拆分：${JSON.stringify(compactModel)}`)
+    process.exit(1)
+  }
+  // 实时路径：同一条 foldRecord 接纳压缩事件
+  compactMounted.svc.ctx.emit('session/event', { id: COMPACT_ID }, compactSummary(5, { inputTokens: 500 }))
+  const snapCompactLive = compactMounted.svc.snapshot({ sessionId: null })
+  const compactModelLive = snapCompactLive.models.find((m) => m.provider === COMPACT_PROVIDER && m.model === COMPACT_MODEL)
+  if (snapCompactLive.foldedEvents !== 4 || snapCompactLive.all.usage.total !== 5450 || compactModelLive?.usage.total !== 3750) {
+    console.error(`FAIL: 实时压缩调用未入账：foldedEvents=${String(snapCompactLive.foldedEvents)} total=${String(snapCompactLive.all.usage.total)} model=${JSON.stringify(compactModelLive)}，应为 4 / 5450 / 3750`)
+    process.exit(1)
+  }
+  await compactMounted.dispose()
+  process.env.DSH_HOME = previousCompactHome
+  rmSync(compactHome, { recursive: true, force: true })
+}
+
 // 清理临时 DSH_HOME
 rmSync(tmpHome, { recursive: true, force: true })
 console.log('SMOKE TEST PASSED')

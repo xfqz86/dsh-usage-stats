@@ -7,14 +7,16 @@
  */
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { constants, zstdCompressSync } from 'node:zlib';
 
 import { ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
 import { fetchDeepSeekBalance, queryDeepSeekBalance } from '../src/host/deepseekBalance.ts';
 import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
+import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
 import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
 import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
-import { createStore } from '../src/host/store.ts';
+import { createStore, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from '../src/host/store.ts';
 import { snapshot } from '../src/host/snapshot.ts';
 import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
@@ -236,17 +238,25 @@ describe('agg：口径', () => {
     assert.equal(a.calls, 1);
   });
 
-  it('usable 仅放行带 usage 的 assistant/message', () => {
+  it('usable 放行带 usage 的计量事件（对话与压缩调用）', () => {
     assert.equal(usable({ type: 'assistant/message', data: { usage: {} } }), true);
+    assert.equal(usable({ type: 'compaction/summary', data: { usage: {} } }), true);
     assert.equal(usable({ type: 'session' }), false);
     assert.equal(usable({ type: 'assistant/message', data: {} }), false);
     assert.equal(usable({ type: 'assistant/message' }), false);
+    assert.equal(usable({ type: 'compaction/summary', data: {} }), false);
+    assert.equal(usable({ type: 'compaction/summary' }), false);
+    // assistant/attempt 的用量是流式中间态，会与同 turn 的 assistant/message 重复，不收
+    assert.equal(usable({ type: 'assistant/attempt', data: { usage: {} } }), false);
   });
 
   it('modelKeyOf 缺失记 unknown', () => {
     assert.equal(modelKeyOf({ type: 'assistant/message', data: { message: { source: { provider: 'p', model: 'm' } } } }), 'p\0m');
     assert.equal(modelKeyOf({ type: 'assistant/message', data: {} }), 'unknown\0unknown');
     assert.equal(modelKeyOf({ type: 'assistant/message', data: { message: { source: { provider: '', model: '' } } } }), 'unknown\0unknown');
+    // 压缩调用的模型身份在 data.provider/data.model，不在 message.source
+    assert.equal(modelKeyOf({ type: 'compaction/summary', data: { provider: 'opencode-go', model: 'deepseek-v4-flash' } }), 'opencode-go\0deepseek-v4-flash');
+    assert.equal(modelKeyOf({ type: 'compaction/summary', data: {} }), 'unknown\0unknown');
   });
 });
 
@@ -261,6 +271,147 @@ describe('logs：行解析', () => {
   it('parseLogLines 跳坏行不断流', () => {
     const out = parseLogLines('{"type":"a"}\nbad\n\n{"type":"b"}');
     assert.equal(out.length, 2);
+  });
+});
+
+/** 压缩一段文本为一帧：与 harness 一致带 checksum，覆盖帧头 checksum 分支。 */
+const zstdFrame = (text) => zstdCompressSync(Buffer.from(text, 'utf8'), {
+  params: { [constants.ZSTD_c_checksumFlag]: 1 },
+});
+
+describe('rawlog：代次识别与多帧 zstd 解码', () => {
+  it('parseGenerationName 识别全代次，非规范名 -1', () => {
+    assert.equal(parseGenerationName('session.jsonl.zstd'), 0);
+    assert.equal(parseGenerationName('session.v2.jsonl.zstd'), 2);
+    assert.equal(parseGenerationName('session.v3.jsonl.zstd'), 3);
+    assert.equal(parseGenerationName('session.jsonl'), 0);
+    assert.equal(parseGenerationName('session.v1.jsonl'), 1);
+    assert.equal(parseGenerationName('session.v12.jsonl.zstd'), 12);
+    for (const bad of [
+      'session.lock', 'session.v0.jsonl.zstd', 'session.v01.jsonl.zstd',
+      'SESSION.V2.JSONL.ZSTD', 'session.jsonl.zstd.tmp', 'notes.txt', '',
+    ]) {
+      assert.equal(parseGenerationName(bad), -1, bad);
+    }
+    assert.deepEqual(parseSessionLogName('session.v2.jsonl.zstd'), { generation: 2, compression: 'zstd' });
+    assert.deepEqual(parseSessionLogName('session.jsonl'), { generation: 0, compression: 'none' });
+    assert.equal(parseSessionLogName('session.lock'), null);
+  });
+
+  it('单帧解码等于原文，帧数 1', () => {
+    const text = '{"type":"session","id":"s"}\n{"type":"assistant/message"}\n';
+    const buffer = zstdFrame(text);
+    assert.equal(decodeSessionLog(buffer, 'zstd'), text);
+    assert.equal(scanZstdFrames(buffer).frames.length, 1);
+    assert.equal(scanZstdFrames(buffer).tornStart, undefined);
+  });
+
+  it('多帧拼接逐帧解压得到完整文本', () => {
+    const chunks = [
+      '{"type":"session","id":"s"}\n',
+      '{"type":"assistant/message","i":1}\n',
+      '{"type":"assistant/message","i":2}\n{"type":"assistant/message","i":3}\n',
+    ];
+    const buffer = Buffer.concat(chunks.map(zstdFrame));
+    assert.equal(decodeSessionLog(buffer, 'zstd'), chunks.join(''));
+    assert.equal(scanZstdFrames(buffer).frames.length, chunks.length);
+    // 帧区间连续覆盖整个文件且互不重叠
+    const scan = scanZstdFrames(buffer);
+    assert.equal(scan.frames[0].start, 0);
+    assert.equal(scan.frames.at(-1).end, buffer.length);
+    for (let i = 1; i < scan.frames.length; i += 1) {
+      assert.equal(scan.frames[i].start, scan.frames[i - 1].end);
+    }
+  });
+
+  it('真实规模形态：1400 段逐帧追加，解出行数一致', () => {
+    // 模拟 harness append-only 写入：每帧若干条事件，首帧为会话头。
+    const chunks = ['{"type":"session","id":"s"}\n'];
+    for (let i = 1; i < 1400; i += 1) chunks.push(`{"type":"assistant/message","i":${i}}\n`);
+    const buffer = Buffer.concat(chunks.map(zstdFrame));
+    const scan = scanZstdFrames(buffer);
+    assert.equal(scan.frames.length, 1400);
+    const text = decodeSessionLog(buffer, 'zstd');
+    assert.equal(text, chunks.join(''));
+    assert.equal(text.split('\n').filter(Boolean).length, 1400);
+  });
+
+  it('未压缩明文原样返回，含中文多字节', () => {
+    const text = '{"type":"session","title":"中文标题"}\n{"type":"assistant/message"}\n';
+    assert.equal(decodeSessionLog(Buffer.from(text, 'utf8'), 'none'), text);
+  });
+
+  it('截断尾帧按 harness 语义只保留完整部分', () => {
+    const a = '{"type":"session","id":"s"}\n';
+    const b = '{"type":"assistant/message","i":1}\n{"type":"assistant/message","i":2}\n';
+    const frameA = zstdFrame(a);
+    const frameB = zstdFrame(b);
+    // 尾帧 payload 被切断：该帧一个 block 都不完整，整帧丢弃
+    const cutPayload = Buffer.concat([frameA, frameB.subarray(0, frameB.length - 12)]);
+    assert.equal(decodeSessionLog(cutPayload, 'zstd'), a);
+    assert.equal(scanZstdFrames(cutPayload).tornStart, frameA.length);
+    // 尾帧仅缺 checksum：payload 完整，按 harness 迁移语义恢复明文
+    const cutChecksum = Buffer.concat([frameA, frameB.subarray(0, frameB.length - 3)]);
+    assert.equal(decodeSessionLog(cutChecksum, 'zstd'), a + b);
+    // 只有不完整首帧：不抛错，返回空串
+    const tornOnly = frameA.subarray(0, 8);
+    assert.equal(scanZstdFrames(tornOnly).tornStart, 0);
+    assert.equal(decodeSessionLog(tornOnly, 'zstd'), '');
+  });
+
+  it('空文件返回空串，坏帧抛错', () => {
+    assert.equal(decodeSessionLog(Buffer.alloc(0), 'zstd'), '');
+    assert.deepEqual(scanZstdFrames(Buffer.alloc(0)).frames, []);
+    const badMagic = Buffer.from([0, 1, 2, 3]);
+    assert.throws(() => scanZstdFrames(badMagic), /invalid frame magic at byte 0/);
+    assert.throws(() => decodeSessionLog(badMagic, 'zstd'), /invalid frame magic at byte 0/);
+    // 完整帧后跟坏 magic：结构非法，同 harness 语义抛错
+    const trailingGarbage = Buffer.concat([zstdFrame('{"type":"a"}\n'), Buffer.from([9, 9, 9, 9])]);
+    assert.throws(() => scanZstdFrames(trailingGarbage), /invalid frame magic at byte /);
+    // 完整帧被篡改：帧校验失败抛错
+    const tampered = Buffer.from(zstdFrame('{"type":"a"}\n'));
+    tampered[tampered.length - 6] ^= 0xFF;
+    assert.throws(() => decodeSessionLog(tampered, 'zstd'), /failed validation/);
+  });
+});
+
+describe('fork 继承前缀：只折本会话自有事件', () => {
+  it('inheritedPrefixOf 取最后一个 inherited 标记之后偏移一位', () => {
+    const records = [
+      { type: 'session', id: 'child', parentSession: 'parent' },
+      { type: 'assistant/message', seq: 0 },
+      { type: 'session/end-seed', seq: 1, data: { inherited: true } },
+      { type: 'assistant/message', seq: 2 },
+    ];
+    assert.equal(inheritedPrefixOf(records), 2);
+    // 无标记（普通会话）与自身 seed（resume，inherited 非 true）都不算继承
+    assert.equal(inheritedPrefixOf([{ type: 'assistant/message', seq: 0 }]), 0);
+    assert.equal(inheritedPrefixOf([{ type: 'session/end-seed', seq: 3, data: {} }]), 0);
+    assert.equal(inheritedPrefixOf([]), 0);
+    // 多个标记取最大 seq，坏记录跳过
+    assert.equal(inheritedPrefixOf([null, 7, { type: 'session/end-seed', seq: 5, data: { inherited: true } }, { type: 'session/end-seed', seq: 3, data: { inherited: true } }]), 6);
+  });
+
+  it('liveEventsOf 丢继承前缀，保留无 seq 的 header 记录', () => {
+    const records = [
+      { type: 'session', id: 'child' },
+      { type: 'assistant/message', seq: 0, data: { usage: { inputTokens: 1 } } },
+      { type: 'session/end-seed', seq: 1, data: { inherited: true } },
+      { type: 'assistant/message', seq: 2, data: { usage: { inputTokens: 9 } } },
+    ];
+    const live = liveEventsOf(records, 2);
+    assert.deepEqual(live.map((r) => r.seq ?? 'header'), ['header', 2]);
+    // inherited 为 0 时原样返回，不做拷贝
+    assert.equal(liveEventsOf(records, 0), records);
+  });
+
+  it('inheritedCountOf 归一 harness 元数据', () => {
+    assert.equal(inheritedCountOf(3), 3);
+    assert.equal(inheritedCountOf(0), 0);
+    assert.equal(inheritedCountOf(undefined), 0);
+    assert.equal(inheritedCountOf(-2), 0);
+    assert.equal(inheritedCountOf(Number.NaN), 0);
+    assert.equal(inheritedCountOf('4'), 4);
   });
 });
 

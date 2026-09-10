@@ -28,11 +28,14 @@ import { splitModelKey, startOfDay  } from '../utils.ts';
 import { modelKeyOf } from './agg.ts';
 import { getDshHome } from './logs.ts';
 
+import type { MeteredEvent } from './agg.ts';
 import type { UsageStore } from './store.ts';
-import type { SessionEvent } from '@deepseek-ai/dsh-session';
 
-/** 账本 schema 版本，PRAGMA user_version，结构不兼容时自动清库重建。 */
-export const LEDGER_VERSION = 5;
+/**
+ * 账本 schema 版本，PRAGMA user_version，不匹配时清库重建并全量重扫。
+ * 统计口径变化同样要递增：历史事件只在重扫时补录，旧库不会自愈。
+ */
+export const LEDGER_VERSION = 6;
 /** 归属目录名，位于 storages 下，与插件同名。 */
 export const LEDGER_DIR_NAME = 'dsh-usage-stats';
 /** 账本 sqlite 文件名。 */
@@ -242,8 +245,11 @@ function sanitizeSqlText(value: string): string {
   return value.includes('\u0000') ? value.replaceAll('\u0000', '\ufffd') : value;
 }
 
-/** 会话事件转换为账本事件，usage 缺失或非对象时返回 null；零用量由调用方丢弃。 */
-export function toLedgerEvent(sessionId: string, event: SessionEvent<'assistant/message'>): LedgerEvent | null {
+/**
+ * 会话事件转换为账本事件，usage 缺失或非对象时返回 null；零用量由调用方丢弃。
+ * 接受全部计量事件（对话消息与压缩摘要调用），模型身份由 modelKeyOf 分派。
+ */
+export function toLedgerEvent(sessionId: string, event: MeteredEvent): LedgerEvent | null {
   const usage = event.data?.usage;
   if (usage === null || typeof usage !== 'object') return null;
   const u = usage as { inputTokens?: unknown; outputTokens?: unknown; cacheReadTokens?: unknown; cacheWriteTokens?: unknown; reasoningTokens?: unknown };
