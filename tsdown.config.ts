@@ -66,18 +66,17 @@ const isProd = process.env.NODE_ENV === 'production';
 /** bundle id = package.json `name`，必须与 package.json 的 name 完全一致，含 scope。 */
 const PLUGIN_ID = '@xfqz86/dsh-usage-stats';
 
-/** web shell 冻结模块表中的模块标识。 */
+/** web shell 冻结模块表（复刻 PLATFORM_MODULES 九项）中的模块标识。 */
 const CLIENT_EXTERNALS = [
   'react',
   'react/jsx-runtime',
   'react-dom',
   'react-dom/client',
-  'cordis',
+  '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-store',
   '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-web-react',
   '@deepseek-ai/dsh-client-ui-primitives',
-  '@deepseek-ai/dsh-client-schema-form',
-  '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-ui-dockkit',
 ];
 
 export default [

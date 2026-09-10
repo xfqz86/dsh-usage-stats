@@ -8,8 +8,8 @@
  *   详情，包含汇总、模型拆分、会话列表、每日趋势曲线和热力图。
  * - 数据来自服务端 usageStats/snapshot（ctx.remote，经网关统一鉴权）。
  *
- * 所有类型均为 harness 自带：ClientContext 来自客户端运行时，插槽表由
- * ui-sidebar 合并，slots 服务来自 ui-slots，locale 服务来自 client-locale，
+ * 所有类型均为 harness 自带：ClientContext 即 cordis Context，插槽表由
+ * ui-sidebar 合并，slots 服务来自 ui-renderer，locale 服务来自 client-locale，
  * remote 服务来自 api-gateway，各自通过 declare module 合并进 cordis Context。
  */
 
@@ -19,9 +19,10 @@ import { NS, zh, en } from './locales.ts';
 import { mountUsageStatsRemote } from './remote.ts';
 import { UsageStatsFooter } from './views/UsageStatsFooter.tsx';
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-api-gateway/client';
 import type {} from '@deepseek-ai/dsh-client-locale/client';
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client';
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client';
 import type {} from '@deepseek-ai/dsh-client-ui-slots';
 

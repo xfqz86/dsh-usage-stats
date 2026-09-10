@@ -16,7 +16,7 @@
 
 import { NAMESPACE, USAGE_STATS_REMOTE } from '../remote/contribution.ts';
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import type { TypertRemoteNamespace$75736167655374617473 } from '@deepseek-ai/dsh-typert-protocol';
 
 declare module '@deepseek-ai/cordis' {
