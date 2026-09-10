@@ -108,10 +108,12 @@ npx eslint .              # 0 errors 为门禁
 pnpm build
 node --experimental-strip-types test/pure.mjs
 node --experimental-strip-types test/smoke.mjs
+node --experimental-strip-types test/styles.mjs
 node test/client-bundle.mjs
 ```
 - `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/计量事件判定与模型身份（`usable` 收对话与压缩调用、拒 `assistant/attempt`；`modelKeyOf` 两处取源）/日志解析/rawlog 代次与多帧 zstd/fork 继承前缀（`inheritedCountOf`/`inheritedPrefixOf`/`liveEventsOf`）/手写严格贡献（方法表/收发合法拒非法/信封分支）/命名空间句柄（经 `get` 取、不暂存 `ctx.remote`）/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
 - `smoke.mjs`：真实 cordis `Context` + mock `sessionQuery/sessionPersistence`（凭据中心缺席时额度查询直接返回 `no-key`），真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→@Remote 标记存活→实时重放20条去重→真实结果过 zod 信封→rebuild 并发 `usageStats/busy`→rebuild一致→三额度 no-key→seal→空清单仍从介质重建394→clear 归零。另有三个独立 `DSH_HOME` 用例：旧代次会话 raw 兜底（`SessionFormatUnsupportedError` → 自读最高代次，只折一次）、fork 继承前缀过滤（query 与 raw 两路都只折自有事件）、压缩调用计入（`compaction/summary` 的用量计入总量与模型拆分，缺 usage/零用量不入账，实时路径同样接纳）。
+- `styles.mjs`：样式契约，扫描全部 `*.module.css`，断言引用的每个变量都在主题包 `@deepseek-ai/dsh-client-ui-theme`（devDependency，与 harness 运行时同包）声明过且前缀合法——未声明的变量会让声明在计算值阶段失效，深色模式下表现为写死浅色的色块（详见 `docs/STYLE.md §8`）。
 - `client-bundle.mjs`：验证 `window.__ModuleLoader__.load` 注册、每 `*.module.css` 对应 `data-plugin-css` 样式含 scoped 类名。
 
 ## 10. 文档维护
