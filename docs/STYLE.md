@@ -82,6 +82,11 @@
 - tsx 内联 `style` 只放动态值（颜色/尺寸/定位）；悬浮叠加层（如命中率折线 svg）
   必须 `pointer-events: none`，几何常量与 CSS 尺寸的换算写进注释
   （见 `StackedBar.tsx` 的 `BAR_W/BAR_GAP` 注释范本）。
+- 提示气泡分两种：纯文字直接用基座 `Tooltip`（`@deepseek-ai/dsh-client-ui-primitives`），
+  需要多行排版或鼠标跟随时用本仓 `components/Tooltip.tsx`（基座当前只收纯文本 `label`，
+  富内容并未支持，故该扩展版保留）。气泡内卡片统一用 `UsageStatsCommon.module.css`
+  的 `tip*` 类（气泡底是深色的 `--dsw-alias-tooltip-bg`，层级靠白色透明度叠加），
+  三处内容（额度明细、热力图单元格、比例条）共用一套，只有进度宽度与档位色留在行内。
 
 ## 9. Hooks 与轮询
 

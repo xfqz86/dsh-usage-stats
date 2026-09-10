@@ -67,13 +67,13 @@ export function UsageHeatmap({
       [t('table.avgPerCall'), fmtFull(avg)],
     ];
     return (
-      <div style={{ minWidth: 200 }}>
-        <div style={{ fontWeight: 600, marginBottom: 6, whiteSpace: 'nowrap', textAlign: 'left' }}>{c.label}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px' }}>
+      <div className={shared.tipPanel}>
+        <div className={shared.tipHeader}>{c.label}</div>
+        <div className={shared.tipList}>
           {rows.map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-              <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
-              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+            <div key={k} className={shared.tipListRow}>
+              <span className={shared.tipListKey}>{k}</span>
+              <span className={shared.tipListVal}>{v}</span>
             </div>
           ))}
         </div>

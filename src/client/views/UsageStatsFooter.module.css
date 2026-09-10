@@ -72,6 +72,13 @@
   text-overflow: clip;
 }
 
+/* 折叠 rail 的今日 tokens 缩写值：字号比百分比行更小，字母间距收紧以容纳缩写数字。 */
+.goRailChipPctCompact {
+  font-size: 10px;
+  line-height: 12px;
+  letter-spacing: -0.2px;
+}
+
 .goChip {
   display: inline-flex;
   align-items: center;

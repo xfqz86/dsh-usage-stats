@@ -42,7 +42,7 @@ export function HeroTile({
   const avgPerCall = calls > 0 ? Math.round(tokens / calls) : 0;
   const barContent = tokens > 0
     ? (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px', minWidth: 180 }}>
+      <div className={`${shared.tipPanelRows} ${shared.tipList}`}>
         {([
           [t('table.cacheRead'), fmtFull(cache)],
           [t('table.input'), fmtFull(input)],
@@ -52,9 +52,9 @@ export function HeroTile({
           [t('table.calls'), fmtFull(calls)],
           [t('table.avgPerCall'), fmtFull(avgPerCall)],
         ] as const).map(([k, v]) => (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-            <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
-            <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+          <div key={k} className={shared.tipListRow}>
+            <span className={shared.tipListKey}>{k}</span>
+            <span className={shared.tipListVal}>{v}</span>
           </div>
         ))}
       </div>
