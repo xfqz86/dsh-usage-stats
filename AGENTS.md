@@ -120,6 +120,7 @@ node test/client-bundle.mjs
 - `AGENTS.md` 为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它，结构/协议现状记 `docs/*` 或文件头注释。
 - `docs/STRUCTURE.md` 生成文件（`pnpm tree`），`docs/API.md` 随接口维护，`docs/STYLE.md` 为风格经验（lint 之外的统一约定，新会话先读）；`README` 面向用户；`AGENTS.local.md` 放本机私有与强时效事实。
 - `CHANGELOG.md`（项目根目录）随发版维护：每次 `package.json version` 变更必须同步追加该版本条目，记录功能更新与 Bug 修复，`Unreleased` 草稿后移并清空。
+- **改动须同批更新受影响的注释、`docs/*` 与 `CHANGELOG.md` 的 `[Unreleased]`**：功能、行为变更记入对应小节（新增/变更/修复），纯重构与文档整理简记一行；`docs/STRUCTURE.md` 跑 `pnpm tree` 重生成。不留「代码已改、文档待补」的中间态，一次改动一次对齐、同批验证。
 
 ## 11. 提交（Conventional Commits）
 格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；提交前须过 §9 全项。

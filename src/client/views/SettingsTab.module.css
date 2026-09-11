@@ -37,6 +37,13 @@
 
 .refreshBtn:disabled {
   cursor: not-allowed;
+  opacity: 0.6;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 禁用态不响应悬浮：避免置灰按钮仍有按下感（扫描进行中的账本操作） */
+.refreshBtn:disabled:hover {
+  background: transparent;
 }
 
 /* ---- Go、DeepSeek 偏好设置分组 — 卡片式分组，头部带图标与底部分割 ---- */

@@ -12,6 +12,7 @@
 
 ### 变更
 
+- 设置 Tab 偏好设置的分组顺序改为 DeepSeek 余额 → OpenCode Go 额度 → Z.ai 额度，与概览底行磁贴排列一致（此前 OpenCode Go 在最前）
 - **BREAKING**：删除自建 `POST /usage-stats/api` 前缀路由与回环围栏、`x-dsh-usage-stats` 自定义头（`src/host/http.ts` 删除），服务端改类表单 `UsageStatsService`（Loader 实例化），客户端自挂载手写严格贡献后经 `ctx.get('remote.usageStats')` 取命名空间服务调用；升级后需重启 dsh 服务端
 - 构建：TypeScript 升至 6（标准装饰器原生类输出），tsdown 新增装饰器降级插件；客户端 bundle 内联 `zod` 编解码
 - 可选服务不再进 inject：`credentials` 改调用处 `ctx.get` 判空（cordis 对象写法的值为拦截配置，无“可选”语义）
@@ -20,6 +21,7 @@
 
 ### 修复
 
+- **扫描期间账本操作可点却静默失败**：首启扫描或重建扫描进行中（模态窗顶部显示「扫描中…」），设置 Tab 的清零与重建按钮仍可点，走完二次确认后服务端以 `usageStats/busy` 拒绝、客户端把错误吞掉，界面没有任何反馈；同时这段窗口里清零会与在飞扫描交错写同一账本与聚合。现扫描期间两按钮置灰并给出原因，已打开的确认框随扫描开始自动关闭
 - **悬浮卡片内容改为 CSS Modules**：额度明细、热力图单元格与比例条三处提示气泡的静态排版此前写在内联 `style` 里（近百处），现集中为 `UsageStatsCommon.module.css` 的 `tip*` 类共用，只有进度条宽度、档位色与圆点色等随数据的值留在行内；视觉不变，深浅主题仍走同一套白色透明度叠加（详见 `docs/STYLE.md §8`）
 - **弹窗关闭按钮补无障碍名**：用量统计模态窗右上角关闭按钮只有图标，读屏抓不到名称，现补 `aria-label`（`panel.close`，中英双语已在字典中）
 - 注释按当前实现校正：账本预统计表与 events 表是「同库、各自提交」而非同一事务；网关调用写明走客户端 Connection 的 RPC（`POST /api/usageStats/<方法>` + `client-request` 信封）；文档区分「一元（unary，区别于流式）」与「无请求参数」（`rebuild`/`clear`/`seal`）

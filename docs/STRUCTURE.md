@@ -45,14 +45,14 @@ dsh-usage-stats/
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
 │   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
-│   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用填充灰， on 用成功绿（token 配色）。
+│   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用描边色填充， on 用成功绿，滑块用前景色（token 配色，深色模式随之翻转）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
 │   │   │   ├── StackedBar.module.css ← 统一堆叠柱状图（StackedBar）：合并 DateStackedBar / ModelStackedBar 及原 StackedBarCommon 的公共壳样式。
 │   │   │   ├── StackedBar.tsx ← 统一堆叠柱状图 StackedBar，合并 DateStackedBar 与 ModelStackedBar 为单一组件。
 │   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
-│   │   │   ├── Tooltip.tsx ← 自实现的 Tooltip：基于 dsh 自带 `@deepseek-ai/dsh-client-ui-primitives/Tooltip` 的轻量修改版， 并已合并原 `FollowTooltip` 的鼠标跟随能力，通过 `follow` 参数控制。
+│   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 当前只接受纯文本（`label: string | (() => string)`，0.1.5-rc.2 仍未变）， 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、 maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增—— - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div 以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space； - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
 │   │   │   ├── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
 │   │   │   ├── ZaiNoPlan.module.css ← Z.ai 未开通空态：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
 │   │   │   └── ZaiNoPlan.tsx ← Z.ai 未开通空态：品牌色图标徽标配短文案，概览磁贴与侧边栏 tooltip 共用。
@@ -68,7 +68,7 @@ dsh-usage-stats/
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab SessionsTab：主会话折叠按钮、子行与徽标、横向滚动容器，表格样式在共用基元里。
 │   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开，数据完整展示。
 │   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、 抓取间隔数字输入、可折叠账本操作与底部页脚。
-│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置，含 OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控各三项，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
+│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置，含 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度监控各三项，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
 │   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层，支持宽列与 56px rail 两种形态，几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。
@@ -110,7 +110,8 @@ dsh-usage-stats/
 │   ├── client-bundle.mjs ← 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
 │   ├── pure.mjs ← 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
-│   └── smoke.mjs ← 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
+│   ├── smoke.mjs ← 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
+│   └── styles.mjs ← 样式契约单测：本插件全部 *.module.css 只允许引用 dsh 主题真实声明的设计变量。
 ├── .gitignore ← git 忽略规则（不入库清单：产物 / 锁目录 / 本机私有）
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）
 ├── CHANGELOG.md ← 更新日志（每次发版同步记录功能更新与 Bug 修复）
