@@ -93,28 +93,38 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 
 ## 设置
 
-设置位于详情面板的设置 Tab，持久化于浏览器本地存储。
+设置位于详情面板的设置 Tab，保存在 DSH 的配置文件 `~/.dsh/settings.yaml`（`$DSH_HOME` 改变时随之变化）的 `usage-stats` 段里，换浏览器、换设备登录同一台 DSH 都用同一份偏好。按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度三组自上而下排列。
 
-- 启用 OpenCode Go 额度监控，关闭后停止轮询，侧边栏与面板均不展示
-- 在侧边栏展示 OpenCode Go 剩余额度，仅控制芯片，面板内详情仍可见
-- OpenCode Go 抓取间隔，默认 5 分钟，下限 3 分钟
-- 启用 DeepSeek 余额监控与侧边栏展示，逻辑同上
+- 启用 DeepSeek 余额监控与侧边栏展示，关闭监控则停止轮询，面板与侧边栏均不展示
+- 启用 OpenCode Go 额度监控与侧边栏展示，仅控制芯片，面板内详情仍可见
 - 启用 Z.ai 额度监控与侧边栏展示，逻辑同上
 - 各额度抓取间隔均为默认 5 分钟，下限 3 分钟
+
+配置文件里只写改过的字段，例如把 Go 额度抓取间隔改成 10 分钟：
+
+```yaml
+usage-stats:
+  goFetchMinutes: 10
+```
+
+旧版本把设置存在浏览器本地存储里，升级后首次打开会把旧设置自动写进配置文件，之后不再使用浏览器存储（服务端设置不可用时旧值会保留，不会丢）。
+
+设置 Tab 底部为账本操作（清零与重建），需二次确认；扫描历史会话期间（面板顶部显示“扫描中…”）两项置灰不可点，等扫描结束自动恢复。
 
 需展示额度时，在 DSH 凭据中心配置对应 Key：
 
 - OpenCode Go：`OPENCODE_GO_API_KEY`
-- DeepSeek：`DEEPSEEK_API_KEY`
-- Z.ai：`ZAI_API_KEY` 或 `ZAI_CODING_CN_API_KEY`
+- DeepSeek：`DEEPSEEK_API_KEY`（兼容 `DEEPSEEK_APIKEY`、`DEEPSEEK_API_TOKEN`、`DEEPSEEK_TOKEN`）
+- Z.ai：`ZAI_CODING_CN_API_KEY` 或 `ZAI_API_KEY`（前者优先）
 
 ## 统计口径
 
-- 数据源为 `assistant/message` 事件中携带 `data.usage` 的记录
+- 数据源为携带 `data.usage` 的记录：对话调用 `assistant/message`，压缩上下文的调用 `compaction/summary`
 - `total = input + output + cacheRead + cacheWrite`，`reasoning` 单列
-- 按模型维度取 `provider` 与 `model`，缺失记为 `unknown`
+- 按模型维度取 `provider` 与 `model`（对话调用在 `message.source`，压缩调用在事件顶层），缺失记为 `unknown`
 - 按会话维度记录标题、工作目录、创建与最近活跃时间
 - 按本地自然日划分日期
+- 不含会话标题自动生成等辅助调用的用量：dsh 只记录这类调用的请求，不记录返回的用量
 
 ## 数据存储
 
