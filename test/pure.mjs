@@ -1156,6 +1156,23 @@ describe('偏好设置：作用域视图与写入', () => {
     assert.deepEqual(loading.calls, [[{ op: 'set', path: ['goEnabled'], value: false }]]);
   });
 
+  it('解绑带作用域身份：旧清理不会抹掉后挂上的新作用域（热重载）', () => {
+    const first = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 9 } });
+    const second = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, zaiFetchMinutes: 7 } });
+    attachUsageSettings(first.scope);
+    attachUsageSettings(second.scope);
+    // 旧 fiber 的清理跑在新 apply 之后：只解绑自己那一个。
+    detachUsageSettings(first.scope);
+    assert.equal(usageSettingsView().settings.zaiFetchMinutes, 7);
+    detachUsageSettings(second.scope);
+    assert.deepEqual(usageSettingsView().settings, USAGE_SETTINGS_DEFAULTS);
+    assert.equal(usageSettingsView().status, 'unavailable');
+    // 省略参数仍是无条件解绑（测试与手动复位用）
+    attachUsageSettings(first.scope);
+    detachUsageSettings();
+    assert.equal(usageSettingsView().status, 'unavailable');
+  });
+
   it('解绑后写入不再落作用域，视图回退默认值', async () => {
     const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
     attachUsageSettings(scope);

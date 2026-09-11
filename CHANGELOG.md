@@ -13,6 +13,7 @@
 
 ### 变更
 
+- 偏好作用域解绑带身份：浏览器端热重载会先挂新作用域、旧 fiber 的清理后跑，旧清理不再把新作用域抹掉（`detachUsageSettings(scope)`）
 - 偏好写入在作用域落定为不可用或只读时直接跳过（此前会发一次注定被拒的 `settings/mutate`，界面上表现为开关弹回并留一条控制台警告）；仍在加载中照发，服务端可能接受
 - 偏好设置的默认值、`clamp*` 夹取与字段级归一化由 `src/client/settings.ts` 上移到 `src/utils.ts`（`UsageSettings` 类型上移到 `src/types.ts`），服务端 schema 与浏览器端归一化共用同一份数值，避免默认值分叉；新增 devDependencies `@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery`（服务端 schema 的值导入）、`@deepseek-ai/dsh-client-ui-settings`、`@deepseek-ai/dsh-api-remotes` 与测试用 `@deepseek-ai/dsh-settings-file`，`dsh.client.inject` 增加 `@deepseek-ai/dsh-client-ui-settings` 保证 `settingsScope` 服务先于本插件加载
 - 设置 Tab 偏好设置的分组顺序改为 DeepSeek 余额 → OpenCode Go 额度 → Z.ai 额度，与概览底行磁贴排列一致（此前 OpenCode Go 在最前）

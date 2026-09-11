@@ -46,7 +46,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // 偏好设置作用域：绑定后组件即可读写服务端设置文档里的 `usage-stats` 段。
   const settingsScope = ctx.settingsScope.bind<UsageSettings>({ namespace: 'usage-stats' });
   attachUsageSettings(settingsScope);
-  ctx.effect(() => () => detachUsageSettings(), 'dsh-usage-stats: 偏好设置作用域');
+  // 清理带作用域身份：热重载时新作用域已挂上，旧清理不得把它抹掉。
+  ctx.effect(() => () => detachUsageSettings(settingsScope), 'dsh-usage-stats: 偏好设置作用域');
   // 旧 localStorage 偏好迁移到设置文档；失败不影响界面（仍按服务端取值为准）。
   void migrateLegacySettings(settingsScope).catch(() => { /* 迁移失败：保持服务端取值 */ });
 

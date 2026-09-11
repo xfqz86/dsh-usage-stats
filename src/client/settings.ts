@@ -60,9 +60,15 @@ export function attachUsageSettings(bound: SettingsScope<UsageSettings>): void {
   scope = bound;
 }
 
-/** 解绑设置作用域：插件卸载后 hook 回退默认值，不再读写服务端设置。 */
-export function detachUsageSettings(): void {
-  scope = undefined;
+/**
+ * 解绑设置作用域：插件卸载后 hook 回退默认值，不再读写服务端设置。
+ *
+ * 传回自己绑定的作用域，只有它仍是当前绑定时才解绑——浏览器端热重载会先挂新
+ * 作用域、旧 fiber 的清理再跑，无条件清空会把新作用域一起抹掉。
+ * @param bound - 绑定时拿到的那个作用域；省略表示无条件解绑。
+ */
+export function detachUsageSettings(bound?: SettingsScope<UsageSettings>): void {
+  if (bound === undefined || bound === scope) scope = undefined;
 }
 
 /** 读取旧版本 localStorage 里的偏好；无键、非 JSON 或坏形状时返回 null。 */
