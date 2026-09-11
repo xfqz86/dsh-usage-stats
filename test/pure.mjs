@@ -1135,6 +1135,27 @@ describe('偏好设置：作用域视图与写入', () => {
     assert.equal(usageSettingsView().settings.showDeepSeekInSidebar, false);
   });
 
+  it('作用域落定为不可用或只读时不发注定被拒的写入，加载中照发', async () => {
+    const unavailable = fakeScope({ value: undefined, status: 'unavailable' });
+    attachUsageSettings(unavailable.scope);
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(unavailable.calls, []);
+
+    const readOnly = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, writable: false });
+    attachUsageSettings(readOnly.scope);
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(readOnly.calls, []);
+
+    // 仍在加载：服务端可能接受，照发
+    const loading = fakeScope({ value: undefined, status: 'loading' });
+    attachUsageSettings(loading.scope);
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(loading.calls, [[{ op: 'set', path: ['goEnabled'], value: false }]]);
+  });
+
   it('解绑后写入不再落作用域，视图回退默认值', async () => {
     const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
     attachUsageSettings(scope);

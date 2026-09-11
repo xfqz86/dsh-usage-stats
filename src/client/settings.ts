@@ -201,13 +201,16 @@ export function subscribeUsageSettings(listener: () => void): () => void {
 
 /**
  * 写入偏好：局部合并语义，只落显式给出的字段（未给出的字段继续跟随默认值）。
- * 未绑定作用域或部署无设置后端时静默忽略，仅当前页面生效。
+ *
+ * 作用域已落定为不可用（部署无设置后端、命名空间未注册）或明确只读时直接返回，
+ * 不发注定被拒的请求；仍在加载中则照发——服务端可能接受，作用域自己会以最新
+ * 一次读取兜底。写入失败不打断界面：作用域会以最新一次读取恢复显示值。
  */
 export function updateUsageSettings(patch: Partial<UsageSettings>): void {
   const ops = settingOps(patch);
   if (ops.length === 0 || scope === undefined) return;
-  // 写入失败（命名空间被撤销、文档不可写等）不该打断界面：作用域自身会以最新
-  // 一次读取恢复显示值，错误只留在控制台。
+  const { status, writable } = scope.getSnapshot();
+  if (status === 'unavailable' || (status === 'ready' && !writable)) return;
   void scope.mutate(ops).catch((error: unknown) => {
     console.warn('[usage-stats] 偏好写入失败，界面回退到服务端设置', error);
   });
