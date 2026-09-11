@@ -109,7 +109,7 @@ Client 严格编解码在 `src/remote/contribution.ts`。
 ## 5. 偏好设置，服务端设置文档（`usage-stats` 命名空间）
 
 - 偏好的事实来源是 harness 用户设置文档（dsh-settings-file 落 `$DSH_HOME/settings.yaml`，默认 `~/.dsh/settings.yaml`）里的 `usage-stats` 段，属部署而非某个浏览器：换浏览器、换设备共用同一份偏好。
-- 服务端 `src/host/settings.ts` 经 `ctx.settings.register('usage-stats', UsageSettingsSchema)` 注册命名空间（`settings` 为可选服务，缺席时不注册），schema 由 `@deepseek-ai/schemastery` 定义，每字段带默认值；文档只存用户显式改过的字段，其余字段按 schema 默认值解析（默认值与 `src/utils.ts` 的 `USAGE_SETTINGS_DEFAULTS` 同源）。
+- 服务端 `src/host/settings.ts` 经 `ctx.settings.register('usage-stats', UsageSettingsSchema)` 注册命名空间（`settings` 为可选服务，缺席时不注册），schema 由 `@deepseek-ai/schemastery` 定义，每字段带默认值；文档只存用户显式改过的字段，其余字段按 schema 默认值解析（默认值与 `src/utils.ts` 的 `USAGE_SETTINGS_DEFAULTS` 同源，纯函数单测断言两处一致）。注册失败（命名空间被占用、schema 被拒）只降级偏好并打警告：统计是插件主职责，不因偏好注册失败而中断，此时浏览器端设置页提示改动不会保存。
 - 浏览器端 `src/client/index.ts` 经 `ctx.settingsScope.bind({ namespace: 'usage-stats' })` 取作用域（`settingsScope` 服务来自 `@deepseek-ai/dsh-client-ui-settings`，已登记进 `package.json` 的 `dsh.client.inject`），`src/client/settings.ts` 持有作用域并提供订阅/读写，组件经 `useUsageSettings` 消费；写入走路径操作，只落显式改过的字段，间隔字段写前夹到下限 3。
 - 字段 `UsageSettings` 定义在 `src/types.ts`：
   - `goEnabled` 默认 `true`，关闭则**不再轮询** go-quota，侧边栏与模态窗

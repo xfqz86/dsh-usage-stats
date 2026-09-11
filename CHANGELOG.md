@@ -8,7 +8,7 @@
 
 ### 新增
 
-- **偏好设置改存 DSH 配置文件**：设置不再放浏览器 localStorage，而是注册进 harness 的用户设置体系——服务端 `ctx.settings.register('usage-stats', schema)`（`src/host/settings.ts`，schemastery schema 带默认值），浏览器端 `ctx.settingsScope.bind({ namespace: 'usage-stats' })`（`src/client/settings.ts` + `useUsageSettings`），落 `$DSH_HOME/settings.yaml`（默认 `~/.dsh/settings.yaml`）的 `usage-stats` 段，换浏览器、换设备共用同一份偏好；文档只写显式改过的字段，其余字段跟随 schema 默认值。设置页顶部新增一行说明当前设置存放位置，服务端设置缺席或只读时明确提示“修改不会保存”。旧版本 localStorage（key `dsh-usage-stats.settings`）由 `migrateLegacySettings` 一次性迁移进配置文件后删除旧键（先在作用域落定后判断，服务端设置缺席或只读时保留旧键）
+- **偏好设置改存 DSH 配置文件**：设置不再放浏览器 localStorage，而是注册进 harness 的用户设置体系——服务端 `ctx.settings.register('usage-stats', schema)`（`src/host/settings.ts`，schemastery schema 带默认值），浏览器端 `ctx.settingsScope.bind({ namespace: 'usage-stats' })`（`src/client/settings.ts` + `useUsageSettings`），落 `$DSH_HOME/settings.yaml`（默认 `~/.dsh/settings.yaml`）的 `usage-stats` 段，换浏览器、换设备共用同一份偏好；文档只写显式改过的字段，其余字段跟随 schema 默认值。设置页顶部新增一行说明当前设置存放位置，服务端设置缺席或只读时明确提示“修改不会保存”。服务端注册失败（命名空间被占用、schema 被拒）只降级偏好并打一条警告，不让统计主链路（账本与实时折叠）随注册失败一起挂掉。旧版本 localStorage（key `dsh-usage-stats.settings`）由 `migrateLegacySettings` 一次性迁移进配置文件后删除旧键（先在作用域落定后判断，服务端设置缺席或只读时保留旧键）
 - 后端接口迁入 `usageStats` 命名空间 7 个一元 `@Remote` 方法（`snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`），调用经客户端 Connection 的 RPC（`POST /api/usageStats/<方法>`），信任与认证由网关载体统一处理
 
 ### 变更

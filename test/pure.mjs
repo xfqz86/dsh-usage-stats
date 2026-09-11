@@ -13,6 +13,7 @@ import { ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
 import { fetchDeepSeekBalance, queryDeepSeekBalance } from '../src/host/deepseekBalance.ts';
 import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
+import { UsageSettingsSchema, registerUsageSettings } from '../src/host/settings.ts';
 import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
 import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
 import {
@@ -1217,5 +1218,42 @@ describe('偏好设置：旧 localStorage 迁移', () => {
     // clearLegacySettings 幂等且存储缺席时不抛错
     clearLegacySettings(storage);
     clearLegacySettings(undefined);
+  });
+});
+
+// ---- 服务端偏好设置：命名空间注册与降级 ----
+
+describe('偏好设置：服务端命名空间注册', () => {
+  it('注册 usage-stats 命名空间与 schema，schema 解析值等于共享默认值', () => {
+    const injected = [];
+    const registered = [];
+    const ctx = {
+      inject: (deps, callback) => {
+        injected.push(deps);
+        return callback({ settings: { register: (...args) => { registered.push(args); } } });
+      },
+    };
+    registerUsageSettings(ctx);
+    assert.deepEqual(injected, [['settings']]);
+    assert.equal(registered.length, 1);
+    assert.equal(registered[0][0], USAGE_SETTINGS_NAMESPACE);
+    assert.equal(registered[0][1], UsageSettingsSchema);
+    // schema 默认值与 utils.ts 的 USAGE_SETTINGS_DEFAULTS 同源：两处漂移即失败。
+    assert.deepEqual(UsageSettingsSchema({}), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(UsageSettingsSchema({ showZaiInSidebar: false }), { ...USAGE_SETTINGS_DEFAULTS, showZaiInSidebar: false });
+  });
+
+  it('注册失败只降级偏好，不向调用方抛错（统计主职责不受影响）', () => {
+    const ctx = { inject: (_deps, callback) => callback({ settings: { register: () => { throw new Error('namespace already registered'); } } }) };
+    const realWarn = console.warn;
+    const warnings = [];
+    console.warn = (...args) => { warnings.push(args); };
+    try {
+      assert.doesNotThrow(() => { registerUsageSettings(ctx); });
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.match(String(warnings[0][0]), /偏好设置命名空间注册失败/);
   });
 });

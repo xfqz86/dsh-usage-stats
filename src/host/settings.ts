@@ -48,10 +48,18 @@ export const UsageSettingsSchema: Schema<UsageSettings> = Schema.object({
 /**
  * 把 `usage-stats` 命名空间注册到设置服务；服务缺席时静默跳过。
  * 注册是插件 fiber 上的 effect，插件卸载即注销命名空间。
+ *
+ * 注册失败（命名空间被别的插件占用、schema 被服务拒绝）只降级偏好：浏览器端
+ * settingsScope 随即报 unavailable，设置页如实提示改动不会保存。统计是插件的
+ * 主职责，不能因为偏好这一附加能力注册失败就整个插件连同账本一起挂掉。
  * @param ctx - 服务端插件上下文。
  */
 export function registerUsageSettings(ctx: Context): void {
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.register(USAGE_SETTINGS_NAMESPACE, UsageSettingsSchema);
+    try {
+      settingsCtx.settings.register(USAGE_SETTINGS_NAMESPACE, UsageSettingsSchema);
+    } catch (error) {
+      console.warn('[usage-stats] 偏好设置命名空间注册失败，偏好退化为仅当前页面生效', error);
+    }
   });
 }
