@@ -15,6 +15,19 @@ import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
 import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
 import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
+import {
+  LEGACY_STORAGE_KEY,
+  attachUsageSettings,
+  clearLegacySettings,
+  detachUsageSettings,
+  diffFromDefaults,
+  migrateLegacySettings,
+  readLegacySettings,
+  settingOps,
+  subscribeUsageSettings,
+  updateUsageSettings,
+  usageSettingsView,
+} from '../src/client/settings.ts';
 import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
 import { createStore, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from '../src/host/store.ts';
 import { snapshot } from '../src/host/snapshot.ts';
@@ -44,17 +57,29 @@ import {
   usageTotal,
 } from '../src/client/stats.ts';
 import {
+  DEEPSEEK_FETCH_DEFAULT_MINUTES,
+  DEEPSEEK_FETCH_MIN_MINUTES,
   DAY_MS,
+  GO_FETCH_DEFAULT_MINUTES,
+  GO_FETCH_MIN_MINUTES,
   QUOTA_CACHE_TTL_MS,
   QUOTA_MIN_FETCH_MS,
   SERIES_MAX_DAYS,
+  USAGE_SETTINGS_DEFAULTS,
+  USAGE_SETTINGS_NAMESPACE,
+  ZAI_FETCH_DEFAULT_MINUTES,
+  ZAI_FETCH_MIN_MINUTES,
   cacheTotal,
+  clampDeepSeekFetchMinutes,
+  clampGoFetchMinutes,
+  clampZaiFetchMinutes,
   dateKeyOf,
   effectiveQuotaTtl,
   errorMessage,
   goLevelOf,
   goPercent,
   goResetsAt,
+  normalizeUsageSettings,
   parseJsonLine,
   splitModelKey,
   startOfDay,
@@ -974,5 +999,223 @@ describe('quota：zai', () => {
     } finally {
       restore();
     }
+  });
+});
+
+// ---- 偏好设置：归一化、夹取、作用域存储与旧 localStorage 迁移（服务端设置文档为准）----
+
+/** 构造设置作用域替身：持有一份快照，mutate 记录操作并按路径写回取值。 */
+function fakeScope(initial) {
+  const state = {
+    status: initial?.status ?? 'ready',
+    value: initial?.value,
+    user: initial?.user,
+    base: undefined,
+    revision: 1,
+    writable: initial?.writable ?? true,
+    mode: 'host',
+  };
+  const listeners = new Set();
+  const calls = [];
+  // 快照对象引用稳定（与真实 settingsScope 的 store 一致）：状态变更时才换新对象。
+  let snapshot = { ...state };
+  const publish = () => {
+    snapshot = { ...state };
+    for (const fn of listeners) fn();
+  };
+  const scope = {
+    getSnapshot: () => snapshot,
+    subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn) },
+    mutate: async (ops) => {
+      calls.push(ops);
+      for (const op of ops) {
+        if (op.op === 'set') state.value = { ...state.value, [op.path[0]]: op.value };
+      }
+      state.user = { ...(state.user ?? {}), ...Object.fromEntries(ops.filter(o => o.op === 'set').map(o => [o.path[0], o.value])) };
+      state.revision += 1;
+      publish();
+    },
+  };
+  return {
+    scope,
+    calls,
+    state,
+    listeners,
+    /** 模拟异步落定：改状态并通知订阅者。 */
+    apply: (patch) => { Object.assign(state, patch); publish(); },
+  };
+}
+
+/** localStorage 替身：只有 getItem/removeItem 两个被用到的能力。 */
+function fakeStorage(initial) {
+  const map = new Map(Object.entries(initial ?? {}));
+  return {
+    store: map,
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    removeItem: (key) => { map.delete(key); },
+    has: (key) => map.has(key),
+  };
+}
+
+describe('偏好设置：归一化与写入操作', () => {
+  it('命名空间名与默认值自洽，坏值逐字段回退', () => {
+    assert.equal(USAGE_SETTINGS_NAMESPACE, 'usage-stats');
+    assert.deepEqual(normalizeUsageSettings(null), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(normalizeUsageSettings(undefined), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(normalizeUsageSettings({}), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(
+      normalizeUsageSettings({ goEnabled: 'on', showZaiInSidebar: 1, zaiFetchMinutes: 'soon' }),
+      USAGE_SETTINGS_DEFAULTS,
+    );
+  });
+
+  it('间隔夹到下限、小数取整，非有限值回退默认', () => {
+    assert.equal(normalizeUsageSettings({ goFetchMinutes: 1 }).goFetchMinutes, GO_FETCH_MIN_MINUTES);
+    assert.equal(normalizeUsageSettings({ goFetchMinutes: 12.6 }).goFetchMinutes, 13);
+    assert.equal(normalizeUsageSettings({ goFetchMinutes: Number.NaN }).goFetchMinutes, GO_FETCH_DEFAULT_MINUTES);
+    assert.equal(normalizeUsageSettings({ deepseekFetchMinutes: 0 }).deepseekFetchMinutes, DEEPSEEK_FETCH_MIN_MINUTES);
+    assert.equal(normalizeUsageSettings({ zaiFetchMinutes: -5 }).zaiFetchMinutes, ZAI_FETCH_MIN_MINUTES);
+    assert.equal(ZAI_FETCH_DEFAULT_MINUTES, 5);
+    assert.equal(clampGoFetchMinutes(Number.POSITIVE_INFINITY), GO_FETCH_DEFAULT_MINUTES);
+    assert.equal(clampDeepSeekFetchMinutes(4.4), 4);
+    assert.equal(clampZaiFetchMinutes(2), ZAI_FETCH_MIN_MINUTES);
+  });
+
+  it('局部偏好只生成显式字段的路径写入，间隔先夹取', () => {
+    assert.deepEqual(settingOps({ goEnabled: false }), [{ op: 'set', path: ['goEnabled'], value: false }]);
+    assert.deepEqual(settingOps({ zaiFetchMinutes: 1 }), [{ op: 'set', path: ['zaiFetchMinutes'], value: ZAI_FETCH_MIN_MINUTES }]);
+    assert.deepEqual(settingOps({ goEnabled: undefined, deepseekEnabled: true }), [{ op: 'set', path: ['deepseekEnabled'], value: true }]);
+    assert.deepEqual(settingOps({}), []);
+  });
+
+  it('迁移只写与默认值不同的字段', () => {
+    assert.deepEqual(diffFromDefaults(USAGE_SETTINGS_DEFAULTS), {});
+    assert.deepEqual(
+      diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, showGoInSidebar: false, zaiFetchMinutes: 9 }),
+      { showGoInSidebar: false, zaiFetchMinutes: 9 },
+    );
+  });
+});
+
+describe('偏好设置：作用域视图与写入', () => {
+  afterEach(() => { detachUsageSettings(); });
+
+  it('未绑定作用域时视图为默认值且不可写状态为 unavailable', () => {
+    assert.deepEqual(usageSettingsView(), { settings: USAGE_SETTINGS_DEFAULTS, status: 'unavailable', writable: false });
+    // 未绑定作用域：写入与订阅都不抛错
+    updateUsageSettings({ goEnabled: false });
+    assert.equal(typeof subscribeUsageSettings(() => {}), 'function');
+  });
+
+  it('绑定后视图取自作用域快照，同一快照引用稳定、坏值归一化', () => {
+    const { scope } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 1 } });
+    attachUsageSettings(scope);
+    const first = usageSettingsView();
+    assert.equal(first.status, 'ready');
+    assert.equal(first.writable, true);
+    assert.equal(first.settings.goFetchMinutes, GO_FETCH_MIN_MINUTES);
+    assert.equal(usageSettingsView(), first);
+  });
+
+  it('写入走作用域 mutate，订阅转发作用域变更', async () => {
+    const { scope, calls, listeners } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    attachUsageSettings(scope);
+    let notified = 0;
+    const unsubscribe = subscribeUsageSettings(() => { notified += 1; });
+    updateUsageSettings({ goFetchMinutes: 2, showDeepSeekInSidebar: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(calls, [[
+      { op: 'set', path: ['goFetchMinutes'], value: GO_FETCH_MIN_MINUTES },
+      { op: 'set', path: ['showDeepSeekInSidebar'], value: false },
+    ]]);
+    assert.equal(notified, 1);
+    unsubscribe();
+    assert.equal(listeners.size, 0);
+    assert.equal(usageSettingsView().settings.showDeepSeekInSidebar, false);
+  });
+
+  it('解绑后写入不再落作用域，视图回退默认值', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    attachUsageSettings(scope);
+    detachUsageSettings();
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(calls, []);
+    assert.deepEqual(usageSettingsView().settings, USAGE_SETTINGS_DEFAULTS);
+  });
+});
+
+describe('偏好设置：旧 localStorage 迁移', () => {
+  afterEach(() => { detachUsageSettings(); });
+
+  it('读取旧值做归一化，坏 JSON 返回 null', () => {
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ goFetchMinutes: 1, zaiEnabled: false }) });
+    assert.deepEqual(readLegacySettings(storage), { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: GO_FETCH_MIN_MINUTES, zaiEnabled: false });
+    assert.equal(readLegacySettings(fakeStorage({ [LEGACY_STORAGE_KEY]: '{oops' })), null);
+    assert.equal(readLegacySettings(fakeStorage({})), null);
+  });
+
+  it('作用域就绪且无用户段时把旧偏好写进设置文档并删键', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, showGoInSidebar: false, zaiFetchMinutes: 9 }) });
+    assert.equal(await migrateLegacySettings(scope, storage), true);
+    assert.deepEqual(calls, [[
+      { op: 'set', path: ['showGoInSidebar'], value: false },
+      { op: 'set', path: ['zaiFetchMinutes'], value: 9 },
+    ]]);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+  });
+
+  it('用户已改过设置文档时不覆盖，旧键仍删除', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, user: { goEnabled: false } });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, showGoInSidebar: false }) });
+    assert.equal(await migrateLegacySettings(scope, storage), false);
+    assert.deepEqual(calls, []);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+  });
+
+  it('作用域一直 loading 时等落定，超时后不写文档也不删旧键', async () => {
+    const notReady = fakeScope({ value: undefined, status: 'loading' });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    assert.equal(await migrateLegacySettings(notReady.scope, storage, 20), false);
+    assert.deepEqual(notReady.calls, []);
+    // 保留旧键：此刻没有可靠落点，删掉等于丢设置。
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), true);
+  });
+
+  it('loading 期间落定为就绪则照常迁移', async () => {
+    const pending = fakeScope({ value: undefined, status: 'loading' });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    const migrating = migrateLegacySettings(pending.scope, storage, 1_000);
+    setTimeout(() => { pending.apply({ status: 'ready', value: { ...USAGE_SETTINGS_DEFAULTS } }); }, 10);
+    assert.equal(await migrating, true);
+    assert.deepEqual(pending.calls, [[{ op: 'set', path: ['goEnabled'], value: false }]]);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+  });
+
+  it('服务端设置不可用或只读时保留旧键', async () => {
+    const unavailable = fakeScope({ value: undefined, status: 'unavailable' });
+    const storageA = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    assert.equal(await migrateLegacySettings(unavailable.scope, storageA, 20), false);
+    assert.deepEqual(unavailable.calls, []);
+    assert.equal(storageA.has(LEGACY_STORAGE_KEY), true);
+
+    const readOnly = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, writable: false });
+    const storageB = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    assert.equal(await migrateLegacySettings(readOnly.scope, storageB, 20), false);
+    assert.deepEqual(readOnly.calls, []);
+    assert.equal(storageB.has(LEGACY_STORAGE_KEY), true);
+  });
+
+  it('无旧键时不动作；旧值与默认值相同也不写文档', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    assert.equal(await migrateLegacySettings(scope, fakeStorage({})), false);
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify(USAGE_SETTINGS_DEFAULTS) });
+    assert.equal(await migrateLegacySettings(scope, storage), false);
+    assert.deepEqual(calls, []);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+    // clearLegacySettings 幂等且存储缺席时不抛错
+    clearLegacySettings(storage);
+    clearLegacySettings(undefined);
   });
 });

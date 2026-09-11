@@ -27,10 +27,18 @@ import { zstdCompressSync } from 'node:zlib'
 
 import { Context, Service as CordisService } from '@deepseek-ai/cordis'
 import { SessionFormatUnsupportedError } from '@deepseek-ai/dsh-session-persistence'
+import { FileSettingsProvider } from '@deepseek-ai/dsh-settings-file'
 import { remoteErrorOf, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 
 import UsageStatsService from '../lib/index.js'
 import { USAGE_STATS_REMOTE } from '../src/remote/contribution.ts'
+import { USAGE_SETTINGS_DEFAULTS, USAGE_SETTINGS_NAMESPACE } from '../src/utils.ts'
+
+/**
+ * 偏好设置用例用 harness 真实文件后端（@deepseek-ai/dsh-settings-file）：
+ * 生产里 dsh-base 就是用它把命名空间段写进 $DSH_HOME/settings.yaml，
+ * 这里以临时 DSH_HOME 跑同一条链路，断言落盘内容。
+ */
 
 // 隔离 DSH_HOME：账本 sqlite 写入临时目录，避免污染真实 ~/.dsh。
 const tmpHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-'))
@@ -85,11 +93,21 @@ const sessionPersistence = {
 /**
  * 挂载服务：等价组合层注入 sessionQuery 等之后，凭据中心缺席覆盖回退路径。
  * 直接构造并手动触发 [Service.init]（生产环境由 Loader 完成这两步）。
+ * options.settings 为真时同时挂载文件设置后端（写 options.settingsPath），
+ * 覆盖偏好设置命名空间注册与落盘链路。
  */
-async function mount(query, persist) {
+async function mount(query, persist, options = {}) {
   const ctx = new Context()
   ctx.provide('sessionQuery', query)
   ctx.provide('sessionPersistence', persist)
+  if (options.settings === true) {
+    const settingsFiber = ctx.plugin(FileSettingsProvider, { path: options.settingsPath, watch: false })
+    await settingsFiber
+    if (!(ctx.get('settings') instanceof FileSettingsProvider)) {
+      console.error('FAIL: 文件设置后端未挂载')
+      process.exit(1)
+    }
+  }
   let svc
   const fiber = ctx.plugin({
     // 与服务 static inject 同形；credentials 可选不进 inject，
@@ -664,6 +682,91 @@ await mounted.dispose()
   await compactMounted.dispose()
   process.env.DSH_HOME = previousCompactHome
   rmSync(compactHome, { recursive: true, force: true })
+}
+
+// ===== 偏好设置命名空间注册用例（独立 DSH_HOME，不触碰上面的 394 基线与其他用例）=====
+// 偏好设置不再存 localStorage，而是注册进 harness 的用户设置体系：服务端
+// registerUsageSettings 用 schemastery schema 注册 `usage-stats` 命名空间，
+// dsh-base 组合的文件后端把用户显式改过的字段写进 $DSH_HOME/settings.yaml，
+// 其余字段由 schema 默认值解析。本用例挂真实文件后端（watch 关闭），断言：
+//   - 注册后未写过的字段解析为 USAGE_SETTINGS_DEFAULTS（默认值同源 utils.ts）；
+//   - update 写入的字段落进 settings.yaml 的 usage-stats 段，且段落只含这两个字段；
+//   - describe 下发的 schema 可 JSON 序列化（浏览器端 settingsScope 靠它校验收到的取值）。
+{
+  const settingsHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-settings-'))
+  const settingsPath = join(settingsHome, 'settings.yaml')
+  const previousSettingsHome = process.env.DSH_HOME
+  process.env.DSH_HOME = settingsHome
+  const settingsMounted = await mount(
+    { async listSessions() { return [] }, async readSession() { return { events: [] } } },
+    { async list() { return [] }, async open() { throw new Error('偏好设置用例不应走持久化路径') } },
+    { settings: true, settingsPath },
+  )
+  const settings = settingsMounted.ctx.get('settings')
+  // 注册是 ctx.inject 上的 effect，注入回调同步触发；未注册时 get 返回 undefined。
+  await new Promise((r) => setTimeout(r, 100))
+  const resolved = settings.get(USAGE_SETTINGS_NAMESPACE)
+  if (resolved === undefined) {
+    console.error(`FAIL: 未注册设置命名空间 ${USAGE_SETTINGS_NAMESPACE}（服务端 registerUsageSettings 未生效）`)
+    process.exit(1)
+  }
+  for (const [field, expected] of Object.entries(USAGE_SETTINGS_DEFAULTS)) {
+    if (resolved[field] !== expected) {
+      console.error(`FAIL: 默认值不一致 ${field}=${String(resolved[field])}，应为 ${String(expected)}`)
+      process.exit(1)
+    }
+  }
+  // describe 下发的 schema 必须可 JSON 序列化：浏览器端 settingsScope 用它校验收到的取值。
+  const descriptor = settings.describe({ redactSecrets: true })
+    .find((candidate) => candidate.ns === USAGE_SETTINGS_NAMESPACE)
+  if (descriptor === undefined || descriptor.revision !== 0) {
+    console.error(`FAIL: describe 未列出 ${USAGE_SETTINGS_NAMESPACE} 或初始 revision 非 0：${JSON.stringify(descriptor)}`)
+    process.exit(1)
+  }
+  try {
+    JSON.parse(JSON.stringify(descriptor.schema))
+  } catch (error) {
+    console.error(`FAIL: 命名空间 schema 不可 JSON 序列化，浏览器端无法校验收到的取值：${String(error)}`)
+    process.exit(1)
+  }
+  // 未改动前不写文档：默认值不落盘。
+  if (existsSync(settingsPath)) {
+    console.error(`FAIL: 未改动偏好就生成了设置文档：${readFileSync(settingsPath, 'utf8')}`)
+    process.exit(1)
+  }
+
+  // 写入两个字段：文档只出现这两个字段，解析值其余字段仍为默认。
+  await settings.update(USAGE_SETTINGS_NAMESPACE, { goFetchMinutes: 10, showZaiInSidebar: false })
+  const afterUpdate = settings.get(USAGE_SETTINGS_NAMESPACE)
+  const yaml = readFileSync(settingsPath, 'utf8')
+  console.log('settings.yaml:\n' + yaml)
+  for (const needle of [`${USAGE_SETTINGS_NAMESPACE}:`, 'goFetchMinutes: 10', 'showZaiInSidebar: false']) {
+    if (!yaml.includes(needle)) {
+      console.error(`FAIL: settings.yaml 缺少 "${needle}"：\n${yaml}`)
+      process.exit(1)
+    }
+  }
+  for (const absent of ['deepseekEnabled', 'zaiFetchMinutes', 'goEnabled']) {
+    if (yaml.includes(absent)) {
+      console.error(`FAIL: settings.yaml 只应存显式改过的字段，却出现了 ${absent}：\n${yaml}`)
+      process.exit(1)
+    }
+  }
+  const expectedAfterUpdate = { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 10, showZaiInSidebar: false }
+  for (const [field, expected] of Object.entries(expectedAfterUpdate)) {
+    if (afterUpdate[field] !== expected) {
+      console.error(`FAIL: 写入后解析值不一致 ${field}=${String(afterUpdate[field])}，应为 ${String(expected)}`)
+      process.exit(1)
+    }
+  }
+  console.log('settings namespace:', JSON.stringify({
+    ns: USAGE_SETTINGS_NAMESPACE,
+    resolved: afterUpdate,
+    revision: settings.describe({ redactSecrets: true }).find((c) => c.ns === USAGE_SETTINGS_NAMESPACE)?.revision,
+  }, null, 2))
+  await settingsMounted.dispose()
+  process.env.DSH_HOME = previousSettingsHome
+  rmSync(settingsHome, { recursive: true, force: true })
 }
 
 // 清理临时 DSH_HOME

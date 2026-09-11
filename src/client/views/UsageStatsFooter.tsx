@@ -13,7 +13,7 @@
  *   DeepSeek 迷你芯片，两行含货币与金额缩写，今日用量迷你芯片，两行含今日与 tokens 缩写数值，
  *   tooltip 给出今日完整明细。整块按钮任意位置可点。
  *
- * Go 额度、DeepSeek 余额与 Z.ai 额度的抓取开关、侧边栏展示开关与抓取间隔来自偏好设置 useGoSettings / settings.ts：
+ * Go 额度、DeepSeek 余额与 Z.ai 额度的抓取开关、侧边栏展示开关与抓取间隔来自偏好设置 useUsageSettings（服务端设置文档，见 client/settings.ts）：
  * 关闭抓取则不轮询，对应数据恒为 null，芯片自然不渲染；侧边栏开关只影响底部芯片展示，不影响模态窗内详情。
  */
 
@@ -26,9 +26,9 @@ import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
-import { useGoSettings } from '../useGoSettings.ts';
 import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../useQuota.ts';
 import { useSnapshot } from '../useSnapshot.ts';
+import { useUsageSettings } from '../useUsageSettings.ts';
 
 import css from './UsageStatsFooter.module.css';
 import { UsageStatsPanel } from './UsageStatsPanel.tsx';
@@ -145,7 +145,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const [open, setOpen] = useState(false);
   const [data, err, refreshSnapshot, errDetail] = useSnapshot();
   // Go 额度、DeepSeek 余额与 Z.ai 额度抓取开关与间隔来自偏好设置，默认开启、间隔 5 分钟
-  const [settings, updateSettings] = useGoSettings();
+  const [settings, updateSettings] = useUsageSettings();
   const [go, refreshQuota] = useGoQuota(settings.goEnabled, settings.goFetchMinutes);
   const [deepseek, refreshDeepSeek] = useDeepSeekBalance(settings.deepseekEnabled, settings.deepseekFetchMinutes);
   const [zai, refreshZai] = useZaiQuota(settings.zaiEnabled, settings.zaiFetchMinutes);

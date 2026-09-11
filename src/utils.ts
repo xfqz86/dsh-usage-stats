@@ -2,8 +2,8 @@
  * 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
  *
  * 本模块只放纯函数与数值常量；协议类型 GoWindow、GoQuota、UsageAgg、Agg、
- * SeriesPoint 定义在 types.ts。这里是插件
- * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、单行 JSON 解析、错误消息提取、模型键拆分、Go 额度档位等。
+ * SeriesPoint、UsageSettings 定义在 types.ts。这里是插件
+ * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、单行 JSON 解析、错误消息提取、模型键拆分、Go 额度档位、插件偏好的默认值与夹取等。
  *
  * 设计约束：
  *   - 只允许纯 JS 运行时能力 Date、Math、JSON、String，禁止 import
@@ -13,7 +13,7 @@
  *     会话发现 logs.ts，客户端格式化、分桶、图表几何 client/stats.ts
  *     等仍留在各自模块，这里只放「多文件共用的」部分。
  */
-import type { GoWindow } from './types.ts';
+import type { GoWindow, UsageSettings } from './types.ts';
 
 /** 时间戳对应的本地零点，避免 UTC 漂移，host 折叠与会话图共用同一套日划分。 */
 export function startOfDay(timeMs: number): number {
@@ -102,4 +102,77 @@ export function goResetsAt(
 /** 每日缓存总量 cacheRead + cacheWrite，角标与热力图 tooltip 共用。 */
 export function cacheTotal(b: { cacheRead?: number | null; cacheWrite?: number | null }): number {
   return (b.cacheRead || 0) + (b.cacheWrite || 0);
+}
+
+// ---- 插件偏好设置：设置命名空间名、默认值、夹取与字段级归一化 ----
+// host 侧按这些常量建 schemastery schema（src/host/settings.ts），client 侧
+// 用它做取值兜底与写入夹取，两侧共用同一份数值，避免默认值分叉。
+
+/** 设置命名空间名，服务端 ctx.settings 注册键，即 settings.yaml 里的一级键。 */
+export const USAGE_SETTINGS_NAMESPACE = 'usage-stats';
+/** OpenCode Go 额度抓取间隔下限，单位分钟：官方额度接口不短于该间隔打点。 */
+export const GO_FETCH_MIN_MINUTES = 3;
+/** OpenCode Go 额度抓取间隔默认值，单位分钟。 */
+export const GO_FETCH_DEFAULT_MINUTES = 5;
+/** DeepSeek 余额抓取间隔下限，单位分钟。 */
+export const DEEPSEEK_FETCH_MIN_MINUTES = 3;
+/** DeepSeek 余额抓取间隔默认值，单位分钟。 */
+export const DEEPSEEK_FETCH_DEFAULT_MINUTES = 5;
+/** Z.ai 额度抓取间隔下限，单位分钟。 */
+export const ZAI_FETCH_MIN_MINUTES = 3;
+/** Z.ai 额度抓取间隔默认值，单位分钟。 */
+export const ZAI_FETCH_DEFAULT_MINUTES = 5;
+
+/** 偏好默认值：设置命名空间未覆盖的字段、取值尚未到达浏览器时都用它。 */
+export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
+  goEnabled: true,
+  showGoInSidebar: true,
+  goFetchMinutes: GO_FETCH_DEFAULT_MINUTES,
+  deepseekEnabled: true,
+  showDeepSeekInSidebar: true,
+  deepseekFetchMinutes: DEEPSEEK_FETCH_DEFAULT_MINUTES,
+  zaiEnabled: true,
+  showZaiInSidebar: true,
+  zaiFetchMinutes: ZAI_FETCH_DEFAULT_MINUTES,
+};
+
+/** 把任意数值夹成合法抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
+export function clampGoFetchMinutes(value: number): number {
+  const n = Number.isFinite(value) ? value : GO_FETCH_DEFAULT_MINUTES;
+  return Math.max(GO_FETCH_MIN_MINUTES, Math.round(n));
+}
+
+/** 把任意数值夹成合法 DeepSeek 抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
+export function clampDeepSeekFetchMinutes(value: number): number {
+  const n = Number.isFinite(value) ? value : DEEPSEEK_FETCH_DEFAULT_MINUTES;
+  return Math.max(DEEPSEEK_FETCH_MIN_MINUTES, Math.round(n));
+}
+
+/** 把任意数值夹成合法 Z.ai 抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
+export function clampZaiFetchMinutes(value: number): number {
+  const n = Number.isFinite(value) ? value : ZAI_FETCH_DEFAULT_MINUTES;
+  return Math.max(ZAI_FETCH_MIN_MINUTES, Math.round(n));
+}
+
+/**
+ * 字段级归一化：布尔字段只收布尔，间隔字段只收有限数并夹取，其余回退默认值。
+ * 归一化对象为设置命名空间的解析值——写入方（浏览器端 settingsScope）与服务端
+ * schema 都保证字段齐备，但手改 settings.yaml 或旧版本残留仍可能给出坏值。
+ */
+export function normalizeUsageSettings(raw: Partial<UsageSettings> | null | undefined): UsageSettings {
+  const src = raw ?? {};
+  const bool = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback);
+  const minutes = (v: unknown, clamp: (n: number) => number, fallback: number): number =>
+    (typeof v === 'number' && Number.isFinite(v) ? clamp(v) : fallback);
+  return {
+    goEnabled: bool(src.goEnabled, USAGE_SETTINGS_DEFAULTS.goEnabled),
+    showGoInSidebar: bool(src.showGoInSidebar, USAGE_SETTINGS_DEFAULTS.showGoInSidebar),
+    goFetchMinutes: minutes(src.goFetchMinutes, clampGoFetchMinutes, USAGE_SETTINGS_DEFAULTS.goFetchMinutes),
+    deepseekEnabled: bool(src.deepseekEnabled, USAGE_SETTINGS_DEFAULTS.deepseekEnabled),
+    showDeepSeekInSidebar: bool(src.showDeepSeekInSidebar, USAGE_SETTINGS_DEFAULTS.showDeepSeekInSidebar),
+    deepseekFetchMinutes: minutes(src.deepseekFetchMinutes, clampDeepSeekFetchMinutes, USAGE_SETTINGS_DEFAULTS.deepseekFetchMinutes),
+    zaiEnabled: bool(src.zaiEnabled, USAGE_SETTINGS_DEFAULTS.zaiEnabled),
+    showZaiInSidebar: bool(src.showZaiInSidebar, USAGE_SETTINGS_DEFAULTS.showZaiInSidebar),
+    zaiFetchMinutes: minutes(src.zaiFetchMinutes, clampZaiFetchMinutes, USAGE_SETTINGS_DEFAULTS.zaiFetchMinutes),
+  };
 }

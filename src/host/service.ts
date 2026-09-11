@@ -3,9 +3,9 @@
  * usageStats 命名空间的 7 个一元 Remote 方法。
  *
  * 数据流（账本为唯一事实来源、聚合为派生缓存）与原 apply 函数版一致：
- * openLedger → 先挂 session/event 实时监听 → bootstrap（预统计快加载、
- * 事件重放、首启全量扫描三档回退）。信任与认证由网关载体统一处理，
- * 本服务只做业务：快照、重建、清零、密封、三路额度。
+ * 注册偏好设置命名空间 → openLedger → 先挂 session/event 实时监听 →
+ * bootstrap（预统计快加载、事件重放、首启全量扫描三档回退）。信任与认证由
+ * 网关载体统一处理，本服务只做业务：快照、重建、清零、密封、三路额度。
  *
  * 方法签名遵守严格 Remote 约定：公开非静态实例方法、非泛型、
  * 参数为具名必填简单标识符（无 lookup、无 signal），请求与结果均为
@@ -19,6 +19,7 @@ import { queryDeepSeekBalance } from './deepseekBalance.ts';
 import { queryGoQuota } from './goquota.ts';
 import { Ledger } from './ledger.ts';
 import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregates } from './scan.ts';
+import { registerUsageSettings } from './settings.ts';
 import { snapshot } from './snapshot.ts';
 import { createStore, foldRecord, inheritedCountOf } from './store.ts';
 import { queryZaiQuota } from './zaiQuota.ts';
@@ -93,6 +94,9 @@ export default class UsageStatsService extends TypertRemoteService {
     const ctx = this.ctx;
     const store = this.store;
     const ledger = this.ledger;
+
+    // 偏好设置落 harness 用户设置文档（$DSH_HOME/settings.yaml），属部署而非某个浏览器。
+    registerUsageSettings(ctx);
 
     // 插件卸载时关闭账本数据库连接，Ledger.close 幂等。
     ctx.effect(() => () => ledger.close(), 'dsh-usage-stats: 关闭账本数据库连接');

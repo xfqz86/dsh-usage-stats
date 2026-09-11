@@ -79,14 +79,14 @@ dsh-usage-stats/
 │   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口。
-│   │   ├── settings.ts ← 浏览器端插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控的偏好设置。
+│   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端注册的 `usage-stats` 设置命名空间。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
 │   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
-│   │   ├── useGoSettings.ts ← 偏好设置的 React hook（浏览器端）。
 │   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
 │   │   ├── useQuota.ts ← 额度轮询 hooks（浏览器端）：共享轮询骨架 useQuota + Go/DeepSeek/Z.ai 三路薄包装。
 │   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
-│   │   └── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
+│   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
+│   │   └── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
 │   ├── host/
 │   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink， 事件守卫 usable、modelKeyOf。
 │   │   ├── deepseekBalance.ts ← DeepSeek 余额查询：通过 `GET https://api.deepseek.com/user/balance` 获取当前余额。
@@ -98,6 +98,7 @@ dsh-usage-stats/
 │   │   ├── rawlog.ts ← 会话原始日志的物理代次识别与多帧 zstd 解码：扫描拼接 zstd 帧边界后逐帧解压为 NDJSON 文本，供扫描链路在 harness 读取失败时兜底读取旧代次会话。
 │   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，经 foldRecord 写入账本（events、session_meta 共 9 表， 含 agg_* 预统计）并折叠聚合缓存。
 │   │   ├── service.ts ← 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露 usageStats 命名空间的 7 个一元 Remote 方法。
+│   │   ├── settings.ts ← 服务端（Host）的插件偏好设置：把 `usage-stats` 命名空间注册进 harness 的 用户设置体系（ctx.settings，由 dsh-settings-file 落到 `$DSH_HOME/settings.yaml`）， 偏好因此属于部署而不是某一个浏览器。
 │   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 usageStats/snapshot 的结果 value，不触碰传输层与 ctx。
 │   │   ├── store.ts ← 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、模型×日、全量维度组织。
 │   │   └── zaiQuota.ts ← Z.ai 智谱额度查询：滚动 5 小时、每周 7 天百分比与每月 Web 搜索次数，端点为 GET https://api.z.ai/api/monitor/usage/quota/limit。

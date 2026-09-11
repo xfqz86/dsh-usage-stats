@@ -2,7 +2,10 @@
  * 设置 Tab：偏好设置，含 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度监控各三项，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
  * 独立成文件，一个组件一个文件。
  *
- * 偏好设置，settings.ts 与 useGoSettings 持久化到 localStorage，分组按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度自上而下排列：
+ * 偏好设置持久化在服务端用户设置文档（`$DSH_HOME/settings.yaml` 的 `usage-stats` 段，
+ * 经 ctx.settingsScope 的作用域读写，见 ../settings.ts 与 ../useUsageSettings.ts），
+ * 换浏览器、换设备共用同一份；本页顶部按作用域状态提示设置存放位置与是否可写。
+ * 分组按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度自上而下排列：
  *   DeepSeek 余额三项：
  *     1. 启用 DeepSeek 余额监控，deepseekEnabled，关闭后不再轮询官方余额接口；
  *     2. 在侧边栏展示 DeepSeek 余额，showDeepSeekInSidebar，只影响底部芯片，不影响模态窗；
@@ -31,18 +34,19 @@ import {
 import { useState } from 'react';
 
 
+import { clampDeepSeekFetchMinutes, clampGoFetchMinutes, clampZaiFetchMinutes, DEEPSEEK_FETCH_MIN_MINUTES, GO_FETCH_MIN_MINUTES, ZAI_FETCH_MIN_MINUTES } from '../../utils.ts';
 import { postLedgerApi } from '../api.ts';
 import { SettingsSwitch } from '../components/SettingsSwitch.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { clampDeepSeekFetchMinutes, clampGoFetchMinutes, clampZaiFetchMinutes, DEEPSEEK_FETCH_MIN_MINUTES, GO_FETCH_MIN_MINUTES, ZAI_FETCH_MIN_MINUTES } from '../settings.ts';
 import { fmtFull } from '../stats.ts';
 import { useConfirmOp, type ConfirmOpState } from '../useConfirmOp.ts';
 import { useIntervalText } from '../useIntervalText.ts';
+import { useUsageSettingsView } from '../useUsageSettings.ts';
 
 import css from './SettingsTab.module.css';
 
+import type { UsageSettings } from '../../types.ts';
 import type { UsageStatsKey } from '../locales.ts';
-import type { UsageSettings } from '../settings.ts';
 import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
@@ -72,6 +76,14 @@ export function SettingsTab({
   const deepseekInterval = useIntervalText(settings.deepseekFetchMinutes, clampDeepSeekFetchMinutes, (m) => onUpdateSettings({ deepseekFetchMinutes: m }));
   const zaiInterval = useIntervalText(settings.zaiFetchMinutes, clampZaiFetchMinutes, (m) => onUpdateSettings({ zaiFetchMinutes: m }));
 
+  // 设置存放位置提示：正常态说明落在服务端配置文件，不可用/只读时明确告知改动不会保存。
+  const { status: storageStatus, writable } = useUsageSettingsView();
+  const storageHint = (() => {
+    if (storageStatus === 'unavailable') return t('settings.storageUnavailable');
+    if (!writable) return t('settings.storageReadonly');
+    return t('settings.storageHint');
+  })();
+
   // 按钮样式与文案：避免嵌套三元，改用 if/else
   const getButtonClass = (state: ConfirmOpState): string => {
     if (state === 'busy') return `${css.refreshBtn} ${css.refreshBtnBusy}`;
@@ -86,10 +98,11 @@ export function SettingsTab({
 
   return (
     <div className={shared.section}>
-      {/* 偏好设置 — 按来源分组 */}
+      {/* 偏好设置 — 按来源分组，顶部提示设置存放位置与可写状态 */}
       <div className={shared.sectionHead}>
         <span className={shared.sectionLabel}>{t('settings.preferences')}</span>
       </div>
+      <span className={shared.goHint}>{storageHint}</span>
 
       {/* DeepSeek 余额分组 */}
       <div className={css.prefGroup}>

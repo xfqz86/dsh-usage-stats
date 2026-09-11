@@ -106,10 +106,12 @@ Client 严格编解码在 `src/remote/contribution.ts`。
   扫描 / 重建进行中时返回 409 `busy`。批量导入与实时增量已自动密封，通常无需
   手动调用。
 
-## 5. 偏好设置，浏览器端 localStorage
+## 5. 偏好设置，服务端设置文档（`usage-stats` 命名空间）
 
-- key `dsh-usage-stats.settings`；读取失败或字段非法回退默认值，`goFetchMinutes`、`deepseekFetchMinutes`、`zaiFetchMinutes` 经 `clamp*` 夹到下限 3。
-- 字段 `UsageSettings` 定义在 `src/client/settings.ts`：
+- 偏好的事实来源是 harness 用户设置文档（dsh-settings-file 落 `$DSH_HOME/settings.yaml`，默认 `~/.dsh/settings.yaml`）里的 `usage-stats` 段，属部署而非某个浏览器：换浏览器、换设备共用同一份偏好。
+- 服务端 `src/host/settings.ts` 经 `ctx.settings.register('usage-stats', UsageSettingsSchema)` 注册命名空间（`settings` 为可选服务，缺席时不注册），schema 由 `@deepseek-ai/schemastery` 定义，每字段带默认值；文档只存用户显式改过的字段，其余字段按 schema 默认值解析（默认值与 `src/utils.ts` 的 `USAGE_SETTINGS_DEFAULTS` 同源）。
+- 浏览器端 `src/client/index.ts` 经 `ctx.settingsScope.bind({ namespace: 'usage-stats' })` 取作用域（`settingsScope` 服务来自 `@deepseek-ai/dsh-client-ui-settings`，已登记进 `package.json` 的 `dsh.client.inject`），`src/client/settings.ts` 持有作用域并提供订阅/读写，组件经 `useUsageSettings` 消费；写入走路径操作，只落显式改过的字段，间隔字段写前夹到下限 3。
+- 字段 `UsageSettings` 定义在 `src/types.ts`：
   - `goEnabled` 默认 `true`，关闭则**不再轮询** go-quota，侧边栏与模态窗
     均不显示 Go 额度；
   - `showGoInSidebar` 默认 `true`，只门控侧边栏底部 Go 芯片，含宽列和 rail，模态窗内额度详情仍可见；
@@ -125,5 +127,7 @@ Client 严格编解码在 `src/remote/contribution.ts`。
   - `showZaiInSidebar` 默认 `true`，只门控侧边栏底部 Z.ai 芯片，含宽列 `5h`、`周` 百分比和 `Web 搜索` 次数及 rail 迷你芯片，模态窗内额度详情仍可见；
   - `zaiFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `usageStats/zaiQuota` 请求的
     `intervalMinutes`，服务端据此调整 TTL。
+- 读取路径：作用域快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔，间隔只收有限数并夹取）→ 缺字段回退默认值；作用域尚未就绪（加载中）或部署无设置后端时同样回退默认值，设置页顶部提示当前设置存放位置与是否可写。
 - 关闭 `goEnabled` 时，Go 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改；关闭 `deepseekEnabled` 时，DeepSeek 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改；关闭 `zaiEnabled` 时，Z.ai 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改，三组独立联动。
-- 纯浏览器端持久化，不落账本，刷新页面后仍生效；偏好经 `useGoSettings` 读写，额度经 `useGoQuota`、`useDeepSeekBalance`、`useZaiQuota` 轮询，局部合并、持久化与多间隔夹取。
+- 偏好不落账本（账本只记用量）；额度经 `useGoQuota`、`useDeepSeekBalance`、`useZaiQuota` 轮询，间隔取自偏好。
+- 旧版本把偏好存在浏览器 localStorage（key `dsh-usage-stats.settings`），升级后首次挂载做一次性迁移：先等作用域从 loading 落定，就绪且可写、设置文档里尚无该命名空间时，把与默认值不同的字段写进设置文档，成功后删除旧键；设置文档已有用户段时只删旧键（文档为准）。服务端设置缺席或只读时**保留**旧键——此刻没有可靠落点，删掉等于丢设置，下次挂载再试。

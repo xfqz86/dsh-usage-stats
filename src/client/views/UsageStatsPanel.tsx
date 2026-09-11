@@ -35,9 +35,8 @@ import { SessionsTab } from './SessionsTab.tsx';
 import { SettingsTab } from './SettingsTab.tsx';
 import css from './UsageStatsPanel.module.css';
 
-import type { DeepSeekBalance, ZaiQuota } from '../../types.ts';
+import type { DeepSeekBalance, UsageSettings, ZaiQuota } from '../../types.ts';
 import type { UsageStatsKey } from '../locales.ts';
-import type { UsageSettings } from '../settings.ts';
 import type { GoQuota } from '../useQuota.ts';
 import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives';

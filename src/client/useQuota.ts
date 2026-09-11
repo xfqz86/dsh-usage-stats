@@ -12,8 +12,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { clampDeepSeekFetchMinutes, clampGoFetchMinutes, clampZaiFetchMinutes } from '../utils.ts';
+
 import { usageStatsRemote } from './remote.ts';
-import { clampDeepSeekFetchMinutes, clampGoFetchMinutes, clampZaiFetchMinutes } from './settings.ts';
 
 import type {
   DeepSeekBalance,
