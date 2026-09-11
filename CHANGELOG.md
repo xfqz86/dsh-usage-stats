@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- 工作流外部动作升级到 Node 24 运行时版本（`actions/checkout@v7`、`actions/setup-node@v7`、`pnpm/action-setup@v6`、`actions/upload-artifact@v7`、`actions/download-artifact@v8`、`softprops/action-gh-release@v3`），消除 GitHub 对 Node 20 动作的弃用警告（本仓复合动作此前已是 `node24`）；`pnpm/action-setup` 升到 v6 才正式支持本仓使用的 pnpm 11
+
 ## [0.3.0] - 2026-09-11
 
 ### 新增
