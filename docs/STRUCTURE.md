@@ -24,6 +24,8 @@ dsh-usage-stats/
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
 ├── docs/
+│   ├── releases/
+│   │   └── v0.3.0.md
 │   ├── screenshot/
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png

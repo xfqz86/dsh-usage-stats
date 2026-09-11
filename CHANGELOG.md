@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-11
+
 ### 新增
 
 - **偏好设置改存 DSH 配置文件**：设置不再放浏览器 localStorage，而是注册进 harness 的用户设置体系——服务端 `ctx.settings.register('usage-stats', schema)`（`src/host/settings.ts`，schemastery schema 带默认值），浏览器端 `ctx.settingsScope.bind({ namespace: 'usage-stats' })`（`src/client/settings.ts` + `useUsageSettings`），落 `$DSH_HOME/settings.yaml`（默认 `~/.dsh/settings.yaml`）的 `usage-stats` 段，换浏览器、换设备共用同一份偏好；文档只写显式改过的字段，其余字段跟随 schema 默认值。设置页顶部新增一行说明当前设置存放位置，服务端设置缺席或只读时明确提示“修改不会保存”。服务端注册失败（命名空间被占用、schema 被拒）只降级偏好并打一条警告，不让统计主链路（账本与实时折叠）随注册失败一起挂掉。旧版本 localStorage（key `dsh-usage-stats.settings`）由 `migrateLegacySettings` 一次性迁移进配置文件后删除旧键（先在作用域落定后判断，服务端设置缺席或只读时保留旧键）
@@ -22,6 +24,7 @@
 - 可选服务不再进 inject：`credentials` 改调用处 `ctx.get` 判空（cordis 对象写法的值为拦截配置，无“可选”语义）
 - harness 版本对齐到 `0.1.5-rc.2`（npm `next` 标签，当前基座发布线）：`@deepseek-ai/*` devDependencies 与 `pnpm-workspace.yaml` 白名单同步，逐包核对类型/实现与基座一致（`session`/`persistence`/`session-query`/`typert-protocol`/`credentials`/`ui-slots`/`ui-renderer`/`locale`/`sidebar`/`api-gateway` 无差异，客户端冻结模块表仍是九项）
 - 提示气泡拆两路：纯文字提示改用基座 `@deepseek-ai/dsh-client-ui-primitives` 的 `Tooltip`；需要多行排版或鼠标跟随时才用本仓 `components/Tooltip.tsx`，其 `label` 兼容分支删除、只保留富内容插槽（基座 Tooltip 当前只接受纯文本，未支持富内容）
+- 发布：GitHub Release 正文不再用自动生成的提交/PR 清单，改为该版本的 `docs/releases/v<版本>.md`（面向用户的人话版更新说明）；`release.yml` 在 tag 校验阶段强制该文件存在，缺失则中止发布（见 `docs/PUBLISH.md`）
 
 ### 修复
 
@@ -101,7 +104,8 @@
 - 统计口径：`assistant/message` 且 `data.usage` 存在才入账，`total=input+output+cacheRead+cacheWrite`（`reasoning` 单列），缺失 provider/model 记 `unknown`，按本地自然日划分
 - 构建与发布：`tsdown` 双 bundle（Host ESM + Client 闭包）+ CSS Modules 内联，`smoke/client-bundle` 验证，交付 npm/GitHub Release/tarball 三形态，提交遵循 Conventional Commits
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.1.0...v0.1.1
