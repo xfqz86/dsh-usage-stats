@@ -1,5 +1,5 @@
 /**
- * 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、全量维度组织。
+ * 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、模型×日、全量维度组织。
  *
  * 边界：账本即 ledger.ts 的 Ledger，持有 sqlite 事件流与会话元数据；本模块
  * 只做折叠与聚合，是快照 API 的读取面。折叠路径：
@@ -20,7 +20,7 @@ import type { Ledger, LedgerEvent } from './ledger.ts';
 import type { TokenUsage } from '@deepseek-ai/dsh-llm';
 import type { SessionEvent } from '@deepseek-ai/dsh-session';
 
-/** 会话级状态，包含数值聚合与去重水位，title、cwd、createdAt 在账本 meta 中。 */
+/** 会话级状态，包含数值聚合与去重水位，标题与归属字段在账本 meta 中。 */
 export interface UsageStore {
   sessions: Map<string, SessionInfo>
   models: Map<string, Agg>
@@ -107,9 +107,48 @@ export function foldUsage(store: UsageStore, info: SessionInfo, timeMs: number, 
 }
 
 /**
- * 折叠一条账本事件进聚合缓存，幂等前提为账本内事件唯一，即 event 表按
- * session+seq 键 upsert，重开账本时每键只折一次。返回是否真正折叠，
- * 事件无用量时返回 false。顺带推进该会话的 maxSeq 水位，使重启恢复后
+ * 从原始记录求 fork 继承前缀长度：最后一个 `session/end-seed`（`data.inherited === true`）
+ * 之后偏移一位，即该会话从父会话复制来的事件数，与 harness 的 `inheritedEventCount` 同义。
+ * 无标记返回 0。原始日志路径拿不到 harness 元数据，用标记事件兜底。
+ */
+export function inheritedPrefixOf(records: readonly unknown[]): number {
+  let cut = -1;
+  for (const record of records) {
+    if (typeof record !== 'object' || record === null) continue;
+    const r = record as { type?: unknown; seq?: unknown; data?: { inherited?: unknown } };
+    if (r.type !== 'session/end-seed' || r.data?.inherited !== true) continue;
+    const seq = r.seq;
+    if (typeof seq === 'number' && Number.isFinite(seq) && seq > cut) cut = seq;
+  }
+  return cut + 1;
+}
+
+/**
+ * 归一 harness 元数据里的 fork 继承前缀长度（`SessionLogSnapshot.inheritedEventCount`
+ * 与 `SessionHandle.inheritedEventCount`）：非有限、负数与缺省一律按 0，即无继承。
+ */
+export function inheritedCountOf(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/**
+ * 只保留本会话自有事件，丢掉 fork 继承前缀，避免把父会话的用量在子会话下重复计入。
+ * 继承前缀是日志的物理前缀（seq 从 0 起共 inherited 条），因此按 seq 判定；
+ * 无 seq 的记录（会话种子 header）不属于事件序列，原样保留供 meta 抄录。
+ */
+export function liveEventsOf<T>(events: readonly T[], inherited: number): readonly T[] {
+  if (!(inherited > 0)) return events;
+  return events.filter((event) => {
+    const seq = (event as { seq?: unknown }).seq;
+    return typeof seq !== 'number' || seq >= inherited;
+  });
+}
+
+/**
+ * 折叠一条账本事件进聚合缓存，调用方保证事件唯一（PK 为 t、session_id、seq），
+ * 本函数除零用量守卫外恒折叠，直接重调会翻倍。返回是否真正折叠，
+ * 事件无用量时返回 false。seq>=0 时推进该会话的 maxSeq 水位，使重启恢复后
  * 实时路径同样能去重历史事件。
  * 若提供 ledger，则同步增量更新预统计物化表，挂起时跳过，由批量 persist 覆盖。
  */
@@ -144,8 +183,8 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent, ledger?: Led
 }
 
 /**
- * 处理一条原始记录，涵盖会话种子、session/title、assistant/message 三类：
- * 元数据写账本 meta；usable 事件按 per-session seq 水位去重后追加进账本
+ * 处理一条原始记录，涵盖会话种子、session/title、计量事件（usable，含对话与压缩调用）三类：
+ * 元数据写账本 meta；usable 事件经 seq 水位、seq=-1 主键、append 返回值三层去重后追加进账本
  * 并折叠进聚合缓存。初始化扫描与实时监听共用此路径，保证账本内事件唯一。
  * 全部同步，sqlite 即写即持久，无需等待落盘。
  * 预统计增量在此路径自动完成，挂起时跳过。

@@ -13,23 +13,22 @@
  *   DeepSeek 迷你芯片，两行含货币与金额缩写，今日用量迷你芯片，两行含今日与 tokens 缩写数值，
  *   tooltip 给出今日完整明细。整块按钮任意位置可点。
  *
- * Go 额度、DeepSeek 余额与 Z.ai 额度的抓取开关、侧边栏展示开关与抓取间隔来自偏好设置 useGoSettings / settings.ts：
+ * Go 额度、DeepSeek 余额与 Z.ai 额度的抓取开关、侧边栏展示开关与抓取间隔来自偏好设置 useUsageSettings（服务端设置文档，见 client/settings.ts）：
  * 关闭抓取则不轮询，对应数据恒为 null，芯片自然不渲染；侧边栏开关只影响底部芯片展示，不影响模态窗内详情。
  */
 
-import { IconDataOutline16 } from '@deepseek-ai/dsh-client-ui-primitives';
+import { IconDataOutline16, Tooltip as BaseTooltip } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useRef, useState } from 'react';
 
 
 import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
 import { Tooltip } from '../components/Tooltip.tsx';
+import shared from '../components/UsageStatsCommon.module.css';
 import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
-import { useDeepSeekBalance } from '../useDeepSeekBalance.ts';
-import { useGoQuota, type GoWindow } from '../useGoQuota.ts';
-import { useGoSettings } from '../useGoSettings.ts';
+import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../useQuota.ts';
 import { useSnapshot } from '../useSnapshot.ts';
-import { useZaiQuota, type ZaiWindow } from '../useZaiQuota.ts';
+import { useUsageSettings } from '../useUsageSettings.ts';
 
 import css from './UsageStatsFooter.module.css';
 import { UsageStatsPanel } from './UsageStatsPanel.tsx';
@@ -64,42 +63,15 @@ const TIP_LEVEL_COLOR: Record<'ok' | 'warn' | 'over', string> = {
   over: 'var(--dsw-alias-state-error-primary, #e5484d)',
 };
 
-/** 窗口卡片容器：半透明白底 + 细边框，在深色气泡上分隔层级。 */
-const TIP_CARD_STYLE: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.07)',
-  borderRadius: 8,
-  border: '1px solid rgba(255,255,255,0.06)',
-  padding: '10px 11px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-};
-
 /** tooltip 标题行，13px 字号、700 字重，底部留白与卡片群分隔。 */
 function TipTitle({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 13, fontWeight: 700, lineHeight: '18px', marginBottom: 10, letterSpacing: 0.1 }}>{children}</div>;
+  return <div className={shared.tipTitle}>{children}</div>;
 }
 
-/** 小徽标 pill，展示货币代码或订阅计划名。 */
+/** 小徽标 pill，展示货币代码或订阅计划名；超长计划名由调用方给 maxWidth 收窄。 */
 function TipPill({ children, maxWidth }: { children: React.ReactNode; maxWidth?: number }) {
   return (
-    <span
-      style={{
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: 0.4,
-        opacity: 0.95,
-        background: 'rgba(255,255,255,0.13)',
-        borderRadius: 4,
-        padding: '1px 5px',
-        lineHeight: '18px',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        flexShrink: 0,
-        ...(maxWidth === undefined ? {} : { maxWidth }),
-      }}
-    >
+    <span className={shared.tipPill} style={maxWidth === undefined ? undefined : { maxWidth }}>
       {children}
     </span>
   );
@@ -107,41 +79,12 @@ function TipPill({ children, maxWidth }: { children: React.ReactNode; maxWidth?:
 
 /** 状态提示卡，用于 no-key、no-plan、error 与空数据等非正常态。 */
 function TipHint({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: 12,
-        lineHeight: '16px',
-        opacity: 0.72,
-        background: 'rgba(255,255,255,0.06)',
-        borderRadius: 8,
-        padding: '10px 12px',
-        textAlign: 'center',
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className={shared.tipHint}>{children}</div>;
 }
 
 /** tooltip 底部更新时间，右对齐、顶部带分割线，弱化但仍可读。 */
 function TipFooter({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: 11,
-        lineHeight: '14px',
-        opacity: 0.45,
-        marginTop: 10,
-        textAlign: 'right',
-        fontVariantNumeric: 'tabular-nums',
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        paddingTop: 7,
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className={shared.tipFooter}>{children}</div>;
 }
 
 /**
@@ -161,23 +104,23 @@ function QuotaTipRow({ label, pct, level, reset, value, points }: {
   const color = TIP_LEVEL_COLOR[level];
   const width = `${Math.max(0, Math.min(100, pct))}%`;
   return (
-    <div style={TIP_CARD_STYLE}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-        <span style={{ fontSize: 11.5, lineHeight: '16px', opacity: 0.68, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
+    <div className={shared.tipCard}>
+      <div className={shared.tipCardHead}>
+        <span className={shared.tipRowLabel}>{label}</span>
+        <span className={shared.tipRowValues}>
           {points !== undefined && (
-            <span style={{ fontSize: 11, lineHeight: '14px', opacity: 0.6, fontVariantNumeric: 'tabular-nums' }}>{points}</span>
+            <span className={shared.tipPoints}>{points}</span>
           )}
-          <span style={{ fontSize: 15, fontWeight: 750, lineHeight: '18px', fontVariantNumeric: 'tabular-nums', letterSpacing: -0.2, color }}>
+          <span className={shared.tipValue} style={{ color }}>
             {value ?? `${pct}%`}
           </span>
         </span>
       </div>
-      <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.10)', overflow: 'hidden' }}>
-        <div style={{ width, height: '100%', borderRadius: 2, background: color }} />
+      <div className={shared.tipBarTrack}>
+        <div className={shared.tipBarFill} style={{ width, background: color }} />
       </div>
       {reset !== '' && (
-        <div style={{ fontSize: 11, lineHeight: '14px', opacity: 0.45, fontVariantNumeric: 'tabular-nums' }}>{reset}</div>
+        <div className={shared.tipReset}>{reset}</div>
       )}
     </div>
   );
@@ -186,12 +129,12 @@ function QuotaTipRow({ label, pct, level, reset, value, points }: {
 /** 余额明细行，圆点 + 标签居左、数值居右，DeepSeek 赠送与充值两行共用。 */
 function BalanceTipRow({ dot, label, amount }: { dot: string; label: string; amount: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, fontSize: 11.5, lineHeight: '16px' }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: 0.68 }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+    <div className={shared.balanceRow}>
+      <span className={shared.balanceLabel}>
+        <span className={shared.balanceDot} style={{ background: dot }} />
         {label}
       </span>
-      <span style={{ fontVariantNumeric: 'tabular-nums', opacity: 0.92, fontWeight: 500 }}>{amount}</span>
+      <span className={shared.balanceAmount}>{amount}</span>
     </div>
   );
 }
@@ -200,9 +143,9 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   // 本地化函数单点转换，组件内统一用 tFn。
   const tFn = t as unknown as LocaleFn;
   const [open, setOpen] = useState(false);
-  const [data, err, refreshSnapshot] = useSnapshot();
+  const [data, err, refreshSnapshot, errDetail] = useSnapshot();
   // Go 额度、DeepSeek 余额与 Z.ai 额度抓取开关与间隔来自偏好设置，默认开启、间隔 5 分钟
-  const [settings, updateSettings] = useGoSettings();
+  const [settings, updateSettings] = useUsageSettings();
   const [go, refreshQuota] = useGoQuota(settings.goEnabled, settings.goFetchMinutes);
   const [deepseek, refreshDeepSeek] = useDeepSeekBalance(settings.deepseekEnabled, settings.deepseekFetchMinutes);
   const [zai, refreshZai] = useZaiQuota(settings.zaiEnabled, settings.zaiFetchMinutes);
@@ -274,7 +217,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     const balances = deepseek.balances;
     if (!deepseek.isAvailable) {
       return (
-        <div style={{ minWidth: 200, padding: '2px 0' }}>
+        <div className={shared.tipPanel}>
           <TipTitle>{t('deepseek.title')}</TipTitle>
           <TipHint>{t('deepseek.notAvailable')}</TipHint>
         </div>
@@ -282,26 +225,26 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     }
     if (balances.length === 0) {
       return (
-        <div style={{ minWidth: 200, padding: '2px 0' }}>
+        <div className={shared.tipPanel}>
           <TipTitle>{t('deepseek.title')}</TipTitle>
           <TipHint>{t('deepseek.balancesEmpty')}</TipHint>
         </div>
       );
     }
     return (
-      <div style={{ minWidth: 236 }}>
+      <div className={shared.tipPanelWide}>
         <TipTitle>{t('deepseek.title')}</TipTitle>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className={shared.tipStack}>
           {balances.map((b) => (
-            <div key={b.currency} style={TIP_CARD_STYLE}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 1 }}>
+            <div key={b.currency} className={shared.tipCard}>
+              <div className={`${shared.tipCardHead} ${shared.tipCardHeadTight}`}>
                 <TipPill>{b.currency}</TipPill>
-                <span style={{ fontSize: 18, fontWeight: 750, fontVariantNumeric: 'tabular-nums', lineHeight: '20px', letterSpacing: -0.3 }}>
+                <span className={`${shared.tipAmount} ${shared.tipAmountLg}`}>
                   {b.totalBalance}
                 </span>
               </div>
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingTop: 1 }}>
+              <div className={shared.tipDivider} />
+              <div className={shared.tipRows}>
                 <BalanceTipRow dot="rgba(255,255,255,0.45)" label={t('deepseek.grantedBalance')} amount={b.grantedBalance} />
                 <BalanceTipRow dot="#3fb57a" label={t('deepseek.toppedUpBalance')} amount={b.toppedUpBalance} />
               </div>
@@ -330,13 +273,13 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       [t('table.avgPerCall'), fmtFull(avgPerCall)],
     ];
     return (
-      <div style={{ minWidth: 200 }}>
-        <div style={{ fontWeight: 600, marginBottom: 6, whiteSpace: 'nowrap', textAlign: 'left' }}>{t('footer.railHeader')}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px' }}>
+      <div className={shared.tipPanel}>
+        <div className={shared.tipHeader}>{t('footer.railHeader')}</div>
+        <div className={shared.tipList}>
           {rows.map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-              <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
-              <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+            <div key={k} className={shared.tipListRow}>
+              <span className={shared.tipListKey}>{k}</span>
+              <span className={shared.tipListVal}>{v}</span>
             </div>
           ))}
         </div>
@@ -352,7 +295,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const goTipContent = (() => {
     if (go === null) return '';
     const wrap = (hint: string) => (
-      <div style={{ minWidth: 208, padding: '2px 0' }}>
+      <div className={shared.tipPanelGo}>
         <TipTitle>{t('go.title')}</TipTitle>
         <TipHint>{hint}</TipHint>
       </div>
@@ -360,9 +303,9 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     if (go.status === 'ok') {
       if (goWindows.length === 0) return '';
       return (
-        <div style={{ minWidth: 208 }}>
+        <div className={shared.tipPanelGo}>
           <TipTitle>{t('go.title')}</TipTitle>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className={shared.tipStack}>
             {goWindows.map((w) => {
               const pct = goPercent(w.win);
               return (
@@ -392,7 +335,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     const balances = deepseek.balances;
     if (!deepseek.isAvailable) {
       return (
-        <div style={{ minWidth: 200, padding: '2px 0' }}>
+        <div className={shared.tipPanel}>
           <TipTitle>{t('deepseek.title')}</TipTitle>
           <TipHint>{t('deepseek.notAvailable')}</TipHint>
         </div>
@@ -400,24 +343,24 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     }
     if (balances.length === 0) {
       return (
-        <div style={{ minWidth: 200, padding: '2px 0' }}>
+        <div className={shared.tipPanel}>
           <TipTitle>{t('deepseek.title')}</TipTitle>
           <TipHint>{t('deepseek.balancesEmpty')}</TipHint>
         </div>
       );
     }
     return (
-      <div style={{ minWidth: 228 }}>
+      <div className={shared.tipPanelRail}>
         <TipTitle>{t('deepseek.title')}</TipTitle>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className={shared.tipStack}>
           {balances.map((b) => (
-            <div key={b.currency} style={TIP_CARD_STYLE}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+            <div key={b.currency} className={shared.tipCard}>
+              <div className={shared.tipCardHead}>
                 <TipPill>{b.currency}</TipPill>
-                <span style={{ fontSize: 16, fontWeight: 750, fontVariantNumeric: 'tabular-nums', lineHeight: '20px' }}>{b.totalBalance}</span>
+                <span className={shared.tipAmount}>{b.totalBalance}</span>
               </div>
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.08)' }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingTop: 1 }}>
+              <div className={shared.tipDivider} />
+              <div className={shared.tipRows}>
                 <BalanceTipRow dot="rgba(255,255,255,0.45)" label={t('deepseek.grantedBalance')} amount={b.grantedBalance} />
                 <BalanceTipRow dot="#3fb57a" label={t('deepseek.toppedUpBalance')} amount={b.toppedUpBalance} />
               </div>
@@ -449,11 +392,11 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       [t('table.avgPerCall'), fmtFull(avgPerCall)],
     ];
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 12, lineHeight: '18px', minWidth: 180 }}>
+      <div className={`${shared.tipPanelRows} ${shared.tipList}`}>
         {rows.map(([k, v]) => (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-            <span style={{ opacity: 0.85, textAlign: 'left' }}>{k}</span>
-            <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{v}</span>
+          <div key={k} className={shared.tipListRow}>
+            <span className={shared.tipListKey}>{k}</span>
+            <span className={shared.tipListVal}>{v}</span>
           </div>
         ))}
       </div>
@@ -499,7 +442,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const zaiTipContent = (() => {
     if (zai === null) return '';
     const wrap = (hint: string) => (
-      <div style={{ minWidth: 208, padding: '2px 0' }}>
+      <div className={shared.tipPanelGo}>
         <TipTitle>{t('zai.title')}</TipTitle>
         <TipHint>{hint}</TipHint>
       </div>
@@ -508,7 +451,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       if (zai.status === 'no-key') return wrap(t('zai.notConfigured'));
       if (zai.status === 'no-plan') {
         return (
-          <div style={{ minWidth: 208, padding: '2px 0' }}>
+          <div className={shared.tipPanelGo}>
             <TipTitle>{t('zai.title')}</TipTitle>
             <ZaiNoPlan text={t('zai.noPlan')} tone="tip" />
           </div>
@@ -522,12 +465,12 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     const hasRows = zaiWindows.length > 0 || zai.webSearches !== null;
     if (!hasRows) return wrap(t('zai.noData'));
     return (
-      <div style={{ minWidth: 208 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, lineHeight: '18px', letterSpacing: 0.1 }}>{t('zai.title')}</span>
+      <div className={shared.tipPanelGo}>
+        <div className={shared.tipHeaderRow}>
+          <span className={shared.tipTitle}>{t('zai.title')}</span>
           {zai.plan && <TipPill maxWidth={120}>{zai.plan}</TipPill>}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className={shared.tipStack}>
           {zaiWindows.map((w) => {
             const pct = goPercent(w.win);
             const pointsText = w.win.used !== null && w.win.limit !== null
@@ -618,32 +561,32 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     }
     if (deepseek?.status === 'ok' && !deepseek.isAvailable) {
       return (
-        <Tooltip label={t('deepseek.notAvailable')} side="top" delayMs={400}>
+        <BaseTooltip label={t('deepseek.notAvailable')} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
             <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
-        </Tooltip>
+        </BaseTooltip>
       );
     }
     if (deepseek?.status === 'no-key') {
       return (
-        <Tooltip label={t('deepseek.notConfigured')} side="top" delayMs={400}>
+        <BaseTooltip label={t('deepseek.notConfigured')} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
             <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
-        </Tooltip>
+        </BaseTooltip>
       );
     }
     if (deepseek?.status === 'error') {
       return (
-        <Tooltip label={t('deepseek.unavailable')} side="top" delayMs={400}>
+        <BaseTooltip label={t('deepseek.unavailable')} side="top" delayMs={400}>
           <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
             <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
             <span className={css.goRailChipPct}>!</span>
           </span>
-        </Tooltip>
+        </BaseTooltip>
       );
     }
     return (
@@ -724,6 +667,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         open={open}
         data={data}
         err={err}
+        errDetail={errDetail}
         go={go}
         deepseek={deepseek}
         zai={zai}
@@ -809,19 +753,19 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                 </Tooltip>
               )}
               {deepseek.status === 'ok' && !deepseek.isAvailable && (
-                <Tooltip label={t('deepseek.notAvailable')} side="top" delayMs={400}>
+                <BaseTooltip label={t('deepseek.notAvailable')} side="top" delayMs={400}>
                   <span className={css.goChip}>—</span>
-                </Tooltip>
+                </BaseTooltip>
               )}
               {deepseek.status === 'no-key' && (
-                <Tooltip label={t('deepseek.notConfigured')} side="top" delayMs={400}>
+                <BaseTooltip label={t('deepseek.notConfigured')} side="top" delayMs={400}>
                   <span className={css.goChip}>—</span>
-                </Tooltip>
+                </BaseTooltip>
               )}
               {deepseek.status === 'error' && (
-                <Tooltip label={t('deepseek.unavailable')} side="top" delayMs={400}>
+                <BaseTooltip label={t('deepseek.unavailable')} side="top" delayMs={400}>
                   <span className={`${css.goChip} ${css.goChipOver}`}>!</span>
-                </Tooltip>
+                </BaseTooltip>
               )}
             </span>
           )}
@@ -894,7 +838,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           <Tooltip content={railContent} side="right" delayMs={500}>
             <span className={css.goRailChipBox}>
               <span className={css.goRailChipLabel}>{t('footer.todayLabel')}</span>
-              <span className={css.goRailChipPct} style={{ fontSize: 10, lineHeight: '12px', letterSpacing: '-0.2px' }}>
+              <span className={`${css.goRailChipPct} ${css.goRailChipPctCompact}`}>
                 {err ? '--' : fmt(todayTokens, tFn)}
               </span>
             </span>

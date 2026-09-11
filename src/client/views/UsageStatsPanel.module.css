@@ -1,5 +1,7 @@
 /* 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome ——
    头部、Tab 栏、可滚动内容区。颜色全部使用设计 token。 */
+/* 卡片内表面统一用 bg-layer-2：primitives Modal 的 dialog 就是这一层；
+   bg-base 在浅色下同为白色、深色下比卡片暗一档，会把头部与 Tab 栏画成黑带。 */
 /* 各 Tab 内容样式见对应 .module.css；跨组件共用基元见 UsageStatsCommon. */
 
 /* 模态卡片尺寸覆盖，叠加于 primitives Modal 的 dialog。
@@ -29,7 +31,7 @@
   padding: 12px 16px;
   box-sizing: border-box;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   border-radius: 20px 20px 0 0;
 }
 
@@ -94,7 +96,7 @@
   gap: 2px;
   padding: 0 8px;
   border-bottom: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -105,6 +107,7 @@
 
 .tab {
   flex: 1;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -112,31 +115,41 @@
   min-width: 0;
   padding: 8px 6px;
   border: none;
-  border-bottom: 2px solid transparent;
   background: transparent;
   font-family: inherit;
   font-size: 12px;
   line-height: 16px;
-  color: var(--dsw-alias-label-caption);
+  /* 未选中用 label-tertiary：caption 是说明性小字的颜色，深色下 12px 文字对比度不足。 */
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  transition: color 0.15s ease;
   white-space: nowrap;
 }
 
 .tab:hover {
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
-  border-radius: 6px 6px 0 0;
 }
 
 .tabOn {
-  color: var(--dsw-alias-brand-primary);
-  border-bottom-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
 }
 
-.tabOn:hover {
-  color: var(--dsw-alias-brand-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+/* 选中下划线：2px 圆头短条（与 dsh 设置页 tab 同一形态），避免深色下整条白边过硬。 */
+.tabOn::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--dsw-alias-label-primary);
+  content: '';
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 
 .tab svg {

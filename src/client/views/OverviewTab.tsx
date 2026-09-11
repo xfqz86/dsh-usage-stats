@@ -21,7 +21,7 @@ import { UsageHeatmap } from './UsageHeatmap.tsx';
 
 import type { DeepSeekBalance, DeepSeekBalanceInfo, ZaiQuota } from '../../types.ts';
 import type { LocaleFn } from '../locales.ts';
-import type { GoQuota } from '../useGoQuota.ts';
+import type { GoQuota } from '../useQuota.ts';
 import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 

@@ -86,7 +86,7 @@ export interface UsageAgg {
   total: number
 }
 
-/** 一组聚合计数：UsageAgg 加调用次数，统一 host 端 agg.ts 的 Agg 与 client 端 UsageAgg。 */
+/** 一组聚合计数：UsageAgg 加调用次数，host 折叠与 client 展示共用。 */
 export interface Agg extends UsageAgg {
   calls: number
 }
@@ -112,7 +112,7 @@ export interface ModelStat {
   series?: SeriesPoint[]
 }
 
-/** 快照中按会话的拆分条目，已含子代理归属字段，复用 SessionHeader 语义，序列化为 string、null。 */
+/** 快照中按会话的拆分条目，已含子代理归属字段，复用 SessionHeader 语义。 */
 export interface SessionStat {
   id: string
   title: string
@@ -127,9 +127,9 @@ export interface SessionStat {
 }
 
 /**
- * /usage-stats/api/snapshot 响应的 value 部分快照协议，为本插件自有 API 协议，
- * 见 AGENTS §3，host snapshot() 构建与 client useSnapshot 消费共用，避免两端镜像漂移。
- * 路由响应为 { ok, value } 外层包装，ok 由围栏与处理结果给出，此类型对应 value。
+ * usageStats/snapshot 的 value 部分快照协议，为本插件自有 API 协议，
+ * 见 AGENTS §8，host snapshot() 构建与 client useSnapshot 消费共用，避免两端镜像漂移。
+ * Remote 传输外层为 { ok, value } 信封，此类型对应成功时的 value。
  */
 export interface UsageSnapshot {
   scanning: boolean
@@ -149,4 +149,67 @@ export interface UsageSnapshot {
   series: { all: SeriesPoint[]; current: SeriesPoint[] }
   models: ModelStat[]
   sessionsList: SessionStat[]
+}
+
+/**
+ * Remote 请求与结果类型：每个 @Remote 方法取单个具名必填 request 对象
+ * （严格约定禁可选参数/解构/默认值，字段级可选不受限），返回结果值；
+ * 传输信封 RemoteResult（{ ok:true,value } | { ok:false,error }）由网关负责。
+ */
+
+/** usageStats/snapshot 请求：按会话过滤与明细分页上限。 */
+export interface SnapshotRequest {
+  sessionId: string | null
+  limit?: number
+}
+
+/** usageStats/rebuild 结果：清空账本后全量重扫的折叠事件数。 */
+export interface RebuildResult {
+  rebuilt: boolean
+  foldedEvents: number
+}
+
+/** usageStats/clear 结果：清空账本不重扫，计数归零。 */
+export interface ClearResult {
+  cleared: boolean
+  foldedEvents: number
+}
+
+/** usageStats/seal 结果：手动物化预统计的密封边界与事件数。 */
+export interface SealResult {
+  sealed: boolean
+  sealedUntil: number
+  foldedEvents: number
+}
+
+/** 额度/余额轮询请求：客户端抓取间隔与强制刷新。 */
+export interface QuotaRequest {
+  intervalMinutes?: number
+  force?: boolean
+}
+
+/**
+ * 插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控各三项，
+ * 字段与 `usage-stats` 设置命名空间（服务端 schemastery schema）一一对应。
+ * host 侧 schema 用它做泛型参数，client 侧经 settingsScope 取得同一形状。
+ */
+export interface UsageSettings {
+  /** 是否启用 OpenCode Go 额度监控，关闭后不再请求官方额度接口。 */
+  goEnabled: boolean
+  /** 是否在侧边栏底部展示 OpenCode Go 剩余额度芯片。 */
+  showGoInSidebar: boolean
+  /** OpenCode Go 额度抓取间隔，单位分钟，下限 3 分钟。 */
+  goFetchMinutes: number
+  /** 是否启用 DeepSeek 余额监控，关闭后不再请求官方余额接口。 */
+  deepseekEnabled: boolean
+  /** 是否在侧边栏底部展示 DeepSeek 余额芯片。 */
+  showDeepSeekInSidebar: boolean
+  /** DeepSeek 余额抓取间隔，单位分钟，下限 3 分钟。 */
+  deepseekFetchMinutes: number
+  /** 是否启用 Z.ai 额度监控，关闭后不再请求官方额度接口。 */
+  zaiEnabled: boolean
+  /** 是否在侧边栏底部展示 Z.ai 额度芯片。 */
+  showZaiInSidebar: boolean
+  /** Z.ai 额度抓取间隔，单位分钟，下限 3 分钟。 */
+  zaiFetchMinutes: number
 }

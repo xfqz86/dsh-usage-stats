@@ -1,5 +1,6 @@
 /* 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、
-   抓取间隔数字输入、可折叠账本操作与底部页脚。颜色全部使用设计 token。 */
+   抓取间隔数字输入、可折叠账本操作与底部页脚。颜色全部使用设计 token
+   （token 名以 test/styles.mjs 对照 harness 主题校验，不得自造）。 */
 /* .section* / .goHint 等基元见 UsageStatsCommon.module.css。 */
 
 /* ---- 重建账本操作按钮 ---- */
@@ -36,6 +37,13 @@
 
 .refreshBtn:disabled {
   cursor: not-allowed;
+  opacity: 0.6;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 禁用态不响应悬浮：避免置灰按钮仍有按下感（扫描进行中的账本操作） */
+.refreshBtn:disabled:hover {
+  background: transparent;
 }
 
 /* ---- Go、DeepSeek 偏好设置分组 — 卡片式分组，头部带图标与底部分割 ---- */
@@ -43,7 +51,7 @@
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: var(--dsw-shadow-lv1);
 }
 
@@ -52,7 +60,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--dsw-alias-bg-subtle, var(--dsw-alias-bg-fill, #f6f7f9));
+  background: var(--dsw-alias-interactive-bg-hover);
   border-bottom: 1px solid var(--dsw-alias-border-l1);
 }
 
@@ -63,14 +71,16 @@
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: var(--dsw-alias-brand-bg, #eef2ff);
-  color: var(--dsw-alias-brand-primary, #4d6bfe);
+  /* 品牌底用 state-business-primary（DeepSeek 蓝，两套主题恒定色调），
+     不用 brand-primary——后者是文字前景色，深色模式近白，做底色会变成浅色块。 */
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, transparent);
+  color: var(--dsw-alias-state-business-primary);
   flex: none;
 }
 
 .prefGroupIconDeepSeek {
-  background: var(--dsw-alias-state-success-bg, #e6f6ec);
-  color: var(--dsw-alias-state-success-primary, #1a7f37);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+  color: var(--dsw-alias-state-success-primary);
 }
 
 .prefGroupTitle {
@@ -86,7 +96,7 @@
   font-size: 11px;
   line-height: 14px;
   color: var(--dsw-alias-label-tertiary);
-  background: var(--dsw-alias-bg-fill, #f0f1f3);
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent);
   padding: 2px 6px;
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
@@ -106,7 +116,7 @@
 }
 
 .settingRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,0.03));
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .settingRow + .settingRow {
@@ -154,7 +164,7 @@
   padding: 4px 8px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   font-family: inherit;
   font-size: 12px;
   line-height: 16px;

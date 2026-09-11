@@ -7,14 +7,30 @@
  */
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Readable } from 'node:stream';
+import { constants, zstdCompressSync } from 'node:zlib';
 
 import { ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
 import { fetchDeepSeekBalance, queryDeepSeekBalance } from '../src/host/deepseekBalance.ts';
 import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
-import { hasUsageStatsHeader, isLoopbackHost, readJsonBody } from '../src/host/http.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
-import { createStore } from '../src/host/store.ts';
+import { UsageSettingsSchema, registerUsageSettings } from '../src/host/settings.ts';
+import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
+import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
+import {
+  LEGACY_STORAGE_KEY,
+  attachUsageSettings,
+  clearLegacySettings,
+  detachUsageSettings,
+  diffFromDefaults,
+  migrateLegacySettings,
+  readLegacySettings,
+  settingOps,
+  subscribeUsageSettings,
+  updateUsageSettings,
+  usageSettingsView,
+} from '../src/client/settings.ts';
+import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
+import { createStore, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from '../src/host/store.ts';
 import { snapshot } from '../src/host/snapshot.ts';
 import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
@@ -42,17 +58,29 @@ import {
   usageTotal,
 } from '../src/client/stats.ts';
 import {
+  DEEPSEEK_FETCH_DEFAULT_MINUTES,
+  DEEPSEEK_FETCH_MIN_MINUTES,
   DAY_MS,
+  GO_FETCH_DEFAULT_MINUTES,
+  GO_FETCH_MIN_MINUTES,
   QUOTA_CACHE_TTL_MS,
   QUOTA_MIN_FETCH_MS,
   SERIES_MAX_DAYS,
+  USAGE_SETTINGS_DEFAULTS,
+  USAGE_SETTINGS_NAMESPACE,
+  ZAI_FETCH_DEFAULT_MINUTES,
+  ZAI_FETCH_MIN_MINUTES,
   cacheTotal,
+  clampDeepSeekFetchMinutes,
+  clampGoFetchMinutes,
+  clampZaiFetchMinutes,
   dateKeyOf,
   effectiveQuotaTtl,
   errorMessage,
   goLevelOf,
   goPercent,
   goResetsAt,
+  normalizeUsageSettings,
   parseJsonLine,
   splitModelKey,
   startOfDay,
@@ -236,17 +264,25 @@ describe('agg：口径', () => {
     assert.equal(a.calls, 1);
   });
 
-  it('usable 仅放行带 usage 的 assistant/message', () => {
+  it('usable 放行带 usage 的计量事件（对话与压缩调用）', () => {
     assert.equal(usable({ type: 'assistant/message', data: { usage: {} } }), true);
+    assert.equal(usable({ type: 'compaction/summary', data: { usage: {} } }), true);
     assert.equal(usable({ type: 'session' }), false);
     assert.equal(usable({ type: 'assistant/message', data: {} }), false);
     assert.equal(usable({ type: 'assistant/message' }), false);
+    assert.equal(usable({ type: 'compaction/summary', data: {} }), false);
+    assert.equal(usable({ type: 'compaction/summary' }), false);
+    // assistant/attempt 的用量是流式中间态，会与同 turn 的 assistant/message 重复，不收
+    assert.equal(usable({ type: 'assistant/attempt', data: { usage: {} } }), false);
   });
 
   it('modelKeyOf 缺失记 unknown', () => {
     assert.equal(modelKeyOf({ type: 'assistant/message', data: { message: { source: { provider: 'p', model: 'm' } } } }), 'p\0m');
     assert.equal(modelKeyOf({ type: 'assistant/message', data: {} }), 'unknown\0unknown');
     assert.equal(modelKeyOf({ type: 'assistant/message', data: { message: { source: { provider: '', model: '' } } } }), 'unknown\0unknown');
+    // 压缩调用的模型身份在 data.provider/data.model，不在 message.source
+    assert.equal(modelKeyOf({ type: 'compaction/summary', data: { provider: 'opencode-go', model: 'deepseek-v4-flash' } }), 'opencode-go\0deepseek-v4-flash');
+    assert.equal(modelKeyOf({ type: 'compaction/summary', data: {} }), 'unknown\0unknown');
   });
 });
 
@@ -264,36 +300,208 @@ describe('logs：行解析', () => {
   });
 });
 
-describe('http：围栏与请求体', () => {
-  it('isLoopbackHost 仅放行回环', () => {
-    assert.equal(isLoopbackHost('127.0.0.1:3080'), true);
-    assert.equal(isLoopbackHost('127.0.0.5'), true);
-    assert.equal(isLoopbackHost('localhost'), true);
-    assert.equal(isLoopbackHost('LOCALHOST:80'), true);
-    assert.equal(isLoopbackHost('::1'), true);
-    assert.equal(isLoopbackHost('[::1]:3080'), true);
-    assert.equal(isLoopbackHost('127.0.0.1.evil.com'), false);
-    assert.equal(isLoopbackHost('192.168.1.1'), false);
-    assert.equal(isLoopbackHost(undefined), false);
-    assert.equal(isLoopbackHost(''), false);
+/** 压缩一段文本为一帧：与 harness 一致带 checksum，覆盖帧头 checksum 分支。 */
+const zstdFrame = (text) => zstdCompressSync(Buffer.from(text, 'utf8'), {
+  params: { [constants.ZSTD_c_checksumFlag]: 1 },
+});
+
+describe('rawlog：代次识别与多帧 zstd 解码', () => {
+  it('parseGenerationName 识别全代次，非规范名 -1', () => {
+    assert.equal(parseGenerationName('session.jsonl.zstd'), 0);
+    assert.equal(parseGenerationName('session.v2.jsonl.zstd'), 2);
+    assert.equal(parseGenerationName('session.v3.jsonl.zstd'), 3);
+    assert.equal(parseGenerationName('session.jsonl'), 0);
+    assert.equal(parseGenerationName('session.v1.jsonl'), 1);
+    assert.equal(parseGenerationName('session.v12.jsonl.zstd'), 12);
+    for (const bad of [
+      'session.lock', 'session.v0.jsonl.zstd', 'session.v01.jsonl.zstd',
+      'SESSION.V2.JSONL.ZSTD', 'session.jsonl.zstd.tmp', 'notes.txt', '',
+    ]) {
+      assert.equal(parseGenerationName(bad), -1, bad);
+    }
+    assert.deepEqual(parseSessionLogName('session.v2.jsonl.zstd'), { generation: 2, compression: 'zstd' });
+    assert.deepEqual(parseSessionLogName('session.jsonl'), { generation: 0, compression: 'none' });
+    assert.equal(parseSessionLogName('session.lock'), null);
   });
 
-  it('hasUsageStatsHeader 精确匹配', () => {
-    assert.equal(hasUsageStatsHeader({ 'x-dsh-usage-stats': 'dsh-usage-stats' }), true);
-    assert.equal(hasUsageStatsHeader({ 'x-dsh-usage-stats': ['a', 'dsh-usage-stats'] }), true);
-    assert.equal(hasUsageStatsHeader({}), false);
-    assert.equal(hasUsageStatsHeader({ 'x-dsh-usage-stats': 'other' }), false);
-    assert.equal(hasUsageStatsHeader(undefined), false);
+  it('单帧解码等于原文，帧数 1', () => {
+    const text = '{"type":"session","id":"s"}\n{"type":"assistant/message"}\n';
+    const buffer = zstdFrame(text);
+    assert.equal(decodeSessionLog(buffer, 'zstd'), text);
+    assert.equal(scanZstdFrames(buffer).frames.length, 1);
+    assert.equal(scanZstdFrames(buffer).tornStart, undefined);
   });
 
-  it('readJsonBody 正常与空体', async () => {
-    assert.deepEqual(await readJsonBody(Readable.from([Buffer.from('{"a":1}')])), { a: 1 });
-    assert.deepEqual(await readJsonBody(Readable.from([Buffer.from('  ')])), {});
+  it('多帧拼接逐帧解压得到完整文本', () => {
+    const chunks = [
+      '{"type":"session","id":"s"}\n',
+      '{"type":"assistant/message","i":1}\n',
+      '{"type":"assistant/message","i":2}\n{"type":"assistant/message","i":3}\n',
+    ];
+    const buffer = Buffer.concat(chunks.map(zstdFrame));
+    assert.equal(decodeSessionLog(buffer, 'zstd'), chunks.join(''));
+    assert.equal(scanZstdFrames(buffer).frames.length, chunks.length);
+    // 帧区间连续覆盖整个文件且互不重叠
+    const scan = scanZstdFrames(buffer);
+    assert.equal(scan.frames[0].start, 0);
+    assert.equal(scan.frames.at(-1).end, buffer.length);
+    for (let i = 1; i < scan.frames.length; i += 1) {
+      assert.equal(scan.frames[i].start, scan.frames[i - 1].end);
+    }
   });
 
-  it('readJsonBody 非法与超限英文报错', async () => {
-    await assert.rejects(readJsonBody(Readable.from([Buffer.from('{bad')])), /not valid JSON/);
-    await assert.rejects(readJsonBody(Readable.from([Buffer.alloc(1_200_000)])), /too large/);
+  it('真实规模形态：1400 段逐帧追加，解出行数一致', () => {
+    // 模拟 harness append-only 写入：每帧若干条事件，首帧为会话头。
+    const chunks = ['{"type":"session","id":"s"}\n'];
+    for (let i = 1; i < 1400; i += 1) chunks.push(`{"type":"assistant/message","i":${i}}\n`);
+    const buffer = Buffer.concat(chunks.map(zstdFrame));
+    const scan = scanZstdFrames(buffer);
+    assert.equal(scan.frames.length, 1400);
+    const text = decodeSessionLog(buffer, 'zstd');
+    assert.equal(text, chunks.join(''));
+    assert.equal(text.split('\n').filter(Boolean).length, 1400);
+  });
+
+  it('未压缩明文原样返回，含中文多字节', () => {
+    const text = '{"type":"session","title":"中文标题"}\n{"type":"assistant/message"}\n';
+    assert.equal(decodeSessionLog(Buffer.from(text, 'utf8'), 'none'), text);
+  });
+
+  it('截断尾帧按 harness 语义只保留完整部分', () => {
+    const a = '{"type":"session","id":"s"}\n';
+    const b = '{"type":"assistant/message","i":1}\n{"type":"assistant/message","i":2}\n';
+    const frameA = zstdFrame(a);
+    const frameB = zstdFrame(b);
+    // 尾帧 payload 被切断：该帧一个 block 都不完整，整帧丢弃
+    const cutPayload = Buffer.concat([frameA, frameB.subarray(0, frameB.length - 12)]);
+    assert.equal(decodeSessionLog(cutPayload, 'zstd'), a);
+    assert.equal(scanZstdFrames(cutPayload).tornStart, frameA.length);
+    // 尾帧仅缺 checksum：payload 完整，按 harness 迁移语义恢复明文
+    const cutChecksum = Buffer.concat([frameA, frameB.subarray(0, frameB.length - 3)]);
+    assert.equal(decodeSessionLog(cutChecksum, 'zstd'), a + b);
+    // 只有不完整首帧：不抛错，返回空串
+    const tornOnly = frameA.subarray(0, 8);
+    assert.equal(scanZstdFrames(tornOnly).tornStart, 0);
+    assert.equal(decodeSessionLog(tornOnly, 'zstd'), '');
+  });
+
+  it('空文件返回空串，坏帧抛错', () => {
+    assert.equal(decodeSessionLog(Buffer.alloc(0), 'zstd'), '');
+    assert.deepEqual(scanZstdFrames(Buffer.alloc(0)).frames, []);
+    const badMagic = Buffer.from([0, 1, 2, 3]);
+    assert.throws(() => scanZstdFrames(badMagic), /invalid frame magic at byte 0/);
+    assert.throws(() => decodeSessionLog(badMagic, 'zstd'), /invalid frame magic at byte 0/);
+    // 完整帧后跟坏 magic：结构非法，同 harness 语义抛错
+    const trailingGarbage = Buffer.concat([zstdFrame('{"type":"a"}\n'), Buffer.from([9, 9, 9, 9])]);
+    assert.throws(() => scanZstdFrames(trailingGarbage), /invalid frame magic at byte /);
+    // 完整帧被篡改：帧校验失败抛错
+    const tampered = Buffer.from(zstdFrame('{"type":"a"}\n'));
+    tampered[tampered.length - 6] ^= 0xFF;
+    assert.throws(() => decodeSessionLog(tampered, 'zstd'), /failed validation/);
+  });
+});
+
+describe('fork 继承前缀：只折本会话自有事件', () => {
+  it('inheritedPrefixOf 取最后一个 inherited 标记之后偏移一位', () => {
+    const records = [
+      { type: 'session', id: 'child', parentSession: 'parent' },
+      { type: 'assistant/message', seq: 0 },
+      { type: 'session/end-seed', seq: 1, data: { inherited: true } },
+      { type: 'assistant/message', seq: 2 },
+    ];
+    assert.equal(inheritedPrefixOf(records), 2);
+    // 无标记（普通会话）与自身 seed（resume，inherited 非 true）都不算继承
+    assert.equal(inheritedPrefixOf([{ type: 'assistant/message', seq: 0 }]), 0);
+    assert.equal(inheritedPrefixOf([{ type: 'session/end-seed', seq: 3, data: {} }]), 0);
+    assert.equal(inheritedPrefixOf([]), 0);
+    // 多个标记取最大 seq，坏记录跳过
+    assert.equal(inheritedPrefixOf([null, 7, { type: 'session/end-seed', seq: 5, data: { inherited: true } }, { type: 'session/end-seed', seq: 3, data: { inherited: true } }]), 6);
+  });
+
+  it('liveEventsOf 丢继承前缀，保留无 seq 的 header 记录', () => {
+    const records = [
+      { type: 'session', id: 'child' },
+      { type: 'assistant/message', seq: 0, data: { usage: { inputTokens: 1 } } },
+      { type: 'session/end-seed', seq: 1, data: { inherited: true } },
+      { type: 'assistant/message', seq: 2, data: { usage: { inputTokens: 9 } } },
+    ];
+    const live = liveEventsOf(records, 2);
+    assert.deepEqual(live.map((r) => r.seq ?? 'header'), ['header', 2]);
+    // inherited 为 0 时原样返回，不做拷贝
+    assert.equal(liveEventsOf(records, 0), records);
+  });
+
+  it('inheritedCountOf 归一 harness 元数据', () => {
+    assert.equal(inheritedCountOf(3), 3);
+    assert.equal(inheritedCountOf(0), 0);
+    assert.equal(inheritedCountOf(undefined), 0);
+    assert.equal(inheritedCountOf(-2), 0);
+    assert.equal(inheritedCountOf(Number.NaN), 0);
+    assert.equal(inheritedCountOf('4'), 4);
+  });
+});
+
+describe('remote：手写严格贡献', () => {
+  it('7 个一元方法与服务一致', () => {
+    assert.deepEqual([...METHOD_NAMES], [
+      'snapshot', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
+    ]);
+    assert.equal(USAGE_STATS_REMOTE.package, '@xfqz86/dsh-usage-stats');
+    assert.deepEqual(
+      USAGE_STATS_REMOTE.descriptors.map((d) => d.method),
+      [...METHOD_NAMES],
+    );
+    for (const d of USAGE_STATS_REMOTE.descriptors) {
+      assert.equal(d.service, 'usageStats');
+      assert.equal(d.namespace, 'usageStats');
+      assert.deepEqual(d.invocation, { kind: 'direct' });
+      assert.equal(d.cancellation, undefined);
+      for (const p of d.parameters) assert.equal(p.codec.mode, 'strict');
+      assert.equal(d.result.mode, 'strict');
+    }
+  });
+
+  it('请求 schema 收发合法、拒非法', () => {
+    const snap = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'snapshot');
+    assert.ok(snap && snap.parameters.length === 1);
+    const codec = snap.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    codec.schema.parse({ sessionId: null });
+    codec.schema.parse({ sessionId: 's-1', limit: 500 });
+    assert.throws(() => codec.schema.parse({ sessionId: 42 }));
+    assert.throws(() => codec.schema.parse({ sessionId: null, limit: 'x' }));
+  });
+
+  it('结果信封成功分支严格、错误分支透传', () => {
+    const quota = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'goQuota');
+    assert.ok(quota);
+    assert.equal(quota.result.mode, 'strict');
+    if (quota.result.mode !== 'strict') throw new Error('unreachable');
+    const { schema } = quota.result;
+    // 成功分支缺字段必须拒绝（值分支精确）。
+    assert.throws(() => schema.parse({ ok: true, value: {} }));
+    // 错误分支接受已知码与未知码（网关透传不断信封解析）。
+    schema.parse({ ok: false, error: { code: 'usageStats/busy', message: 'busy', details: { operation: 'rebuild' } } });
+    schema.parse({ ok: false, error: { code: 'gateway/internal', message: 'boom', details: {} } });
+  });
+});
+
+describe('remote句柄：经 get 取命名空间服务', () => {
+  it('不暂存 ctx.remote：子 scope 里对暂存句柄的属性访问报 without-inject', async () => {
+    // 命名空间服务桩：只有 get 能拿到，remote 上故意不挂 usageStats 属性。
+    const ns = { snapshot: async () => ({ ok: true, value: {} }) };
+    let alive = false;
+    const fakeCtx = {
+      remote: { $mount: async () => { alive = true; return async () => { alive = false; }; } },
+      get: (key) => (alive && key === 'remote.usageStats' ? ns : undefined),
+    };
+    assert.throws(() => usageStatsRemote(), /尚未挂载/);
+    const dispose = await mountUsageStatsRemote(fakeCtx);
+    // 若实现改回暂存 ctx.remote 再读 .usageStats，这里拿到的是 undefined。
+    assert.equal(usageStatsRemote(), ns);
+    await dispose();
+    assert.throws(() => usageStatsRemote(), /尚未挂载/);
   });
 });
 
@@ -792,5 +1000,298 @@ describe('quota：zai', () => {
     } finally {
       restore();
     }
+  });
+});
+
+// ---- 偏好设置：归一化、夹取、作用域存储与旧 localStorage 迁移（服务端设置文档为准）----
+
+/** 构造设置作用域替身：持有一份快照，mutate 记录操作并按路径写回取值。 */
+function fakeScope(initial) {
+  const state = {
+    status: initial?.status ?? 'ready',
+    value: initial?.value,
+    user: initial?.user,
+    base: undefined,
+    revision: 1,
+    writable: initial?.writable ?? true,
+    mode: 'host',
+  };
+  const listeners = new Set();
+  const calls = [];
+  // 快照对象引用稳定（与真实 settingsScope 的 store 一致）：状态变更时才换新对象。
+  let snapshot = { ...state };
+  const publish = () => {
+    snapshot = { ...state };
+    for (const fn of listeners) fn();
+  };
+  const scope = {
+    getSnapshot: () => snapshot,
+    subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn) },
+    mutate: async (ops) => {
+      calls.push(ops);
+      for (const op of ops) {
+        if (op.op === 'set') state.value = { ...state.value, [op.path[0]]: op.value };
+      }
+      state.user = { ...(state.user ?? {}), ...Object.fromEntries(ops.filter(o => o.op === 'set').map(o => [o.path[0], o.value])) };
+      state.revision += 1;
+      publish();
+    },
+  };
+  return {
+    scope,
+    calls,
+    state,
+    listeners,
+    /** 模拟异步落定：改状态并通知订阅者。 */
+    apply: (patch) => { Object.assign(state, patch); publish(); },
+  };
+}
+
+/** localStorage 替身：只有 getItem/removeItem 两个被用到的能力。 */
+function fakeStorage(initial) {
+  const map = new Map(Object.entries(initial ?? {}));
+  return {
+    store: map,
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    removeItem: (key) => { map.delete(key); },
+    has: (key) => map.has(key),
+  };
+}
+
+describe('偏好设置：归一化与写入操作', () => {
+  it('命名空间名与默认值自洽，坏值逐字段回退', () => {
+    assert.equal(USAGE_SETTINGS_NAMESPACE, 'usage-stats');
+    assert.deepEqual(normalizeUsageSettings(null), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(normalizeUsageSettings(undefined), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(normalizeUsageSettings({}), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(
+      normalizeUsageSettings({ goEnabled: 'on', showZaiInSidebar: 1, zaiFetchMinutes: 'soon' }),
+      USAGE_SETTINGS_DEFAULTS,
+    );
+  });
+
+  it('间隔夹到下限、小数取整，非有限值回退默认', () => {
+    assert.equal(normalizeUsageSettings({ goFetchMinutes: 1 }).goFetchMinutes, GO_FETCH_MIN_MINUTES);
+    assert.equal(normalizeUsageSettings({ goFetchMinutes: 12.6 }).goFetchMinutes, 13);
+    assert.equal(normalizeUsageSettings({ goFetchMinutes: Number.NaN }).goFetchMinutes, GO_FETCH_DEFAULT_MINUTES);
+    assert.equal(normalizeUsageSettings({ deepseekFetchMinutes: 0 }).deepseekFetchMinutes, DEEPSEEK_FETCH_MIN_MINUTES);
+    assert.equal(normalizeUsageSettings({ zaiFetchMinutes: -5 }).zaiFetchMinutes, ZAI_FETCH_MIN_MINUTES);
+    assert.equal(ZAI_FETCH_DEFAULT_MINUTES, 5);
+    assert.equal(clampGoFetchMinutes(Number.POSITIVE_INFINITY), GO_FETCH_DEFAULT_MINUTES);
+    assert.equal(clampDeepSeekFetchMinutes(4.4), 4);
+    assert.equal(clampZaiFetchMinutes(2), ZAI_FETCH_MIN_MINUTES);
+  });
+
+  it('局部偏好只生成显式字段的路径写入，间隔先夹取', () => {
+    assert.deepEqual(settingOps({ goEnabled: false }), [{ op: 'set', path: ['goEnabled'], value: false }]);
+    assert.deepEqual(settingOps({ zaiFetchMinutes: 1 }), [{ op: 'set', path: ['zaiFetchMinutes'], value: ZAI_FETCH_MIN_MINUTES }]);
+    assert.deepEqual(settingOps({ goEnabled: undefined, deepseekEnabled: true }), [{ op: 'set', path: ['deepseekEnabled'], value: true }]);
+    assert.deepEqual(settingOps({}), []);
+  });
+
+  it('迁移只写与默认值不同的字段', () => {
+    assert.deepEqual(diffFromDefaults(USAGE_SETTINGS_DEFAULTS), {});
+    assert.deepEqual(
+      diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, showGoInSidebar: false, zaiFetchMinutes: 9 }),
+      { showGoInSidebar: false, zaiFetchMinutes: 9 },
+    );
+  });
+});
+
+describe('偏好设置：作用域视图与写入', () => {
+  afterEach(() => { detachUsageSettings(); });
+
+  it('未绑定作用域时视图为默认值且不可写状态为 unavailable', () => {
+    assert.deepEqual(usageSettingsView(), { settings: USAGE_SETTINGS_DEFAULTS, status: 'unavailable', writable: false });
+    // 未绑定作用域：写入与订阅都不抛错
+    updateUsageSettings({ goEnabled: false });
+    assert.equal(typeof subscribeUsageSettings(() => {}), 'function');
+  });
+
+  it('绑定后视图取自作用域快照，同一快照引用稳定、坏值归一化', () => {
+    const { scope } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 1 } });
+    attachUsageSettings(scope);
+    const first = usageSettingsView();
+    assert.equal(first.status, 'ready');
+    assert.equal(first.writable, true);
+    assert.equal(first.settings.goFetchMinutes, GO_FETCH_MIN_MINUTES);
+    assert.equal(usageSettingsView(), first);
+  });
+
+  it('写入走作用域 mutate，订阅转发作用域变更', async () => {
+    const { scope, calls, listeners } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    attachUsageSettings(scope);
+    let notified = 0;
+    const unsubscribe = subscribeUsageSettings(() => { notified += 1; });
+    updateUsageSettings({ goFetchMinutes: 2, showDeepSeekInSidebar: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(calls, [[
+      { op: 'set', path: ['goFetchMinutes'], value: GO_FETCH_MIN_MINUTES },
+      { op: 'set', path: ['showDeepSeekInSidebar'], value: false },
+    ]]);
+    assert.equal(notified, 1);
+    unsubscribe();
+    assert.equal(listeners.size, 0);
+    assert.equal(usageSettingsView().settings.showDeepSeekInSidebar, false);
+  });
+
+  it('作用域落定为不可用或只读时不发注定被拒的写入，加载中照发', async () => {
+    const unavailable = fakeScope({ value: undefined, status: 'unavailable' });
+    attachUsageSettings(unavailable.scope);
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(unavailable.calls, []);
+
+    const readOnly = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, writable: false });
+    attachUsageSettings(readOnly.scope);
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(readOnly.calls, []);
+
+    // 仍在加载：服务端可能接受，照发
+    const loading = fakeScope({ value: undefined, status: 'loading' });
+    attachUsageSettings(loading.scope);
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(loading.calls, [[{ op: 'set', path: ['goEnabled'], value: false }]]);
+  });
+
+  it('解绑带作用域身份：旧清理不会抹掉后挂上的新作用域（热重载）', () => {
+    const first = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 9 } });
+    const second = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, zaiFetchMinutes: 7 } });
+    attachUsageSettings(first.scope);
+    attachUsageSettings(second.scope);
+    // 旧 fiber 的清理跑在新 apply 之后：只解绑自己那一个。
+    detachUsageSettings(first.scope);
+    assert.equal(usageSettingsView().settings.zaiFetchMinutes, 7);
+    detachUsageSettings(second.scope);
+    assert.deepEqual(usageSettingsView().settings, USAGE_SETTINGS_DEFAULTS);
+    assert.equal(usageSettingsView().status, 'unavailable');
+    // 省略参数仍是无条件解绑（测试与手动复位用）
+    attachUsageSettings(first.scope);
+    detachUsageSettings();
+    assert.equal(usageSettingsView().status, 'unavailable');
+  });
+
+  it('解绑后写入不再落作用域，视图回退默认值', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    attachUsageSettings(scope);
+    detachUsageSettings();
+    updateUsageSettings({ goEnabled: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(calls, []);
+    assert.deepEqual(usageSettingsView().settings, USAGE_SETTINGS_DEFAULTS);
+  });
+});
+
+describe('偏好设置：旧 localStorage 迁移', () => {
+  afterEach(() => { detachUsageSettings(); });
+
+  it('读取旧值做归一化，坏 JSON 返回 null', () => {
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ goFetchMinutes: 1, zaiEnabled: false }) });
+    assert.deepEqual(readLegacySettings(storage), { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: GO_FETCH_MIN_MINUTES, zaiEnabled: false });
+    assert.equal(readLegacySettings(fakeStorage({ [LEGACY_STORAGE_KEY]: '{oops' })), null);
+    assert.equal(readLegacySettings(fakeStorage({})), null);
+  });
+
+  it('作用域就绪且无用户段时把旧偏好写进设置文档并删键', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, showGoInSidebar: false, zaiFetchMinutes: 9 }) });
+    assert.equal(await migrateLegacySettings(scope, storage), true);
+    assert.deepEqual(calls, [[
+      { op: 'set', path: ['showGoInSidebar'], value: false },
+      { op: 'set', path: ['zaiFetchMinutes'], value: 9 },
+    ]]);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+  });
+
+  it('用户已改过设置文档时不覆盖，旧键仍删除', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, user: { goEnabled: false } });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, showGoInSidebar: false }) });
+    assert.equal(await migrateLegacySettings(scope, storage), false);
+    assert.deepEqual(calls, []);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+  });
+
+  it('作用域一直 loading 时等落定，超时后不写文档也不删旧键', async () => {
+    const notReady = fakeScope({ value: undefined, status: 'loading' });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    assert.equal(await migrateLegacySettings(notReady.scope, storage, 20), false);
+    assert.deepEqual(notReady.calls, []);
+    // 保留旧键：此刻没有可靠落点，删掉等于丢设置。
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), true);
+  });
+
+  it('loading 期间落定为就绪则照常迁移', async () => {
+    const pending = fakeScope({ value: undefined, status: 'loading' });
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    const migrating = migrateLegacySettings(pending.scope, storage, 1_000);
+    setTimeout(() => { pending.apply({ status: 'ready', value: { ...USAGE_SETTINGS_DEFAULTS } }); }, 10);
+    assert.equal(await migrating, true);
+    assert.deepEqual(pending.calls, [[{ op: 'set', path: ['goEnabled'], value: false }]]);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+  });
+
+  it('服务端设置不可用或只读时保留旧键', async () => {
+    const unavailable = fakeScope({ value: undefined, status: 'unavailable' });
+    const storageA = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    assert.equal(await migrateLegacySettings(unavailable.scope, storageA, 20), false);
+    assert.deepEqual(unavailable.calls, []);
+    assert.equal(storageA.has(LEGACY_STORAGE_KEY), true);
+
+    const readOnly = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, writable: false });
+    const storageB = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify({ ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }) });
+    assert.equal(await migrateLegacySettings(readOnly.scope, storageB, 20), false);
+    assert.deepEqual(readOnly.calls, []);
+    assert.equal(storageB.has(LEGACY_STORAGE_KEY), true);
+  });
+
+  it('无旧键时不动作；旧值与默认值相同也不写文档', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    assert.equal(await migrateLegacySettings(scope, fakeStorage({})), false);
+    const storage = fakeStorage({ [LEGACY_STORAGE_KEY]: JSON.stringify(USAGE_SETTINGS_DEFAULTS) });
+    assert.equal(await migrateLegacySettings(scope, storage), false);
+    assert.deepEqual(calls, []);
+    assert.equal(storage.has(LEGACY_STORAGE_KEY), false);
+    // clearLegacySettings 幂等且存储缺席时不抛错
+    clearLegacySettings(storage);
+    clearLegacySettings(undefined);
+  });
+});
+
+// ---- 服务端偏好设置：命名空间注册与降级 ----
+
+describe('偏好设置：服务端命名空间注册', () => {
+  it('注册 usage-stats 命名空间与 schema，schema 解析值等于共享默认值', () => {
+    const injected = [];
+    const registered = [];
+    const ctx = {
+      inject: (deps, callback) => {
+        injected.push(deps);
+        return callback({ settings: { register: (...args) => { registered.push(args); } } });
+      },
+    };
+    registerUsageSettings(ctx);
+    assert.deepEqual(injected, [['settings']]);
+    assert.equal(registered.length, 1);
+    assert.equal(registered[0][0], USAGE_SETTINGS_NAMESPACE);
+    assert.equal(registered[0][1], UsageSettingsSchema);
+    // schema 默认值与 utils.ts 的 USAGE_SETTINGS_DEFAULTS 同源：两处漂移即失败。
+    assert.deepEqual(UsageSettingsSchema({}), USAGE_SETTINGS_DEFAULTS);
+    assert.deepEqual(UsageSettingsSchema({ showZaiInSidebar: false }), { ...USAGE_SETTINGS_DEFAULTS, showZaiInSidebar: false });
+  });
+
+  it('注册失败只降级偏好，不向调用方抛错（统计主职责不受影响）', () => {
+    const ctx = { inject: (_deps, callback) => callback({ settings: { register: () => { throw new Error('namespace already registered'); } } }) };
+    const realWarn = console.warn;
+    const warnings = [];
+    console.warn = (...args) => { warnings.push(args); };
+    try {
+      assert.doesNotThrow(() => { registerUsageSettings(ctx); });
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.match(String(warnings[0][0]), /偏好设置命名空间注册失败/);
   });
 });

@@ -64,7 +64,7 @@
   padding: 8px 10px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: var(--dsw-shadow-lv1);
 }
 
@@ -168,7 +168,7 @@
   flex: none;
   height: 6px;
   border-radius: 3px;
-  background: var(--dsw-alias-bg-fill-2, var(--dsw-alias-interactive-bg-hover));
+  background: var(--dsw-alias-interactive-bg-hover);
   overflow: hidden;
 }
 

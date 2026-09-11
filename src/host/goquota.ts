@@ -89,6 +89,6 @@ export async function fetchGoQuota(credentials?: CredentialsService): Promise<Go
  *   未提供时用默认 5 分钟。
  * @param force 为 true 时绕过 TTL 缓存强制重新抓取，供概览 Go 磁贴的“立即
  *   刷新”按钮使用；仍走单飞，避免并发打官方端点。
- * @param credentials DSH 凭据中心，必选，仅 OPENCODE_GO_API_KEY。
+ * @param credentials DSH 凭据中心，可选，缺席时返回 no-key，仅 OPENCODE_GO_API_KEY。
  */
 export const queryGoQuota = createQuotaQuery((credentials?: CredentialsService) => fetchGoQuota(credentials));

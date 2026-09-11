@@ -67,12 +67,26 @@
 
 ## 8. CSS 与内联样式
 
-- 静态样式走 `*.module.css`，颜色 `var(--dsw-alias-*, fallback)` 写法（含 fallback）；
+- 静态样式走 `*.module.css`，颜色与动效只引用主题包声明过的变量
+  （`--dsw-*` / `--ds-*`，`test/styles.mjs` 对照 `@deepseek-ai/dsh-client-ui-theme` 校验，
+  `pnpm test:styles` 可单独跑）；**不写自定义属性兜底**——主题缺声明时兜底值会
+  在深色模式把浅色写死，症状是白色色块而不是报错，让唯一门禁（该测试）失效。
   唯一豁免是图表数据色（`MODEL_PALETTE`/`DATE_TOKEN_META`/`HIT_RATE_COLOR` 集中于 `stats.ts`），
   因 SVG `fill` 属性不解析 `var()`。
+- 文字色按用途选，不按“看起来够灰”：正文与可点文字用 `label-primary`/`label-secondary`/`label-tertiary`，
+  `label-caption` 只给说明性小标签（分区标题、表头、状态胶囊）。深色模式下 caption 在 12px 文字上
+  对比度不足（约 3.8:1），**Tab 这类可点文字用 `label-tertiary` 起**（对齐 harness 的 tab 写法）。
+- 模态窗内的表面（卡片、磁贴、图表卡、吸顶表头、分页条、输入框）一律 `bg-layer-2`：
+  卡片底色由 primitives Modal 的 dialog 铺设（就是这一层），浅色下与 `bg-base` 同为白色、视觉无差，
+  深色下 `bg-base` 比卡片暗一档，会把整条栏画成黑带。
 - tsx 内联 `style` 只放动态值（颜色/尺寸/定位）；悬浮叠加层（如命中率折线 svg）
   必须 `pointer-events: none`，几何常量与 CSS 尺寸的换算写进注释
   （见 `StackedBar.tsx` 的 `BAR_W/BAR_GAP` 注释范本）。
+- 提示气泡分两种：纯文字直接用基座 `Tooltip`（`@deepseek-ai/dsh-client-ui-primitives`），
+  需要多行排版或鼠标跟随时用本仓 `components/Tooltip.tsx`（基座当前只收纯文本 `label`，
+  富内容并未支持，故该扩展版保留）。气泡内卡片统一用 `UsageStatsCommon.module.css`
+  的 `tip*` 类（气泡底是深色的 `--dsw-alias-tooltip-bg`，层级靠白色透明度叠加），
+  三处内容（额度明细、热力图单元格、比例条）共用一套，只有进度宽度与档位色留在行内。
 
 ## 9. Hooks 与轮询
 

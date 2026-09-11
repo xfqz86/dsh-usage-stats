@@ -250,7 +250,7 @@ export function todayOf(series: SeriesPoint[]): SeriesPoint | undefined {
   return undefined;
 }
 
-/** 按范围分桶：'7d' | '14d' | '30d' | 'all'。 */
+/** 按范围分桶（遗留路径，仅支持 '7d' | '14d' | '30d' | 'all'，其余按 'all' 处理）。 */
 export function buildSet(series: SeriesPoint[], range: string): SeriesPoint[] {
   const daysMap: Record<string, number> = { '7d': 7, '14d': 14, '30d': 30 };
   const days = daysMap[range] ?? null;
@@ -410,7 +410,7 @@ export function heatGridOf(series: SeriesPoint[], weeks = 26): HeatGrid {
   return { cols: weeks, cells, months };
 }
 
-/** 模型汇总时间范围：全部、1年、半年、3个月、1个月、14天、7天，默认全部。 */
+/** 模型汇总时间范围：全部、1年、半年、3个月、1个月、14天、7天，默认 1 年。 */
 export type ModelRange = '7d' | '14d' | '30d' | '90d' | '180d' | '365d' | 'all';
 
 /** 模型范围对应的天数，all 返回 null。 */
@@ -607,8 +607,7 @@ export const DATE_TOKEN_META: readonly { key: DateTokenKey; label: string; color
   { key: 'cacheRead', label: '缓存', color: '#fdcb6e' },
 ];
 
-/** 缓存命中率折线颜色：与三段柱色（蓝/绿/黄）区分，且避开 MODEL_PALETTE 十色，
- * 跨 Tab 不与模型饼图/堆叠色重叠；仅 date 模式出现，与 model 模式色板互斥。
+/** 缓存命中率折线颜色：避开 MODEL_PALETTE 十色，跨 Tab 不与模型饼图/堆叠色重叠；仅 date 模式出现。
  * AGENTS §3 的 design-token 约束针对界面静态样式，图表数据色豁免见 MODEL_PALETTE 注释。 */
 export const HIT_RATE_COLOR = '#ff4757';
 
@@ -746,8 +745,8 @@ export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?
  * 图表数据驱动的系列配色，10 色循环，与热力图、三色条区分。
  * 说明：AGENTS §3 的「颜色一律 design token」针对界面静态样式；图表系列色
  * 是数据驱动调色板，同一颜色同时喂给 SVG fill 属性，CSS var() 在 fill
- * 属性中不解析，与 HTML 背景，故以 hex 字面量集中定义于此，作为全仓库
- * 唯一的调色板豁免点；调整配色只改这一处。
+ * 属性中不解析，与 HTML 背景，故以 hex 字面量集中定义于此（MODEL_PALETTE、
+ * DATE_TOKEN_META、HIT_RATE_COLOR 三处豁免之一）；调整系列配色只改这一处。
  */
 export const MODEL_PALETTE = [
   '#4d6bfe',

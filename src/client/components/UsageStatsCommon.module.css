@@ -34,7 +34,7 @@
   padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: var(--dsw-shadow-lv1);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
@@ -175,7 +175,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: 0 1px 0 var(--dsw-alias-border-l1);
 }
 
@@ -192,7 +192,7 @@
   justify-content: center;
   padding: 8px 0 0;
   border-top: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
 }
 
 /* ---- 时间范围 chips：DatesTab 与 ModelsTab 共用 ---- */
@@ -256,7 +256,7 @@
   padding: 12px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   box-shadow: var(--dsw-shadow-lv1);
   display: flex;
   flex-direction: column;
@@ -277,4 +277,244 @@
   .table td {
     padding: 4px 4px;
   }
+}
+
+/* ---- 悬浮提示卡片内容：Footer、HeroTile、UsageHeatmap 三处共用 ----
+   气泡底为 --dsw-alias-tooltip-bg（两套主题都是深色），故层级一律用白色透明度叠加，
+   静态排版进本模块，仅随数据变化的值（进度条宽度、档位色、圆点色）留在行内。 */
+.tipPanel {
+  min-width: 200px;
+  padding: 2px 0;
+}
+
+.tipPanelGo {
+  min-width: 208px;
+}
+
+.tipPanelRail {
+  min-width: 228px;
+}
+
+.tipPanelWide {
+  min-width: 236px;
+}
+
+.tipTitle {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  margin-bottom: 10px;
+  letter-spacing: 0.1px;
+}
+
+.tipHint {
+  font-size: 12px;
+  line-height: 16px;
+  opacity: 0.72;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.tipPill {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  opacity: 0.95;
+  background: rgba(255, 255, 255, 0.13);
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.tipFooter {
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.45;
+  margin-top: 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 7px;
+}
+
+.tipCard {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tipStack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tipCardHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.tipCardHeadTight {
+  margin-bottom: 1px;
+}
+
+.tipAmount {
+  font-size: 16px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+}
+
+.tipAmountLg {
+  font-size: 18px;
+  letter-spacing: -0.3px;
+}
+
+.tipDivider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tipRows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 1px;
+}
+
+.tipRowLabel {
+  font-size: 11.5px;
+  line-height: 16px;
+  opacity: 0.68;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tipRowValues {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tipPoints {
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.tipValue {
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+
+.tipBarTrack {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.tipBarFill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+.tipReset {
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.balanceRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.balanceLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.68;
+}
+
+.balanceDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.balanceAmount {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.92;
+  font-weight: 500;
+}
+
+.tipHeader {
+  font-weight: 600;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* 标题行带右侧徽标（如 Z.ai 订阅计划名）时的横排布局。 */
+.tipHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.tipPanelRows {
+  min-width: 180px;
+}
+
+.tipList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tipListRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.tipListKey {
+  opacity: 0.85;
+  text-align: left;
+}
+
+.tipListVal {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }

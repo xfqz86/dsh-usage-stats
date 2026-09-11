@@ -1,6 +1,6 @@
 /**
  * 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成
- * /usage-stats/api/snapshot 的响应 value，纯函数，不触碰 HTTP、ctx。
+ * usageStats/snapshot 的结果 value，不触碰传输层与 ctx。
  * 快照协议类型 UsageSnapshot、ModelStat、SessionStat、SeriesPoint、
  * UsageAgg 单一定义在 types.ts，host 构建与 client 消费共用同一类型面，
  * 避免两端镜像漂移；splitModelKey 来自 utils.ts，host 与 client 共用。
@@ -18,7 +18,7 @@ import type { ModelStat, SeriesPoint, SessionStat, UsageAgg, UsageSnapshot } fro
 /** 按日序列点结构定义在 types.ts，与 client 端 SeriesPoint 统一。 */
 export type { SeriesPoint } from '../types.ts';
 
-/** 把某会话/全量的逐日聚合转成按时间升序的序列。 */
+/** 把逐日聚合转成按时间升序的序列，用于会话、全量与模型×日。 */
 export function buildSeries(dailyMap: Map<number, Agg>): SeriesPoint[] {
   const out: SeriesPoint[] = [];
   for (const [day, agg] of dailyMap) {
@@ -32,7 +32,7 @@ export function buildSeries(dailyMap: Map<number, Agg>): SeriesPoint[] {
   return out;
 }
 
-/** 聚合转为对外 usage 形状，total 由各分量之和得到，调用数已分离。 */
+/** 聚合转为对外 usage 形状，直接透传聚合内预计算的 total，调用数已分离。 */
 export function usageOf(agg: Agg): UsageAgg {
   return {
     input: agg.input, output: agg.output, cacheRead: agg.cacheRead,
@@ -48,7 +48,7 @@ function truncateSeries(series: SeriesPoint[]): SeriesPoint[] {
   return series.length > SERIES_MAX_DAYS ? series.slice(series.length - SERIES_MAX_DAYS) : series;
 }
 
-/** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。 */
+/** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。会话明细默认 200、上限 1000；all 与 models 序列截断至 366 天，current 序列不截断；sessions 为有量会话数。 */
 export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | null, opts?: { limit?: number }): UsageSnapshot {
   let sessionsWithUsage = 0;
   const sessionsList: SessionStat[] = [];

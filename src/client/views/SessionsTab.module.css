@@ -29,7 +29,7 @@
   margin-right: 6px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 4px;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 1;
@@ -61,7 +61,7 @@
 }
 
 .childRow td {
-  background: color-mix(in srgb, var(--dsw-alias-bg-base) 96%, var(--dsw-alias-border-l1));
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 96%, var(--dsw-alias-border-l1));
 }
 
 .childCell {

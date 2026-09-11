@@ -1,29 +1,21 @@
 /**
- * 自实现的 Tooltip：基于 dsh 自带 `@deepseek-ai/dsh-client-ui-primitives/Tooltip` 的轻量修改版，
- * 并已合并原 `FollowTooltip` 的鼠标跟随能力，通过 `follow` 参数控制。
+ * 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip
+ * 当前只接受纯文本（`label: string | (() => string)`，0.1.5-rc.2 仍未变），
+ * 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个
+ * 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、
+ * maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增——
  *
- * 原版仅支持 `label: string | (() => string)` 的纯文本气泡；本实现保留其全部定位、
- * 视口自适应、hover/focus 双触发、delay、disabled、maxWidth、ref 转发等行为，
- * 仅扩展内容形态以支持插槽传入任意组件排版，并通过 `follow` 合并跟随变体：
+ * - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div
+ *   以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space；
+ * - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
  *
- * - 新增 `content?: ReactNode | (() => ReactNode)` 插槽，传入时优先于 `label` 渲染；
- * - 兼容扩展 `label` 亦可为 `ReactNode | (() => ReactNode)`，便于平滑迁移，原有 `label="文字"` 仍可工作；
- * - 新增 `follow?: boolean`，默认为 `false`，为 `true` 时水平位置跟随鼠标，即原 `FollowTooltip` 行为，
- *   垂直仍锚定到元素边缘，键盘聚焦时居中显示；为 `false` 时为普通锚点居中/右侧定位；
- * - 气泡容器由 `span` 改为 `div`，使块级富内容支持 flex 与 grid 排版的合法布局；
- * - 当内容为富组件时，外层包裹 `.rich` 以重置 `white-space` 为 `normal`，避免 `pre-line` 干扰布局；
- * - 其它视觉与交互完全复刻原版，含 fixed 定位、transform 按 side、水平溢出内收、垂直翻转、maxWidth 覆盖等。
+ * 纯文字提示直接用基座 Tooltip（`UsageStatsFooter` 中的 BaseTooltip），
+ * 不经过本组件，避免同一份能力维护两套。
  *
  * 用法：
  * ```tsx
- * // 纯文本，原有写法不变
- * <Tooltip label="缓存 12,345" side="top"><span>...</span></Tooltip>
- * // 富排版，新增插槽
- * <Tooltip content={<div><b>今日</b><span>12,345 tokens</span></div>} side="top"><span>...</span></Tooltip>
- * // 函数式惰性求值，仅在气泡可见时执行，避免大开销
- * <Tooltip content={() => <MyPanel />}><span>...</span></Tooltip>
- * // 跟随鼠标，原 FollowTooltip 已移除，统一使用 follow
- * <Tooltip follow content={barContent} side="top"><span className={css.barRow} /></Tooltip>
+ * <Tooltip content={() => <MyPanel />} side="top" delayMs={300}><span>...</span></Tooltip>
+ * <Tooltip follow content={barRows} side="top"><span className={css.barRow} /></Tooltip>
  * ```
  *
  * 独立成文件，一个组件一个文件，样式见 `./Tooltip.module.css`。
@@ -48,13 +40,10 @@ interface AnchorProps {
   onBlur?: FocusEventHandler | undefined
 }
 
-/** 兼容原版的文本标签，支持字符串或惰性求值，本实现同时允许 ReactNode 以便直接传组件。 */
-type TooltipLabel = string | ReactNode | (() => string | ReactNode);
-/** 富内容插槽：任意 React 排版或惰性求值函数。 */
+/** 富内容插槽：任意 React 排版或惰性求值函数，仅在气泡可见时求值。 */
 type TooltipContent = ReactNode | (() => ReactNode);
 
 export function Tooltip({
-  label,
   content,
   side,
   delayMs = 0,
@@ -63,9 +52,7 @@ export function Tooltip({
   follow = false,
   children,
 }: {
-  /** 文本标签，兼容原版，传入 ReactNode 时等同 content，为存量代码保留。 */
-  label?: TooltipLabel
-  /** 富内容插槽，推荐，任意组件排版，优先级高于 label。支持函数以惰性求值。 */
+  /** 富内容插槽，任意组件排版。支持函数以惰性求值。 */
   content?: TooltipContent
   /** 相对锚点的方位，默认跟随时为 'bottom'，非跟随时为 'right'。 */
   side?: TooltipSide
@@ -99,8 +86,8 @@ export function Tooltip({
   const bubble = useRef<HTMLDivElement | null>(null);
   const lastClientX = useRef<number>(0);
 
-  // 插槽解析：content 优先于 label；函数仅在气泡可见时求值，避免每次渲染开销。
-  const raw: TooltipLabel | TooltipContent | undefined = content !== undefined ? content : label;
+  // 插槽解析：函数仅在气泡可见时求值，避免每次渲染开销。
+  const raw: TooltipContent | undefined = content;
   function getResolved(): ReactNode {
     if (pos === null) return null;
     if (raw === undefined) return null;

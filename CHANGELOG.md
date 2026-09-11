@@ -6,7 +6,43 @@
 
 ## [Unreleased]
 
-暂无。下一版草稿在此累积，发版时移入对应版本小节并清空。
+## [0.3.0] - 2026-09-11
+
+### 新增
+
+- **偏好设置改存 DSH 配置文件**：设置不再放浏览器 localStorage，而是注册进 harness 的用户设置体系——服务端 `ctx.settings.register('usage-stats', schema)`（`src/host/settings.ts`，schemastery schema 带默认值），浏览器端 `ctx.settingsScope.bind({ namespace: 'usage-stats' })`（`src/client/settings.ts` + `useUsageSettings`），落 `$DSH_HOME/settings.yaml`（默认 `~/.dsh/settings.yaml`）的 `usage-stats` 段，换浏览器、换设备共用同一份偏好；文档只写显式改过的字段，其余字段跟随 schema 默认值。设置页顶部新增一行说明当前设置存放位置，服务端设置缺席或只读时明确提示“修改不会保存”。服务端注册失败（命名空间被占用、schema 被拒）只降级偏好并打一条警告，不让统计主链路（账本与实时折叠）随注册失败一起挂掉。旧版本 localStorage（key `dsh-usage-stats.settings`）由 `migrateLegacySettings` 一次性迁移进配置文件后删除旧键（先在作用域落定后判断，服务端设置缺席或只读时保留旧键）
+- 后端接口迁入 `usageStats` 命名空间 7 个一元 `@Remote` 方法（`snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`），调用经客户端 Connection 的 RPC（`POST /api/usageStats/<方法>`），信任与认证由网关载体统一处理
+
+### 变更
+
+- 偏好作用域解绑带身份：浏览器端热重载会先挂新作用域、旧 fiber 的清理后跑，旧清理不再把新作用域抹掉（`detachUsageSettings(scope)`）
+- 偏好写入在作用域落定为不可用或只读时直接跳过（此前会发一次注定被拒的 `settings/mutate`，界面上表现为开关弹回并留一条控制台警告）；仍在加载中照发，服务端可能接受
+- 偏好设置的默认值、`clamp*` 夹取与字段级归一化由 `src/client/settings.ts` 上移到 `src/utils.ts`（`UsageSettings` 类型上移到 `src/types.ts`），服务端 schema 与浏览器端归一化共用同一份数值，避免默认值分叉；新增 devDependencies `@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery`（服务端 schema 的值导入）、`@deepseek-ai/dsh-client-ui-settings`、`@deepseek-ai/dsh-api-remotes` 与测试用 `@deepseek-ai/dsh-settings-file`，`dsh.client.inject` 增加 `@deepseek-ai/dsh-client-ui-settings` 保证 `settingsScope` 服务先于本插件加载
+- 设置 Tab 偏好设置的分组顺序改为 DeepSeek 余额 → OpenCode Go 额度 → Z.ai 额度，与概览底行磁贴排列一致（此前 OpenCode Go 在最前）
+- **BREAKING**：删除自建 `POST /usage-stats/api` 前缀路由与回环围栏、`x-dsh-usage-stats` 自定义头（`src/host/http.ts` 删除），服务端改类表单 `UsageStatsService`（Loader 实例化），客户端自挂载手写严格贡献后经 `ctx.get('remote.usageStats')` 取命名空间服务调用；升级后需重启 dsh 服务端
+- 构建：TypeScript 升至 6（标准装饰器原生类输出），tsdown 新增装饰器降级插件；客户端 bundle 内联 `zod` 编解码
+- 可选服务不再进 inject：`credentials` 改调用处 `ctx.get` 判空（cordis 对象写法的值为拦截配置，无“可选”语义）
+- harness 版本对齐到 `0.1.5-rc.2`（npm `next` 标签，当前基座发布线）：`@deepseek-ai/*` devDependencies 与 `pnpm-workspace.yaml` 白名单同步，逐包核对类型/实现与基座一致（`session`/`persistence`/`session-query`/`typert-protocol`/`credentials`/`ui-slots`/`ui-renderer`/`locale`/`sidebar`/`api-gateway` 无差异，客户端冻结模块表仍是九项）
+- 提示气泡拆两路：纯文字提示改用基座 `@deepseek-ai/dsh-client-ui-primitives` 的 `Tooltip`；需要多行排版或鼠标跟随时才用本仓 `components/Tooltip.tsx`，其 `label` 兼容分支删除、只保留富内容插槽（基座 Tooltip 当前只接受纯文本，未支持富内容）
+- 发布：GitHub Release 正文不再用自动生成的提交/PR 清单，改为该版本的 `docs/releases/v<版本>.md`（面向用户的人话版更新说明）；`release.yml` 在 tag 校验阶段强制该文件存在，缺失则中止发布（见 `docs/PUBLISH.md`）
+
+### 修复
+
+- **扫描期间账本操作可点却静默失败**：首启扫描或重建扫描进行中（模态窗顶部显示「扫描中…」），设置 Tab 的清零与重建按钮仍可点，走完二次确认后服务端以 `usageStats/busy` 拒绝、客户端把错误吞掉，界面没有任何反馈；同时这段窗口里清零会与在飞扫描交错写同一账本与聚合。现扫描期间两按钮置灰并给出原因，已打开的确认框随扫描开始自动关闭
+- **悬浮卡片内容改为 CSS Modules**：额度明细、热力图单元格与比例条三处提示气泡的静态排版此前写在内联 `style` 里（近百处），现集中为 `UsageStatsCommon.module.css` 的 `tip*` 类共用，只有进度条宽度、档位色与圆点色等随数据的值留在行内；视觉不变，深浅主题仍走同一套白色透明度叠加（详见 `docs/STYLE.md §8`）
+- **弹窗关闭按钮补无障碍名**：用量统计模态窗右上角关闭按钮只有图标，读屏抓不到名称，现补 `aria-label`（`panel.close`，中英双语已在字典中）
+- 注释按当前实现校正：账本预统计表与 events 表是「同库、各自提交」而非同一事务；网关调用写明走客户端 Connection 的 RPC（`POST /api/usageStats/<方法>` + `client-request` 信封）；文档区分「一元（unary，区别于流式）」与「无请求参数」（`rebuild`/`clear`/`seal`）
+
+- **深色模式白色色块**：设置 Tab 的分组头部、计数徽标、图标底与开关滑块引用了 harness 主题根本没有的 token（`--dsw-alias-bg-subtle`/`bg-fill`/`brand-bg`/`state-success-bg`），声明在计算值阶段失效后落到写死的浅色兜底（`#f6f7f9` 等），于是浅色模式正常、深色模式变成白条。现改用真实存在的 token（`interactive-bg-hover`/`border-l3`/`label-primary-foreground` 与 `color-mix` 品牌、成功色底），并新增 `test/styles.mjs` 对照主题包校验全部样式变量，写死兜底不再允许（详见 `docs/STYLE.md §8`）
+- **深色模式黑带**：卡片底色由 harness 的 Modal 用 `bg-layer-2` 铺设，而窗内头部、Tab 栏、吸顶表头、分页条、磁贴卡片、图表卡与输入框都用 `bg-base`（浅色下同为白色、深色下比卡片暗一档），深色模式里于是出现几条比卡片更黑的横带；现统一为 `bg-layer-2`
+- **无效 token 的死兜底清理**：额度进度条与设置开关的占位底色引用了不存在的 `bg-fill-2`，声明整条失效后落到兜底值上；现改为直接引用 `interactive-bg-hover`，行为不变、少一层误导
+- **Tab 文字深色模式偏灰、选中下划线过硬**：未选中 Tab 用了 `label-caption`（说明性小标签的颜色，深色下 12px 文字对比度约 3.8:1），现改用 `label-tertiary`（约 8.5:1）；选中态由整条 `brand-primary` 描边改为 `label-primary` 文字 + 2px 圆头短线（与 dsh 设置页 tab 同一形态），并补 `:focus-visible` 焦点环
+- **压缩上下文的调用不再漏统计**：dsh 压缩会话会发起一次独立 summarize 调用，用量落在 `compaction/summary` 事件的 `data.usage`（模型身份在 `data.provider`/`data.model`，不经 agent loop、不与 `assistant/message` 重复），此前只认 `assistant/message` 导致整条调用丢失。现两类计量事件统一入账，`assistant/attempt` 仍不收（流式中间态，与同 turn 的 message 重复）；账本 `LEDGER_VERSION` 5→6，旧库自动清空重扫。本机实测补回 7 次调用 / 129.99 万 token
+- **fork 子会话重复计数**：被 fork 的子会话日志物理包含父会话的历史事件，此前整份折叠导致父的用量在子会话名下再算一遍。现按 harness 的 `inheritedEventCount`（原始日志路径按 `session/end-seed` 的 `inherited` 标记）只折自有事件，实时监听同口径；本机实测排除 2,972 条重复 / 4.45 亿 token。账本 `LEDGER_VERSION` 4→5，旧库自动清空重扫
+- **旧格式会话不再漏统计**：新版 dsh 对 v0/v2 会话的格式迁移 fail-closed（`SessionFormatUnsupportedError`），本机实测 66 个旧会话的用量完全读不到。新增 `src/host/rawlog.ts`（多帧 zstd 解码 + 代次命名解析），扫描在 harness 两路读取失败或为空时自读磁盘原始日志兜底，命中计入 `rawSessions`；`findSessionLogs` 由只认 `session.jsonl.zstd` 改为按代次择优（v0/vN/未压缩），补回仅存 v2/v3 的目录
+- harness 0.1.5 对齐：`@deepseek-ai/*` 升至 `0.1.5-alpha.2`，移除已下线的 `dsh-client-runtime`，`ClientContext` 改 `Context as ClientContext`（`@deepseek-ai/cordis`），slots 类型取自 `dsh-client-ui-renderer/client`；会话读取改 `persistence.open+read`（`supportsRawArtifacts/readRaw/readFrom` 已删）；客户端 external 复刻基座 `PLATFORM_MODULES` 九项
+- 浏览器端取命名空间服务改走 `ctx.get('remote.usageStats')` 实时解析：暂存 `ctx.remote` 再读 `.usageStats` 会在子 scope 下报 `without inject`，导致快照与三路额度全部不可用（`src/client/remote.ts`；`pure` 新增句柄回归单测）
+- 注释文档与实现对齐：额度缺凭据直接返回 `no-key`（不读 env 与文件）、九表与去重与截断口径按实现修正，`README` 凭据别名与 `CHANGELOG` 链接同步
 
 ## [0.2.1] - 2026-09-06
 
@@ -68,7 +104,8 @@
 - 统计口径：`assistant/message` 且 `data.usage` 存在才入账，`total=input+output+cacheRead+cacheWrite`（`reasoning` 单列），缺失 provider/model 记 `unknown`，按本地自然日划分
 - 构建与发布：`tsdown` 双 bundle（Host ESM + Client 闭包）+ CSS Modules 内联，`smoke/client-bundle` 验证，交付 npm/GitHub Release/tarball 三形态，提交遵循 Conventional Commits
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.1.0...v0.1.1
