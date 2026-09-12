@@ -7,8 +7,8 @@
  *   收窄为仅圆形图标按钮，今日数字明细移入按钮 Tooltip；点击打开模态窗
  *   详情，包含汇总、模型拆分、会话列表、每日趋势曲线和热力图。
  * - 数据来自服务端 usageStats/snapshot（ctx.remote，经网关统一鉴权）。
- * - 偏好设置（三额度抓取开关、侧边栏展示开关、抓取间隔）来自服务端用户设置
- *   文档：作用域取自 ctx.settingsScope 的 `usage-stats` 命名空间（服务端在
+ * - 偏好设置（三额度抓取开关、侧边栏展示开关、抓取间隔、模型统计重定向规则表）来自
+ *   服务端用户设置文档：作用域取自 ctx.settingsScope 的 `usage-stats` 命名空间（服务端在
  *   src/host/settings.ts 注册），组件经 useUsageSettings 读写，不再用
  *   localStorage；旧版本的 localStorage 偏好由 migrateLegacySettings 一次性迁移。
  *

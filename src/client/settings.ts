@@ -6,7 +6,9 @@
  * （attachUsageSettings），组件经 subscribeUsageSettings 订阅变化、经
  * updateUsageSettings 写回显式改过的字段（路径写入，未改的字段继续跟随
  * schema 默认值）。取值经 normalizeUsageSettings 归一化并夹取，作用域尚未
- * 就绪（加载中或部署无设置后端）时回退 USAGE_SETTINGS_DEFAULTS。
+ * 就绪（加载中或部署无设置后端）时回退 USAGE_SETTINGS_DEFAULTS。写入走路径操作，
+ * 只落显式给出的字段：标量按字段写，模型统计重定向规则表整表写入（一条规则一个对象，
+ * 不做数组下标级增删，避免并发写时错位）。
  *
  * 旧版本把偏好存在 localStorage，本模块保留一次性迁移：作用域落定为就绪、可写、
  * 用户文档尚无该命名空间时，把与默认值不同的旧字段写进设置文档并删除旧键；
@@ -29,6 +31,9 @@ import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-clie
 
 /** 旧版本 localStorage 存储键，仅用于一次性迁移。 */
 export const LEGACY_STORAGE_KEY = 'dsh-usage-stats.settings';
+
+/** 路径写入的值类型：SettingsPathOpView 是 set/unset 联合，取 set 分支的 value。 */
+type SettingsWriteValue = Extract<SettingsPathOpView, { op: 'set' }>['value'];
 
 /** 本插件绑定的设置作用域；apply 时 attach，插件卸载时 detach。 */
 let scope: SettingsScope<UsageSettings> | undefined;
@@ -96,12 +101,21 @@ export function clearLegacySettings(storage?: Pick<Storage, 'removeItem'>): void
 /** 取出与默认值不同的字段，迁移只写这些字段，设置文档保持最小。 */
 export function diffFromDefaults(settings: UsageSettings): Partial<UsageSettings> {
   const patch: Partial<UsageSettings> = {};
-  for (const [field, value] of Object.entries(settings) as [keyof UsageSettings, boolean | number][]) {
-    if (value !== USAGE_SETTINGS_DEFAULTS[field]) {
-      (patch as Record<string, boolean | number>)[field] = value;
+  for (const field of Object.keys(USAGE_SETTINGS_DEFAULTS) as (keyof UsageSettings)[]) {
+    if (!settingsValueEqual(settings[field], USAGE_SETTINGS_DEFAULTS[field])) {
+      (patch as Record<string, unknown>)[field] = settings[field];
     }
   }
   return patch;
+}
+
+/**
+ * 偏好字段比较：数组按 JSON 比——每次归一化都会新建数组，引用比较永远判为不同，
+ * 迁移时会把空规则表当作用户改动写进设置文档。
+ */
+function settingsValueEqual(a: UsageSettings[keyof UsageSettings], b: UsageSettings[keyof UsageSettings]): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b);
+  return a === b;
 }
 
 /** 抓取间隔字段写入前的夹取；非间隔字段原样返回。 */
@@ -112,14 +126,25 @@ function clampOf(field: keyof UsageSettings, value: number): number {
   return value;
 }
 
-/** 把局部偏好转成路径写入操作：只写显式给出的字段，间隔字段先夹取。 */
+/** 把局部偏好转成路径写入操作：只写显式给出的字段，间隔字段先夹取，规则表整表写入。 */
 export function settingOps(patch: Partial<UsageSettings>): SettingsPathOpView[] {
   const ops: SettingsPathOpView[] = [];
-  for (const [field, value] of Object.entries(patch) as [keyof UsageSettings, boolean | number | undefined][]) {
+  for (const [field, value] of Object.entries(patch) as [keyof UsageSettings, UsageSettings[keyof UsageSettings] | undefined][]) {
     if (value === undefined) continue;
-    ops.push({ op: 'set', path: [field], value: typeof value === 'number' ? clampOf(field, value) : value });
+    ops.push({ op: 'set', path: [field], value: settingValueOf(field, value) });
   }
   return ops;
+}
+
+/**
+ * 单个偏好字段的写入值：间隔字段先夹取；规则表逐条展开成普通对象字面量——
+ * `ModelRedirect` 是 interface，没有隐式索引签名，直接当写入值传会报类型错，
+ * 展开后每条都是纯字符串字段的对象字面量，正是设置文档里要存的东西。
+ */
+function settingValueOf(field: keyof UsageSettings, value: UsageSettings[keyof UsageSettings]): SettingsWriteValue {
+  if (typeof value === 'number') return clampOf(field, value);
+  if (Array.isArray(value)) return value.map((rule) => ({ ...rule }));
+  return value;
 }
 
 /**

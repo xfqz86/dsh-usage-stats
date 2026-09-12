@@ -1,14 +1,15 @@
 /**
- * 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
+ * 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何、模型统计重定向归并。
  * 不依赖 React / DOM，可单测，角标与模态窗共用。
- * 本地日划分、日期键 startOfDay、dateKeyOf 来自 utils.ts；类型
- * SeriesPoint、UsageAgg 来自 types.ts，与 host 端共用，避免两端镜像漂移。
+ * 本地日划分、日期键 startOfDay、dateKeyOf、模型键拆分 splitModelKey 与规则完整性
+ * isCompleteRedirect 来自 utils.ts；类型 SeriesPoint、UsageAgg、ModelRedirect 来自
+ * types.ts，与 host 端共用，避免两端镜像漂移。
  */
 
-import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, startOfDay } from '../utils.ts';
+import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, isCompleteRedirect, splitModelKey, startOfDay } from '../utils.ts';
 
 import type { LocaleFn } from './locales.ts';
-import type { ModelStat, SeriesPoint, SessionStat, UsageAgg } from '../types.ts';
+import type { ModelRedirect, ModelStat, SeriesPoint, SessionStat, UsageAgg } from '../types.ts';
 
 /** 判断是否为英文环境：支持传入 locale 字符串或翻译函数 t。 */
 function isEnglishLocale(localeOrT?: string | LocaleFn): boolean {
@@ -435,6 +436,186 @@ export function modelRangeCutoff(range: ModelRange): number | null {
   const d = new Date(todayStart);
   d.setDate(d.getDate() - (days - 1));
   return d.getTime();
+}
+
+// ---- 模型统计重定向：按用户规则把来源模型的用量并入目标模型 ----
+// 归并在浏览器端做，服务端快照始终是原始行：设置页要拿原始「供应商 + 模型」
+// 当规则候选，改规则也要立刻重算，不必等下一次轮询或重启。
+// 规则表来自偏好设置（utils.ts 归一化，client/settings.ts 读写），模型页消费。
+
+/** 模型键：与账本、快照同一口径 `provider\0model`，utils.ts 的 splitModelKey 拆回。 */
+function modelKeyOf(provider: string, model: string): string {
+  return provider + '\u0000' + model;
+}
+
+/** 归并结果：模型行（按 total 降序）+ 每个目标行并进来的来源键，供界面提示。 */
+export interface ModelRedirectResult {
+  /** 归并后的模型行，无生效规则时原样返回入参数组。 */
+  models: ModelStat[]
+  /** 目标行键 → 该行并进来的来源键（按原行顺序，不含目标自身）。 */
+  mergedSources: Map<string, string[]>
+}
+
+/** 规则索引的一条边：目标键 + 该规则在列表里的序号，序号用于环内择优。 */
+export interface RedirectEdge {
+  to: string
+  order: number
+}
+
+/**
+ * 解析规则链：沿「来源 → 目标」逐跳前进。
+ * - 无匹配：该键自己就是目标（不归并）；
+ * - 链式（A→B、B→C）：解析到链尾 C；
+ * - 环形（A→B、B→A）：把环折到环内**最靠前那条规则的目标**上，即按列表顺序取优先级，
+ *   与「同一来源只有最上面一条生效」同一口径，既不会死循环，也不会把用量改名换姓。
+ */
+export function resolveRedirectKey(key: string, index: ReadonlyMap<string, RedirectEdge>): string {
+  const path: string[] = [];
+  const seen = new Map<string, number>();
+  let current = key;
+  for (;;) {
+    const repeated = seen.get(current);
+    if (repeated !== undefined) {
+      // current 是环入口：环上的边是 path[repeated..]，取序号最小者的目标作为归并目标
+      let representative = current;
+      let bestOrder = Number.POSITIVE_INFINITY;
+      for (let i = repeated; i < path.length; i += 1) {
+        const edge = index.get(path[i]);
+        if (edge !== undefined && edge.order < bestOrder) {
+          bestOrder = edge.order;
+          representative = edge.to;
+        }
+      }
+      return representative;
+    }
+    seen.set(current, path.length);
+    path.push(current);
+    const edge = index.get(current);
+    if (edge === undefined) return current;
+    current = edge.to;
+  }
+}
+
+/** 建规则索引：跳过不完整规则与自反规则，同一来源只认最上面一条（列表顺序即优先级）。 */
+function redirectIndexOf(rules: readonly ModelRedirect[]): Map<string, RedirectEdge> {
+  const index = new Map<string, RedirectEdge>();
+  for (const rule of rules) {
+    if (!isCompleteRedirect(rule)) continue;
+    const from = modelKeyOf(rule.fromProvider, rule.fromModel);
+    const to = modelKeyOf(rule.toProvider, rule.toModel);
+    if (from === to || index.has(from)) continue;
+    index.set(from, { to, order: index.size });
+  }
+  return index;
+}
+
+/** 归并累加器：用量各字段与调用数求和，日序列按天求和。 */
+interface RedirectAcc {
+  usage: UsageAgg
+  calls: number
+  series: Map<number, SeriesPoint>
+}
+
+/**
+ * 应用模型统计重定向：命中规则的来源行并入目标行——用量各字段与调用数求和、
+ * 按日序列逐日求和（total 与 host 同口径，等于四段之和，不含 reasoning）；
+ * 目标行在快照里不存在时按规则里的名字新建，只有真有用量才出现。
+ * 没有一行命中时原样返回入参数组（引用不变，未配规则的行为逐字节一致）。
+ */
+export function redirectModels(models: ModelStat[], rules: readonly ModelRedirect[]): ModelRedirectResult {
+  const index = redirectIndexOf(rules);
+  const keys = models.map((m) => modelKeyOf(m.provider, m.model));
+  const targets = keys.map((key) => resolveRedirectKey(key, index));
+  if (targets.every((target, i) => target === keys[i])) {
+    return { models, mergedSources: new Map() };
+  }
+
+  const accs = new Map<string, RedirectAcc>();
+  const mergedSources = new Map<string, string[]>();
+  for (let i = 0; i < models.length; i += 1) {
+    const m = models[i];
+    const target = targets[i];
+    let acc = accs.get(target);
+    if (acc === undefined) {
+      acc = {
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 },
+        calls: 0,
+        series: new Map(),
+      };
+      accs.set(target, acc);
+    }
+    acc.usage.input += m.usage.input || 0;
+    acc.usage.output += m.usage.output || 0;
+    acc.usage.cacheRead += m.usage.cacheRead || 0;
+    acc.usage.cacheWrite += m.usage.cacheWrite || 0;
+    acc.usage.reasoning += m.usage.reasoning || 0;
+    acc.usage.total += m.usage.total || 0;
+    acc.calls += m.calls || 0;
+    for (const pt of m.series ?? []) {
+      const day = acc.series.get(pt.t);
+      if (day === undefined) {
+        acc.series.set(pt.t, { ...pt });
+        continue;
+      }
+      day.input += pt.input || 0;
+      day.output += pt.output || 0;
+      day.cacheRead += pt.cacheRead || 0;
+      day.cacheWrite += pt.cacheWrite || 0;
+      day.reasoning += pt.reasoning || 0;
+      day.calls += pt.calls || 0;
+    }
+    if (target !== keys[i]) {
+      const list = mergedSources.get(target);
+      if (list === undefined) mergedSources.set(target, [keys[i]]);
+      else list.push(keys[i]);
+    }
+  }
+
+  const out: ModelStat[] = [];
+  for (const [key, acc] of accs) {
+    const { provider, model } = splitModelKey(key);
+    out.push({
+      provider,
+      model,
+      calls: acc.calls,
+      usage: acc.usage,
+      series: [...acc.series.values()].sort((a, b) => a.t - b.t),
+    });
+  }
+  out.sort((a, b) => usageTotal(b.usage) - usageTotal(a.usage));
+  return { models: out, mergedSources };
+}
+
+/**
+ * 账本里的供应商 → 模型清单（各自去重、按字母序，供应商同样按字母序），
+ * 设置页规则编辑器的自动完成候选以它为底：服务端快照不归并，这里拿到的就是真实来源。
+ */
+export function modelCatalog(models: readonly ModelStat[]): Map<string, string[]> {
+  const catalog = new Map<string, string[]>();
+  for (const m of models) {
+    const list = catalog.get(m.provider);
+    if (list === undefined) catalog.set(m.provider, [m.model]);
+    else if (!list.includes(m.model)) list.push(m.model);
+  }
+  for (const list of catalog.values()) list.sort();
+  return new Map([...catalog].sort((a, b) => a[0].localeCompare(b[0])));
+}
+
+/**
+ * 按已用来源组合过滤候选：去掉 `used` 里已占用的「供应商 + 模型」，
+ * 模型被用光的供应商整条不再出现——同一来源只有最上面一条规则生效，
+ * 已配过的组合再选一次没有意义，来源的自动完成里就不该再出现。
+ */
+export function unusedRedirectSources(
+  catalog: ReadonlyMap<string, string[]>,
+  used: ReadonlySet<string>,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [provider, models] of catalog) {
+    const free = models.filter((model) => !used.has(modelKeyOf(provider, model)));
+    if (free.length > 0) out.set(provider, free);
+  }
+  return out;
 }
 
 /** 按时间范围过滤模型：基于各模型的 series 按日聚合，返回排序后的切片。 */

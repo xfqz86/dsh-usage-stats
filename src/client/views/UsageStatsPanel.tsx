@@ -6,8 +6,8 @@
  *   - OverviewTab，概览，含汇总、热力图与 Go 额度、DeepSeek 余额、Z.ai 额度，受监控开关控制，关闭时隐藏对应卡片
  *   - DatesTab，日期，含每日趋势曲线与范围切换
  *   - SessionsTab，会话，按会话展示表格
- *   - ModelsTab，模型，按模型拆分表格
- *   - SettingsTab，设置，含偏好设置，涉及 Go、DeepSeek 与 Z.ai、可折叠的账本操作与页脚
+ *   - ModelsTab，模型，按模型拆分表格（按偏好里的重定向规则归并后展示）
+ *   - SettingsTab，设置，含偏好设置，涉及 Go、DeepSeek 与 Z.ai、模型统计重定向、可折叠的账本操作与页脚
  *
  * 数据与底部按钮共用 usageStats/snapshot、usageStats/go-quota
  * 与 usageStats/deepseek-balance 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
@@ -24,9 +24,10 @@ import {
   IconSettingsOutline16,
   Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives';
-import { useState, type ComponentType } from 'react';
+import { useState, useMemo, type ComponentType } from 'react';
 
 import shared from '../components/UsageStatsCommon.module.css';
+import { redirectModels } from '../stats.ts';
 
 import { DatesTab } from './DatesTab.tsx';
 import { ModelsTab } from './ModelsTab.tsx';
@@ -114,6 +115,13 @@ export function UsageStatsPanel({
 
   const value = data;
 
+  // 模型统计重定向：按偏好里的规则归并模型行（设置页拿原始行当候选，故这里才算），
+  // 只有模型页消费归并结果——会话/日期/概览/底栏都不读 models。
+  const redirect = useMemo(
+    () => redirectModels(value?.models ?? [], settings.modelRedirects),
+    [value?.models, settings.modelRedirects],
+  );
+
   // 内容区渲染，避免嵌套三元
   function renderBody() {
     if (err) {
@@ -144,7 +152,9 @@ export function UsageStatsPanel({
         {active === 'sessions' && (
           <SessionsTab sessionsList={value.sessionsList} t={t} />
         )}
-        {active === 'models' && <ModelsTab models={value.models} t={t} />}
+        {active === 'models' && (
+          <ModelsTab models={redirect.models} mergedSources={redirect.mergedSources} t={t} />
+        )}
         {active === 'settings' && (
           <SettingsTab
             onRefresh={onRefresh}

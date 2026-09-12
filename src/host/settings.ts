@@ -32,6 +32,11 @@ import type {} from '@deepseek-ai/dsh-settings';
  * 数值字段只约束类型，不在 schema 里设 min——手改 settings.yaml 写出越界间隔
  * 时，整段失效回退默认值远不如夹到下限友好，夹取统一由浏览器端归一化负责
  * （clampGoFetchMinutes 等，下限 3 分钟）。
+ *
+ * modelRedirects 是模型统计重定向规则表：每条规则四个字符串字段各自带空串
+ * 默认值，手写文档漏字段时按空串解析而不是让整段命名空间判非法；规则内容
+ * 不在 schema 里设 min/长度约束，条数上限与空白清洗由浏览器端的
+ * normalizeModelRedirects 负责（与服务端解析值同源，见 utils.ts）。
  */
 export const UsageSettingsSchema: Schema<UsageSettings> = Schema.object({
   goEnabled: Schema.boolean().default(USAGE_SETTINGS_DEFAULTS.goEnabled),
@@ -43,6 +48,12 @@ export const UsageSettingsSchema: Schema<UsageSettings> = Schema.object({
   zaiEnabled: Schema.boolean().default(USAGE_SETTINGS_DEFAULTS.zaiEnabled),
   showZaiInSidebar: Schema.boolean().default(USAGE_SETTINGS_DEFAULTS.showZaiInSidebar),
   zaiFetchMinutes: Schema.number().default(ZAI_FETCH_DEFAULT_MINUTES),
+  modelRedirects: Schema.array(Schema.object({
+    fromProvider: Schema.string().default(''),
+    fromModel: Schema.string().default(''),
+    toProvider: Schema.string().default(''),
+    toModel: Schema.string().default(''),
+  })).default([]),
 });
 
 /**

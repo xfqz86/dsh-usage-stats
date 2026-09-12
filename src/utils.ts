@@ -3,7 +3,7 @@
  *
  * 本模块只放纯函数与数值常量；协议类型 GoWindow、GoQuota、UsageAgg、Agg、
  * SeriesPoint、UsageSettings 定义在 types.ts。这里是插件
- * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、单行 JSON 解析、错误消息提取、模型键拆分、Go 额度档位、插件偏好的默认值与夹取等。
+ * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、单行 JSON 解析、错误消息提取、模型键拆分、Go 额度档位、插件偏好的默认值与夹取、模型统计重定向规则的归一化等。
  *
  * 设计约束：
  *   - 只允许纯 JS 运行时能力 Date、Math、JSON、String，禁止 import
@@ -13,7 +13,7 @@
  *     会话发现 logs.ts，客户端格式化、分桶、图表几何 client/stats.ts
  *     等仍留在各自模块，这里只放「多文件共用的」部分。
  */
-import type { GoWindow, UsageSettings } from './types.ts';
+import type { ModelRedirect, GoWindow, UsageSettings } from './types.ts';
 
 /** 时间戳对应的本地零点，避免 UTC 漂移，host 折叠与会话图共用同一套日划分。 */
 export function startOfDay(timeMs: number): number {
@@ -122,6 +122,8 @@ export const DEEPSEEK_FETCH_DEFAULT_MINUTES = 5;
 export const ZAI_FETCH_MIN_MINUTES = 3;
 /** Z.ai 额度抓取间隔默认值，单位分钟。 */
 export const ZAI_FETCH_DEFAULT_MINUTES = 5;
+/** 模型统计重定向规则条数上限：约束浏览器端归并成本与偏好文档体积。 */
+export const MODEL_REDIRECT_MAX_RULES = 50;
 
 /** 偏好默认值：设置命名空间未覆盖的字段、取值尚未到达浏览器时都用它。 */
 export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
@@ -134,6 +136,7 @@ export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
   zaiEnabled: true,
   showZaiInSidebar: true,
   zaiFetchMinutes: ZAI_FETCH_DEFAULT_MINUTES,
+  modelRedirects: [],
 };
 
 /** 把任意数值夹成合法抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
@@ -152,6 +155,38 @@ export function clampDeepSeekFetchMinutes(value: number): number {
 export function clampZaiFetchMinutes(value: number): number {
   const n = Number.isFinite(value) ? value : ZAI_FETCH_DEFAULT_MINUTES;
   return Math.max(ZAI_FETCH_MIN_MINUTES, Math.round(n));
+}
+
+/**
+ * 模型统计重定向规则归一化：只收数组，元素必须是对象，四个字段取字符串并去首尾空白，
+ * 非字符串字段记空串；四项全空的条目是编辑器里的空行，直接丢弃；半填的保留
+ * （界面继续填，归并时按 isCompleteRedirect 跳过）；超过上限截断。
+ * 归一化对象是设置命名空间的解析值，手改 settings.yaml 或旧版本残留都可能给出坏形状。
+ */
+export function normalizeModelRedirects(raw: unknown): ModelRedirect[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ModelRedirect[] = [];
+  for (const item of raw) {
+    if (out.length >= MODEL_REDIRECT_MAX_RULES) break;
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) continue;
+    const src = item as Record<string, unknown>;
+    const field = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+    const rule: ModelRedirect = {
+      fromProvider: field(src.fromProvider),
+      fromModel: field(src.fromModel),
+      toProvider: field(src.toProvider),
+      toModel: field(src.toModel),
+    };
+    if (!rule.fromProvider && !rule.fromModel && !rule.toProvider && !rule.toModel) continue;
+    out.push(rule);
+  }
+  return out;
+}
+
+/** 规则四项是否填齐：不完整的规则不参与归并（界面保留，等填完再生效）。 */
+export function isCompleteRedirect(rule: ModelRedirect): boolean {
+  return rule.fromProvider !== '' && rule.fromModel !== ''
+    && rule.toProvider !== '' && rule.toModel !== '';
 }
 
 /**
@@ -174,5 +209,6 @@ export function normalizeUsageSettings(raw: Partial<UsageSettings> | null | unde
     zaiEnabled: bool(src.zaiEnabled, USAGE_SETTINGS_DEFAULTS.zaiEnabled),
     showZaiInSidebar: bool(src.showZaiInSidebar, USAGE_SETTINGS_DEFAULTS.showZaiInSidebar),
     zaiFetchMinutes: minutes(src.zaiFetchMinutes, clampZaiFetchMinutes, USAGE_SETTINGS_DEFAULTS.zaiFetchMinutes),
+    modelRedirects: normalizeModelRedirects(src.modelRedirects),
   };
 }

@@ -25,7 +25,8 @@ dsh-usage-stats/
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
 ├── docs/
 │   ├── releases/
-│   │   └── v0.3.0.md
+│   │   ├── v0.3.0.md
+│   │   └── v0.4.0.md
 │   ├── screenshot/
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png
@@ -63,6 +64,8 @@ dsh-usage-stats/
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
 │   │   │   ├── HeroTile.module.css ← 英雄磁贴 HeroTile：今日与总 tokens 共用的合并磁贴样式。
 │   │   │   ├── HeroTile.tsx ← 英雄磁贴 HeroTile，今日与总 tokens 共用的合并磁贴。
+│   │   │   ├── ModelRedirectEditor.module.css ← 模型统计重定向规则编辑器 ModelRedirectEditor：规则行（来源 → 目标）、 删除按钮、添加按钮与提示文字。
+│   │   │   ├── ModelRedirectEditor.tsx ← 模型统计重定向规则编辑器：设置 Tab 的专属子视图，一个组件一个文件。
 │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表，含占比条，布局与会话 Tab 对齐。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab OverviewTab：Bento 磁贴网格 — 布局见布局图：今日/总计左列，热力图右大区，底行 DeepSeek/Go。
@@ -82,7 +85,7 @@ dsh-usage-stats/
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端注册的 `usage-stats` 设置命名空间。
-│   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何。
+│   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何、模型统计重定向归并。
 │   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
 │   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
 │   │   ├── useQuota.ts ← 额度轮询 hooks（浏览器端）：共享轮询骨架 useQuota + Go/DeepSeek/Z.ai 三路薄包装。

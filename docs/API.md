@@ -126,8 +126,28 @@ Client 严格编解码在 `src/remote/contribution.ts`。
     均不显示 Z.ai 额度；
   - `showZaiInSidebar` 默认 `true`，只门控侧边栏底部 Z.ai 芯片，含宽列 `5h`、`周` 百分比和 `Web 搜索` 次数及 rail 迷你芯片，模态窗内额度详情仍可见；
   - `zaiFetchMinutes` 默认 5，下限 3，抓取间隔，同时作为 `usageStats/zaiQuota` 请求的
-    `intervalMinutes`，服务端据此调整 TTL。
-- 读取路径：作用域快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔，间隔只收有限数并夹取）→ 缺字段回退默认值；作用域尚未就绪（加载中）或部署无设置后端时同样回退默认值，设置页顶部提示当前设置存放位置与是否可写。
+    `intervalMinutes`，服务端据此调整 TTL；
+  - `modelRedirects` 默认 `[]`，**模型统计重定向规则表**，每条规则四个字符串字段
+    `fromProvider`/`fromModel`/`toProvider`/`toModel`：把来源供应商+模型的用量算到
+    目标供应商+模型名下。规则表只存偏好，账本与 `usageStats/snapshot` 一个字节都不改。
+- **模型统计重定向**（浏览器端归并，服务端快照保持原始行）：
+  - 归并在 `src/client/stats.ts` 的 `redirectModels` 里做，`UsageStatsPanel` 按
+    `settings.modelRedirects` 调一次，只有「模型」页（表格、占比、饼图、堆叠柱）消费；
+    服务端快照不归并，设置页才能拿原始「供应商 + 模型」当规则候选。
+  - 匹配按 `provider + model` 精确比较（trim 后，区分大小写）；同一来源配了多条时
+    **只有列表最上面一条生效**；四项没填齐的规则不生效（界面保留待填）。
+  - 链式规则 `A→B`、`B→C` 一路解析到 C；环形规则（`A→B`、`B→A`）折到环内
+    **最靠前那条规则的目标**上，既不死循环，也不会把用量改名换姓。
+  - 归并求和用量各字段与调用次数，日序列按本地日逐日求和；目标行在快照里不存在时
+    按规则里的名字新建，只有真有用量才出现；没有行命中时原样返回入参数组（未配
+    规则的行为逐字节一致）。规则条数上限 `MODEL_REDIRECT_MAX_RULES`（50）。
+  - 规则表整表写入设置文档（`{op:'set', path:['modelRedirects'], value:[...]}`，
+    不做数组下标级增删）；`normalizeModelRedirects` 去首尾空白、丢弃四项全空的
+    空行、截断到上限，界面「失焦/回车」提交。
+  - 设置页的自动完成候选来自原始快照（`modelCatalog`），来源侧会排除**其他行**
+    已配过的「供应商 + 模型」组合（`unusedRedirectSources`）：模型被用光的供应商
+    整条不再出现，本行自己的取值仍保留在候选里，便于回改；目标侧候选不排除任何组合。
+- 读取路径：作用域快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔，间隔只收有限数并夹取，规则表按 `normalizeModelRedirects` 清洗）→ 缺字段回退默认值；作用域尚未就绪（加载中）或部署无设置后端时同样回退默认值，设置页顶部提示当前设置存放位置与是否可写。
 - 关闭 `goEnabled` 时，Go 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改；关闭 `deepseekEnabled` 时，DeepSeek 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改；关闭 `zaiEnabled` 时，Z.ai 的「侧边栏展示」与「抓取间隔」两项一并置灰不可改，三组独立联动。
 - 偏好不落账本（账本只记用量）；额度经 `useGoQuota`、`useDeepSeekBalance`、`useZaiQuota` 轮询，间隔取自偏好。
 - 旧版本把偏好存在浏览器 localStorage（key `dsh-usage-stats.settings`），升级后首次挂载做一次性迁移：先等作用域从 loading 落定，就绪且可写、设置文档里尚无该命名空间时，把与默认值不同的字段写进设置文档，成功后删除旧键；设置文档已有用户段时只删旧键（文档为准）。服务端设置缺席或只读时**保留**旧键——此刻没有可靠落点，删掉等于丢设置，下次挂载再试。

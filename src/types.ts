@@ -189,9 +189,25 @@ export interface QuotaRequest {
 }
 
 /**
+ * 一条模型统计重定向规则：把「来源供应商 + 来源模型」的用量算到
+ * 「目标供应商 + 目标模型」名下（只影响模型页统计，不动账本）。
+ */
+export interface ModelRedirect {
+  /** 来源供应商，如 opencode-go-vision。 */
+  fromProvider: string
+  /** 来源模型，如 deepseek-v4-flash。 */
+  fromModel: string
+  /** 目标供应商，如 opencode-go。 */
+  toProvider: string
+  /** 目标模型，如 deepseek-v4-flash。 */
+  toModel: string
+}
+
+/**
  * 插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控各三项，
- * 字段与 `usage-stats` 设置命名空间（服务端 schemastery schema）一一对应。
- * host 侧 schema 用它做泛型参数，client 侧经 settingsScope 取得同一形状。
+ * 加模型统计重定向规则表；字段与 `usage-stats` 设置命名空间（服务端
+ * schemastery schema）一一对应。host 侧 schema 用它做泛型参数，
+ * client 侧经 settingsScope 取得同一形状。
  */
 export interface UsageSettings {
   /** 是否启用 OpenCode Go 额度监控，关闭后不再请求官方额度接口。 */
@@ -212,4 +228,9 @@ export interface UsageSettings {
   showZaiInSidebar: boolean
   /** Z.ai 额度抓取间隔，单位分钟，下限 3 分钟。 */
   zaiFetchMinutes: number
+  /**
+   * 模型统计重定向规则：按顺序匹配来源（同一来源只有最上面一条生效），
+   * 由浏览器端在模型页归并，见 `src/client/stats.ts` 的 redirectModels。
+   */
+  modelRedirects: ModelRedirect[]
 }

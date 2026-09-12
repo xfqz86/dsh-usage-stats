@@ -27,3 +27,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 归并来源标记：跟在「模型 · 供应商」之后的低调小标签，悬浮出明细 */
+.mergedChip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  vertical-align: middle;
+}

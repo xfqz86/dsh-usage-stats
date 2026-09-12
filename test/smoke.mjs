@@ -689,8 +689,10 @@ await mounted.dispose()
 // registerUsageSettings 用 schemastery schema 注册 `usage-stats` 命名空间，
 // dsh-base 组合的文件后端把用户显式改过的字段写进 $DSH_HOME/settings.yaml，
 // 其余字段由 schema 默认值解析。本用例挂真实文件后端（watch 关闭），断言：
-//   - 注册后未写过的字段解析为 USAGE_SETTINGS_DEFAULTS（默认值同源 utils.ts）；
+//   - 注册后未写过的字段解析为 USAGE_SETTINGS_DEFAULTS（默认值同源 utils.ts，
+//     逐字段按 JSON 比较：modelRedirects 是数组，引用比较永远判为不同）；
 //   - update 写入的字段落进 settings.yaml 的 usage-stats 段，且段落只含这两个字段；
+//   - 模型统计重定向规则表能整表落盘为 YAML 列表并原样读回；
 //   - describe 下发的 schema 可 JSON 序列化（浏览器端 settingsScope 靠它校验收到的取值）。
 {
   const settingsHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-settings-'))
@@ -710,11 +712,17 @@ await mounted.dispose()
     console.error(`FAIL: 未注册设置命名空间 ${USAGE_SETTINGS_NAMESPACE}（服务端 registerUsageSettings 未生效）`)
     process.exit(1)
   }
+  /** 逐字段深比较：数组字段（modelRedirects）不能用引用比较。 */
+  const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   for (const [field, expected] of Object.entries(USAGE_SETTINGS_DEFAULTS)) {
-    if (resolved[field] !== expected) {
-      console.error(`FAIL: 默认值不一致 ${field}=${String(resolved[field])}，应为 ${String(expected)}`)
+    if (!sameValue(resolved[field], expected)) {
+      console.error(`FAIL: 默认值不一致 ${field}=${JSON.stringify(resolved[field])}，应为 ${JSON.stringify(expected)}`)
       process.exit(1)
     }
+  }
+  if (!Array.isArray(resolved.modelRedirects) || resolved.modelRedirects.length !== 0) {
+    console.error(`FAIL: 规则表默认值应为空数组，实际 ${JSON.stringify(resolved.modelRedirects)}`)
+    process.exit(1)
   }
   // describe 下发的 schema 必须可 JSON 序列化：浏览器端 settingsScope 用它校验收到的取值。
   const descriptor = settings.describe({ redactSecrets: true })
@@ -754,14 +762,33 @@ await mounted.dispose()
   }
   const expectedAfterUpdate = { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 10, showZaiInSidebar: false }
   for (const [field, expected] of Object.entries(expectedAfterUpdate)) {
-    if (afterUpdate[field] !== expected) {
-      console.error(`FAIL: 写入后解析值不一致 ${field}=${String(afterUpdate[field])}，应为 ${String(expected)}`)
+    if (!sameValue(afterUpdate[field], expected)) {
+      console.error(`FAIL: 写入后解析值不一致 ${field}=${JSON.stringify(afterUpdate[field])}，应为 ${JSON.stringify(expected)}`)
       process.exit(1)
     }
   }
+
+  // 模型统计重定向规则表：整表写入后落成 YAML 列表并原样读回（浏览器端读它做归并）。
+  const redirects = [
+    { fromProvider: 'opencode-go-vision', fromModel: 'deepseek-v4-flash', toProvider: 'opencode-go', toModel: 'deepseek-v4-flash' },
+    { fromProvider: 'zai-coding-cn', fromModel: 'glm-5.3-flash', toProvider: 'opencode-go', toModel: 'glm-5.3-flash' },
+  ]
+  await settings.update(USAGE_SETTINGS_NAMESPACE, { modelRedirects: redirects })
+  const afterRedirect = settings.get(USAGE_SETTINGS_NAMESPACE)
+  const redirectYaml = readFileSync(settingsPath, 'utf8')
+  for (const needle of ['modelRedirects:', 'fromProvider: opencode-go-vision', 'toProvider: opencode-go']) {
+    if (!redirectYaml.includes(needle)) {
+      console.error(`FAIL: settings.yaml 缺少规则表字段 "${needle}"：\n${redirectYaml}`)
+      process.exit(1)
+    }
+  }
+  if (!sameValue(afterRedirect.modelRedirects, redirects)) {
+    console.error(`FAIL: 规则表读回不一致：${JSON.stringify(afterRedirect.modelRedirects)}，应为 ${JSON.stringify(redirects)}`)
+    process.exit(1)
+  }
   console.log('settings namespace:', JSON.stringify({
     ns: USAGE_SETTINGS_NAMESPACE,
-    resolved: afterUpdate,
+    resolved: afterRedirect,
     revision: settings.describe({ redactSecrets: true }).find((c) => c.ns === USAGE_SETTINGS_NAMESPACE)?.revision,
   }, null, 2))
   await settingsMounted.dispose()

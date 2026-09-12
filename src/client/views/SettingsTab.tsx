@@ -18,6 +18,8 @@
  *     7. 启用 Z.ai 额度监控，zaiEnabled，关闭后不再轮询官方额度接口；
  *     8. 在侧边栏展示 Z.ai 额度，showZaiInSidebar，只影响底部芯片，不影响模态窗；
  *     9. Z.ai 额度抓取间隔，zaiFetchMinutes，单位分钟，下限 3 为 ZAI_FETCH_MIN_MINUTES、默认 5，关闭监控时 8、9 项置灰不可改。
+ * 模型统计重定向分组：规则表 modelRedirects，把来源供应商/模型的用量算到目标供应商/
+ * 模型名下（只影响模型页统计），编辑与提交见 ModelRedirectEditor，徽标显示规则条数。
  * 账本操作折叠：标题为 t('settings.ledgerOps')，内含清零与重建两项危险操作；
  * 快照 scanning 为真（首启扫描或重建扫描进行中）时两项同时置灰并给出原因，
  * 扫描期间不允许清零/重建——两者会与扫描交错写同一账本与聚合，服务端也以
@@ -26,6 +28,7 @@
  */
 
 import {
+  IconAgentPresetOutline16,
   IconArchiveOutline20,
   IconChevronDownOutline14,
   IconDataOutline16,
@@ -43,6 +46,7 @@ import { useConfirmOp, type ConfirmOpState } from '../useConfirmOp.ts';
 import { useIntervalText } from '../useIntervalText.ts';
 import { useUsageSettingsView } from '../useUsageSettings.ts';
 
+import { ModelRedirectEditor } from './ModelRedirectEditor.tsx';
 import css from './SettingsTab.module.css';
 
 import type { UsageSettings } from '../../types.ts';
@@ -267,6 +271,23 @@ export function SettingsTab({
             <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
           </span>
         </label>
+      </div>
+
+      {/* 模型统计重定向分组：规则条数即徽标，规则编辑器见 ModelRedirectEditor */}
+      <div className={css.prefGroup}>
+        <div className={css.prefGroupHead}>
+          <span className={css.prefGroupIcon} aria-hidden>
+            <IconAgentPresetOutline16 size={14} />
+          </span>
+          <span className={css.prefGroupTitle}>{t('settings.modelRedirects')}</span>
+          <span className={css.prefGroupCount}>{settings.modelRedirects.length}</span>
+        </div>
+        <ModelRedirectEditor
+          rules={settings.modelRedirects}
+          models={value?.models ?? []}
+          onChange={(rules) => onUpdateSettings({ modelRedirects: rules })}
+          t={t}
+        />
       </div>
 
       {/* 账本操作折叠 */}
