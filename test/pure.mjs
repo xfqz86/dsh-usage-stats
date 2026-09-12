@@ -49,12 +49,16 @@ import {
   hitRateOfDay,
   modelRangeCutoff,
   modelRangeToDays,
+  modelCatalog,
   paginateGroups,
   pctOf,
   pieFullCircleOf,
   pieSlicesOf,
+  redirectModels,
+  resolveRedirectKey,
   shortId,
   todayOf,
+  unusedRedirectSources,
   usageTotal,
 } from '../src/client/stats.ts';
 import {
@@ -63,6 +67,7 @@ import {
   DAY_MS,
   GO_FETCH_DEFAULT_MINUTES,
   GO_FETCH_MIN_MINUTES,
+  MODEL_REDIRECT_MAX_RULES,
   QUOTA_CACHE_TTL_MS,
   QUOTA_MIN_FETCH_MS,
   SERIES_MAX_DAYS,
@@ -80,6 +85,8 @@ import {
   goLevelOf,
   goPercent,
   goResetsAt,
+  isCompleteRedirect,
+  normalizeModelRedirects,
   normalizeUsageSettings,
   parseJsonLine,
   splitModelKey,
@@ -723,6 +730,197 @@ describe('stats：模型范围过滤与堆叠', () => {
   });
 });
 
+describe('模型统计重定向：规则归一化', () => {
+  const rule = (fromProvider, fromModel, toProvider, toModel) => ({ fromProvider, fromModel, toProvider, toModel });
+
+  it('非数组、坏元素一律回退空表', () => {
+    for (const bad of [undefined, null, 'x', 42, {}, [{}, null, 1, 'a', [], []]]) {
+      assert.deepEqual(normalizeModelRedirects(bad), []);
+    }
+  });
+
+  it('四字段取字符串并去首尾空白，非字符串记空串', () => {
+    assert.deepEqual(
+      normalizeModelRedirects([{ fromProvider: ' p1 ', fromModel: 'm1', toProvider: 1, toModel: null }]),
+      [rule('p1', 'm1', '', '')],
+    );
+  });
+
+  it('四项全空的条目丢弃，半填条目保留，超过上限截断', () => {
+    assert.deepEqual(
+      normalizeModelRedirects([{}, rule('', '', '', ''), rule('p1', '', '', '')]),
+      [rule('p1', '', '', '')],
+    );
+    assert.equal(MODEL_REDIRECT_MAX_RULES, 50);
+    const many = Array.from({ length: MODEL_REDIRECT_MAX_RULES + 5 }, (_, i) => rule(`p${i}`, 'm', 't', 'm'));
+    assert.equal(normalizeModelRedirects(many).length, MODEL_REDIRECT_MAX_RULES);
+  });
+
+  it('完整性判定：四项都非空才参与归并', () => {
+    assert.equal(isCompleteRedirect(rule('p', 'm', 't', 'n')), true);
+    assert.equal(isCompleteRedirect(rule('p', '', 't', 'n')), false);
+    assert.equal(isCompleteRedirect(rule('', 'm', 't', 'n')), false);
+    assert.equal(isCompleteRedirect(rule('p', 'm', '', 'n')), false);
+    assert.equal(isCompleteRedirect(rule('p', 'm', 't', '')), false);
+  });
+
+  it('偏好归一化贯通规则表，坏值回退空表', () => {
+    assert.deepEqual(normalizeUsageSettings({}).modelRedirects, []);
+    assert.deepEqual(normalizeUsageSettings({ modelRedirects: 'x' }).modelRedirects, []);
+    assert.deepEqual(
+      normalizeUsageSettings({ modelRedirects: [{ fromProvider: ' p ', fromModel: 'm', toProvider: 't', toModel: 'n' }] }).modelRedirects,
+      [rule('p', 'm', 't', 'n')],
+    );
+  });
+});
+
+describe('模型统计重定向：归并', () => {
+  const rule = (fromProvider, fromModel, toProvider, toModel) => ({ fromProvider, fromModel, toProvider, toModel });
+  /** 构造模型行：usage 由四段之和得出 total，series 默认给一段今天的用量。 */
+  const model = (provider, name, { input = 0, output = 0, cacheRead = 0, cacheWrite = 0, reasoning = 0, calls = 0, series = [] } = {}) => ({
+    provider,
+    model: name,
+    calls,
+    usage: { input, output, cacheRead, cacheWrite, reasoning, total: input + output + cacheRead + cacheWrite },
+    series,
+  });
+
+  it('无规则时原样返回入参数组，来源表为空', () => {
+    const models = [model('p1', 'a', { input: 10 }), model('p2', 'b', { input: 5 })];
+    const out = redirectModels(models, []);
+    assert.equal(out.models, models);
+    assert.deepEqual([...out.mergedSources], []);
+  });
+
+  it('规则一条都没命中时同样原样返回', () => {
+    const models = [model('p1', 'a', { input: 10 })];
+    const out = redirectModels(models, [rule('p9', 'x', 'p1', 'a')]);
+    assert.equal(out.models, models);
+    assert.deepEqual([...out.mergedSources], []);
+  });
+
+  it('跨供应商同名模型并成一行：用量、调用数与日序列求和', () => {
+    const models = [
+      model('opencode-go', 'deepseek-v4-flash', { input: 100, output: 10, calls: 2, series: [{ ...pt(0, 100), output: 10, calls: 2 }] }),
+      model('opencode-go-vision', 'deepseek-v4-flash', { input: 50, output: 5, calls: 1, series: [{ ...pt(0, 50), output: 5, calls: 1 }, pt(1, 1)] }),
+    ];
+    const out = redirectModels(models, [rule('opencode-go-vision', 'deepseek-v4-flash', 'opencode-go', 'deepseek-v4-flash')]);
+    assert.equal(out.models.length, 1);
+    assert.equal(out.models[0].provider, 'opencode-go');
+    assert.equal(out.models[0].model, 'deepseek-v4-flash');
+    assert.equal(out.models[0].usage.total, 165);
+    assert.equal(out.models[0].usage.output, 15);
+    assert.equal(out.models[0].calls, 3);
+    // 日序列按天求和，且按时间升序（series[0] 是更早的那天）
+    assert.equal(out.models[0].series.length, 2);
+    assert.equal(out.models[0].series[0].input, 1);
+    assert.equal(out.models[0].series[0].calls, 1);
+    assert.equal(out.models[0].series[1].input, 150);
+    assert.equal(out.models[0].series[1].calls, 3);
+    assert.ok(out.models[0].series[0].t < out.models[0].series[1].t);
+    assert.deepEqual(
+      out.mergedSources.get('opencode-go\u0000deepseek-v4-flash'),
+      ['opencode-go-vision\u0000deepseek-v4-flash'],
+    );
+  });
+
+  it('链式规则一路解析到链尾，环内折到最靠前那条规则的目标', () => {
+    const chain = [model('p', 'a', { input: 1 }), model('p', 'b', { input: 2 }), model('p', 'c', { input: 4 })];
+    const chained = redirectModels(chain, [rule('p', 'a', 'p', 'b'), rule('p', 'b', 'p', 'c')]);
+    assert.equal(chained.models.length, 1);
+    assert.equal(chained.models[0].model, 'c');
+    assert.equal(chained.models[0].usage.total, 7);
+    assert.deepEqual(chained.mergedSources.get('p\u0000c'), ['p\u0000a', 'p\u0000b']);
+
+    // 环 A→B、B→A：按列表顺序取 A→B（第一条）的目标 B，两行并成一行 B
+    const cycle = [model('p', 'a', { input: 1 }), model('p', 'b', { input: 2 })];
+    const folded = redirectModels(cycle, [rule('p', 'a', 'p', 'b'), rule('p', 'b', 'p', 'a')]);
+    assert.equal(folded.models.length, 1);
+    assert.equal(folded.models[0].model, 'b');
+    assert.equal(folded.models[0].usage.total, 3);
+    // 反过来写规则，存活的是 A
+    const reversed = redirectModels(cycle, [rule('p', 'b', 'p', 'a'), rule('p', 'a', 'p', 'b')]);
+    assert.equal(reversed.models.length, 1);
+    assert.equal(reversed.models[0].model, 'a');
+    // 自反规则不产生归并
+    const self = redirectModels([model('p', 'a', { input: 1 })], [rule('p', 'a', 'p', 'a')]);
+    assert.equal(self.models.length, 1);
+    assert.deepEqual([...self.mergedSources], []);
+  });
+
+  it('同一来源取最上面一条，不完整与自反规则不生效', () => {
+    const models = [model('p', 'a', { input: 1 }), model('t1', 'x', { input: 0 }), model('t2', 'x', { input: 0 })];
+    const out = redirectModels(models, [
+      rule('p', 'a', 't1', 'x'),
+      rule('p', 'a', 't2', 'x'),
+      rule('p', 'b', '', 't2', ),
+    ]);
+    const keys = out.models.map((m) => `${m.provider}/${m.model}`).sort();
+    assert.deepEqual(keys, ['t1/x', 't2/x']);
+    assert.equal(out.models.find((m) => m.model === 'x' && m.provider === 't1').usage.total, 1);
+    assert.equal(out.models.find((m) => m.provider === 't2').usage.total, 0);
+  });
+
+  it('目标行不存在时按规则里的名字新建，按 total 降序排列', () => {
+    const models = [model('p', 'a', { input: 10 }), model('q', 'z', { input: 3 })];
+    const out = redirectModels(models, [rule('p', 'a', 'canonical', 'merged')]);
+    assert.deepEqual(out.models.map((m) => `${m.provider}/${m.model}`), ['canonical/merged', 'q/z']);
+    assert.equal(out.models[0].usage.total, 10);
+    assert.deepEqual(out.mergedSources.get('canonical\u0000merged'), ['p\u0000a']);
+  });
+
+  it('旧快照缺 series 时不虚构日序列', () => {
+    const noSeries = [{ provider: 'p', model: 'a', calls: 1, usage: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 1 } }];
+    const out = redirectModels(noSeries, [rule('p', 'a', 'q', 'b')]);
+    assert.deepEqual(out.models[0].series, []);
+  });
+
+  it('resolveRedirectKey 逐跳解析，未命中即为自身', () => {
+    const index = new Map([
+      ['p\u0000a', { to: 'p\u0000b', order: 0 }],
+      ['p\u0000b', { to: 'p\u0000c', order: 1 }],
+    ]);
+    assert.equal(resolveRedirectKey('p\u0000a', index), 'p\u0000c');
+    assert.equal(resolveRedirectKey('p\u0000z', index), 'p\u0000z');
+    assert.equal(resolveRedirectKey('p\u0000c', index), 'p\u0000c');
+  });
+});
+
+describe('模型统计重定向：候选过滤（设置页自动完成）', () => {
+  const model = (provider, name) => ({ provider, model: name, calls: 0, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 }, series: [] });
+
+  it('catalog 按供应商与模型去重、排序', () => {
+    const catalog = modelCatalog([
+      model('zai-coding-cn', 'glm-5.3-flash'),
+      model('opencode-go', 'deepseek-v4-flash'),
+      model('opencode-go', 'deepseek-v4-flash'),
+      model('opencode-go', 'mimo-v2.5'),
+      model('opencode-go-vision', 'deepseek-v4-flash'),
+    ]);
+    assert.deepEqual([...catalog.keys()], ['opencode-go', 'opencode-go-vision', 'zai-coding-cn']);
+    assert.deepEqual(catalog.get('opencode-go'), ['deepseek-v4-flash', 'mimo-v2.5']);
+  });
+
+  it('已配过的来源组合从候选里去掉，模型用光的供应商整条消失', () => {
+    const catalog = modelCatalog([
+      model('opencode-go', 'deepseek-v4-flash'),
+      model('opencode-go', 'mimo-v2.5'),
+      model('opencode-go-vision', 'deepseek-v4-flash'),
+    ]);
+    const used = new Set(['opencode-go-vision\u0000deepseek-v4-flash']);
+    const free = unusedRedirectSources(catalog, used);
+    // vision 只有一个模型且已被占用：整条供应商不再出现
+    assert.deepEqual([...free.keys()], ['opencode-go']);
+    assert.deepEqual(free.get('opencode-go'), ['deepseek-v4-flash', 'mimo-v2.5']);
+    // 同一供应商只占用其中一个模型：供应商保留，只去掉那一个模型
+    const partial = unusedRedirectSources(catalog, new Set(['opencode-go\u0000deepseek-v4-flash']));
+    assert.deepEqual([...partial.keys()], ['opencode-go', 'opencode-go-vision']);
+    assert.deepEqual(partial.get('opencode-go'), ['mimo-v2.5']);
+    // 没占用任何组合时原样返回
+    assert.deepEqual([...unusedRedirectSources(catalog, new Set()).keys()], [...catalog.keys()]);
+  });
+});
+
 describe('snapshot：构建与截断', () => {
   it('快照截断至 366 天且总量不受影响', () => {
     const store = createStore();
@@ -1095,6 +1293,17 @@ describe('偏好设置：归一化与写入操作', () => {
       diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, showGoInSidebar: false, zaiFetchMinutes: 9 }),
       { showGoInSidebar: false, zaiFetchMinutes: 9 },
     );
+  });
+
+  it('规则表整表写入，空表与非空表都不算用户改动', () => {
+    const rules = [{ fromProvider: 'p1', fromModel: 'm', toProvider: 'p2', toModel: 'm' }];
+    // 路径写入：整条数组一次 set，不做下标级增删
+    assert.deepEqual(settingOps({ modelRedirects: rules }), [
+      { op: 'set', path: ['modelRedirects'], value: rules },
+    ]);
+    // 归一化每次都新建数组：引用比较会把空表当成用户改动，故按 JSON 比较
+    assert.deepEqual(diffFromDefaults(normalizeUsageSettings(null)), {});
+    assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, modelRedirects: rules }), { modelRedirects: rules });
   });
 });
 

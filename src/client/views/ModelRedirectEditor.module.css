@@ -1,0 +1,140 @@
+/* 模型统计重定向规则编辑器 ModelRedirectEditor：规则行（来源 → 目标）、
+   删除按钮、添加按钮与提示文字。颜色全部使用设计 token
+   （token 名以 test/styles.mjs 对照 harness 主题校验，不得自造，
+   也禁止写自定义属性兜底）。 */
+/* .goHint 等基元见 UsageStatsCommon.module.css；分组卡片外观在 SettingsTab.module.css。 */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+/* 空态：没有规则时的说明，与其他分组说明文字同一形态 */
+.empty {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 一条规则：行本身 + 行下方的提示文字 */
+.ruleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ruleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ruleSide {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 侧标签「来源 / 算到」：与抓取间隔的单位文字同一层级 */
+.ruleTag {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.ruleInput {
+  width: 168px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.ruleInput::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.ruleInput:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.ruleArrow {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 删除按钮：默认低调，悬浮转危险色 */
+.ruleRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex: none;
+}
+
+.ruleRemove:hover {
+  color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+}
+
+/* 行内提示：四项没填齐、来源重复 */
+.ruleHint {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.editorFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.addBtn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.addBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.addBtn:disabled:hover {
+  background: transparent;
+}

@@ -4,14 +4,20 @@
  * 表格列：模型 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比。
  * 过滤逻辑基于模型的按日细分 series，与饼图/堆叠柱共用同一过滤后切片。
  * 表头可排序，与 SessionsTab 同款交互，分页 20/页、容器与会话 Tab 对齐。
+ *
+ * 传进来的 models 已按偏好里的模型统计重定向规则归并（见 UsageStatsPanel 与
+ * ../stats.ts 的 redirectModels）：来源行的用量并进目标行，mergedSources 给出
+ * 每个目标行并进来的来源，模型列据此显示「已归并 N」并在悬浮卡片里列出明细。
  */
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { splitModelKey } from '../../utils.ts';
 import { ModelPieChart } from '../components/ModelPieChart.tsx';
 import { Pagination } from '../components/Pagination.tsx';
 import { StackedBar } from '../components/StackedBar.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
+import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { avgPerCall, fmt, fmtFull, hitRateOfDay, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
@@ -40,9 +46,11 @@ const MODEL_RANGES: [ModelRange, UsageStatsKey][] = [
 
 /** 模型 Tab：图表 + 时间范围筛选，位于图表与表格之间且右对齐，+ 排序 + 分页，容器与会话 Tab 对齐。 */
 export function ModelsTab({
-  models, t,
+  models, mergedSources, t,
 }: {
   models: ModelStat[]
+  /** 归并来源：目标行键（`provider\0model`）→ 并进来的来源键，未配重定向时为空。 */
+  mergedSources?: ReadonlyMap<string, string[]>
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   // 本地化函数单点转换：纯函数要的无命名空间形态，组件内统一用 tFn。
@@ -156,10 +164,38 @@ export function ModelsTab({
                   const total = usageTotal(m.usage);
                   const hit = hitRateOfDay(m.usage);
                   const avg = avgPerCall(total, m.calls);
+                  const sources = mergedSources?.get(m.provider + '\u0000' + m.model) ?? [];
                   return (
                     <tr key={m.provider + '\u0000' + m.model}>
                       <td className={shared.cellText}>
                         {m.model} <span className={shared.sub}>· {m.provider}</span>
+                        {/* 归并来源：目标行显示条数与悬浮明细，未归并的行不出现该标记 */}
+                        {sources.length > 0 && (
+                          <Tooltip
+                            side="top"
+                            delayMs={150}
+                            content={(
+                              <div className={shared.tipPanel}>
+                                <div className={shared.tipHeader}>{t('models.mergedSourcesHint')}</div>
+                                <div className={shared.tipList}>
+                                  {sources.map((key) => {
+                                    const src = splitModelKey(key);
+                                    return (
+                                      <div key={key} className={shared.tipListRow}>
+                                        <span className={shared.tipListKey}>{src.model}</span>
+                                        <span className={shared.tipListVal}>{src.provider}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          >
+                            <span className={`${shared.sub} ${css.mergedChip}`}>
+                              {t('models.mergedSources', { n: sources.length })}
+                            </span>
+                          </Tooltip>
+                        )}
                       </td>
                       <td className={shared.num}>{fmt(m.usage.cacheRead, tFn)}</td>
                       <td className={shared.num}>{fmt(m.usage.input, tFn)}</td>
