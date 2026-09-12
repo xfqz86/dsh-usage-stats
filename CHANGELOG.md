@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-13
+
+### 新增
+
+- **模型统计重定向**：设置页新增一组规则，把「某个供应商的某个模型的用量」算到「另一个供应商的某个模型」名下——适合同一模型被路由到不同 provider 的场景（如 `opencode-go-vision/deepseek-v4-flash` 并入 `opencode-go/deepseek-v4-flash`）。规则存 `$DSH_HOME/settings.yaml` 的 `usage-stats` 段（`modelRedirects`，新字段，服务端 schema 数组，默认空表），换浏览器共用；模型页的表格、占比、饼图与堆叠柱按归并后的行展示，目标行显示「已归并 N」并在悬浮卡片里列出被并进来的来源。归并在浏览器端做（`src/client/stats.ts` 的 `redirectModels`），服务端快照与账本原始数据一字不改，不用重建、不用重扫：配规则立即生效，删规则立即恢复。语义：来源按 `provider + model` 精确匹配、同一来源只有列表最上面一条生效、四项没填齐的规则不生效、链式规则解析到链尾、环形规则折到环内最靠前那条规则的目标上、规则上限 50 条；来源输入的下拉候选会排除其他规则已配过的「供应商 + 模型」组合（模型用光的供应商整条不再出现，本行自己的取值保留），目标候选不排除
+
+### 变更
+
+- 工作流外部动作升级到 Node 24 运行时版本（`actions/checkout@v7`、`actions/setup-node@v7`、`pnpm/action-setup@v6`、`actions/upload-artifact@v7`、`actions/download-artifact@v8`、`softprops/action-gh-release@v3`），消除 GitHub 对 Node 20 动作的弃用警告（本仓复合动作此前已是 `node24`）；`pnpm/action-setup` 升到 v6 才正式支持本仓使用的 pnpm 11
+
 ## [0.3.0] - 2026-09-11
 
 ### 新增
@@ -104,7 +114,8 @@
 - 统计口径：`assistant/message` 且 `data.usage` 存在才入账，`total=input+output+cacheRead+cacheWrite`（`reasoning` 单列），缺失 provider/model 记 `unknown`，按本地自然日划分
 - 构建与发布：`tsdown` 双 bundle（Host ESM + Client 闭包）+ CSS Modules 内联，`smoke/client-bundle` 验证，交付 npm/GitHub Release/tarball 三形态，提交遵循 Conventional Commits
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.1.1...v0.2.0

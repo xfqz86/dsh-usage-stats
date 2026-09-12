@@ -1,6 +1,6 @@
 {
   "name": "@xfqz86/dsh-usage-stats",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "DSH web plugin: token usage statistics in the sidebar footer — today badge (wide/rail) opening a detail panel with per-model/provider breakdown, session list, daily trend curve and heatmap (host scans session logs, serves usageStats Remote methods)",
   "type": "module",
   "main": "lib/index.js",
