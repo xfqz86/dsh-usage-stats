@@ -25,7 +25,8 @@ dsh-usage-stats/
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
 ├── docs/
 │   ├── releases/
-│   │   └── v0.3.0.md
+│   │   ├── v0.3.0.md
+│   │   └── v0.4.0.md
 │   ├── screenshot/
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png
