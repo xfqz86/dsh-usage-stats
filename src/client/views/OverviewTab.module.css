@@ -33,6 +33,16 @@
   background: transparent;
   box-shadow: none;
   min-width: 0;
+  /* 行高由跨两行的热力图内容撑开：卡片需纵向填满所在行，
+     上下边缘才与热力图卡片齐平，否则卡片以自然高度悬浮、行间缝隙变大。 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* HeroTile 卡片填满定位层 */
+.tileToday > * {
+  flex: 1;
+  min-height: 0;
 }
 
 .tileTotal {
@@ -42,6 +52,13 @@
   background: transparent;
   box-shadow: none;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tileTotal > * {
+  flex: 1;
+  min-height: 0;
 }
 
 .tileHeatmap {

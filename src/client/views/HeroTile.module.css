@@ -3,7 +3,10 @@
 /* .cell / .cellIcon 等基元见 UsageStatsCommon.module.css。 */
 
 .cellHero {
-  gap: 4px;
+  /* 卡片随行高拉伸（与热力图齐平）：纵向 space-between 让图标行贴顶、
+     比例条钉底，大数与命中率行随高度均匀散开，避免底部大片留白。 */
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .heroHead {
