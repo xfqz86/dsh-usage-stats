@@ -47,6 +47,7 @@ import {
   groupSessions,
   heatGridOf,
   hitRateOfDay,
+  lastActiveDayKind,
   modelRangeCutoff,
   modelRangeToDays,
   modelCatalog,
@@ -918,6 +919,21 @@ describe('模型统计重定向：候选过滤（设置页自动完成）', () =
     assert.deepEqual(partial.get('opencode-go'), ['mimo-v2.5']);
     // 没占用任何组合时原样返回
     assert.deepEqual([...unusedRedirectSources(catalog, new Set()).keys()], [...catalog.keys()]);
+  });
+});
+
+describe('lastActiveDayKind：最近活跃自然日判定', () => {
+  // 固定本地时间 2026-09-14 09:30，用例不随当前时间漂移
+  const now = new Date(2026, 8, 14, 9, 30).getTime();
+  const at = (d, h, m) => new Date(2026, 8, d, h, m).getTime();
+
+  it('按本地自然日划分，不用 24 小时窗', () => {
+    assert.equal(lastActiveDayKind(at(14, 0, 1), now), 'today');
+    // 昨天 23:59 距今不到 10 小时，24 小时窗会误判为今天
+    assert.equal(lastActiveDayKind(at(13, 23, 59), now), 'yesterday');
+    // 昨天 02:47，即用户报错的凌晨场景
+    assert.equal(lastActiveDayKind(at(13, 2, 47), now), 'yesterday');
+    assert.equal(lastActiveDayKind(at(12, 12, 0), now), 'earlier');
   });
 });
 

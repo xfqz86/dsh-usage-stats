@@ -241,6 +241,20 @@ export { startOfDay } from '../utils.ts';
 export const dayLabel = (t: number): string => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate(); };
 export const fullDayLabel = (t: number): string => dateKeyOf(t);
 
+/**
+ * 最近活跃的自然日分类：按本地日历日比较，今天 / 昨天 / 更早。
+ * 昨天用 setDate 回退一天再取零点，夏令时切换日也正确；不能用
+ * 「距今不足 24 小时」判定，否则昨天凌晨的会话次日会被误标今天。
+ */
+export function lastActiveDayKind(lastActive: number, nowMs: number): 'today' | 'yesterday' | 'earlier' {
+  const day = startOfDay(lastActive);
+  if (day === startOfDay(nowMs)) return 'today';
+  const yesterday = new Date(nowMs);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day === startOfDay(yesterday.getTime())) return 'yesterday';
+  return 'earlier';
+}
+
 /** 取序列中最新一天的点，底部角标读今日数据用。 */
 export function todayOf(series: SeriesPoint[]): SeriesPoint | undefined {
   const today = startOfDay(Date.now());

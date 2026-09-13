@@ -8,11 +8,10 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 
-import { DAY_MS } from '../../utils.ts';
 import { Pagination } from '../components/Pagination.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { avgPerCall, fmt, fmtFull, fullDayLabel, hitRateOfDay, pctOf, shortId, usageTotal, groupSessions } from '../stats.ts';
+import { avgPerCall, fmt, fmtFull, fullDayLabel, hitRateOfDay, lastActiveDayKind, pctOf, shortId, usageTotal, groupSessions } from '../stats.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
 import css from './SessionsTab.module.css';
@@ -28,15 +27,16 @@ type SortKey = 'session' | 'calls' | 'input' | 'output' | 'cacheRead' | 'hitRate
 
 /** 缓存命中率：cacheRead 除以 cacheRead 与 input 之和再乘 100，保留 1 位小数，分母为 0 时为 null。 */
 /** 平均每次调用：total / calls 取整；calls 为 0 时为 null。 */
-/** 最近活跃文案：0 表未知，24 小时内显示“今天 HH:MM”，否则完整日期。 */
+/** 最近活跃文案：0 表未知，自然日为今天显示「今天 HH:MM」、昨天显示「昨天 HH:MM」，更早显示完整日期。 */
 function formatLastActive(
   lastActive: number,
   t: PropsLocale<'dsh-usage-stats'>['t'],
 ): string {
   if (!lastActive) return '--';
-  if (Date.now() - lastActive < DAY_MS) {
-    return `${t('time.today')} ${new Date(lastActive).toTimeString().slice(0, 5)}`;
-  }
+  const time = new Date(lastActive).toTimeString().slice(0, 5);
+  const kind = lastActiveDayKind(lastActive, Date.now());
+  if (kind === 'today') return `${t('time.today')} ${time}`;
+  if (kind === 'yesterday') return `${t('time.yesterday')} ${time}`;
   return fullDayLabel(lastActive);
 }
 
