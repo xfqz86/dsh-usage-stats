@@ -9,8 +9,8 @@
  *   - ModelsTab，模型，按模型拆分表格（按偏好里的重定向规则归并后展示）
  *   - SettingsTab，设置，含偏好设置，涉及 Go、DeepSeek 与 Z.ai、模型统计重定向、可折叠的账本操作与页脚
  *
- * 数据与底部按钮共用 usageStats/snapshot、usageStats/go-quota
- * 与 usageStats/deepseek-balance 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
+ * 数据与底部按钮共用 usageStats/snapshot、usageStats/go-quota、
+ * usageStats/deepseek-balance 与 usageStats/zai-quota 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
  * 含 DatesTab 的曲线范围、SessionsTab 的会话展开等，不跨切换保留，
  * 重新进入对应 Tab 即重置为默认值。
  */

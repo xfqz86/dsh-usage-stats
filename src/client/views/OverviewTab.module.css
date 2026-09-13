@@ -35,13 +35,6 @@
   min-width: 0;
 }
 
-.tileToday :global(.cellHero),
-.tileTotal :global(.cellHero) {
-  /* 覆盖 HeroTile 默认的 grid-column: span 2，避免在命名区域内再跨列 */
-  grid-column: auto !important;
-  width: 100%;
-}
-
 .tileTotal {
   grid-area: total;
   padding: 0;
@@ -277,31 +270,6 @@
 .deepseekDetailValue {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.deepseekToday {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
-}
-
-.deepseekTodayLabel {
-  font-size: 11px;
-  color: var(--dsw-alias-label-tertiary);
-  white-space: nowrap;
-}
-
-.deepseekTodayValue {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-align: right;
 }
 
 /* ---- 磁贴底部更新时间：DeepSeek / Go / Z.ai 三卡共用 ----

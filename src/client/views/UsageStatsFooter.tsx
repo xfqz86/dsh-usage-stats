@@ -25,7 +25,7 @@ import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
 import { HintCard } from '../components/HintCard.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
+import { avgPerCall, dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
 import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../useQuota.ts';
 import { useSnapshot } from '../useSnapshot.ts';
 import { useUsageSettings } from '../useUsageSettings.ts';
@@ -258,25 +258,27 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     );
   })();
 
-  // 折叠 rail tooltip 为用量图标，顺序与热力图一致，含缓存、输入、输出、总计、缓存命中率、调用次数与平均每次调用，
-  // 不含 Go 额度，Go 明细由上方额度芯片的 tooltip 承载，日期左对齐、其他标签居左、数值居右。
+  // 今日明细行清单：折叠 rail 与宽列比例条两个 tooltip 共用同一份，
+  // 平均每次调用走 stats 的 avgPerCall，与日期/会话/模型三表同一口径。
+  const todayDetailRows: [string, string][] = [
+    [t('table.cacheRead'), fmtFull(cacheTokens)],
+    [t('table.input'), fmtFull(inputTokens)],
+    [t('table.output'), fmtFull(outputTokens)],
+    [t('table.total'), fmtFull(todayTokens)],
+    [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
+    [t('table.calls'), fmtFull(todayCalls)],
+    [t('table.avgPerCall'), fmtFull(avgPerCall(todayTokens, todayCalls) ?? 0)],
+  ];
+
+  // 折叠态今日用量芯片的 tooltip：明细行与宽列比例条 tooltip 完全共用，
+  // 不含额度明细，三额度的明细由各自芯片的 tooltip 承载。
   const railContent = (() => {
     if (!today || todayTokens === 0) return t('footer.railEmpty');
-    const avgPerCall = todayCalls > 0 ? Math.round(todayTokens / todayCalls) : 0;
-    const rows: [string, string][] = [
-      [t('table.cacheRead'), fmtFull(cacheTokens)],
-      [t('table.input'), fmtFull(inputTokens)],
-      [t('table.output'), fmtFull(outputTokens)],
-      [t('table.total'), fmtFull(todayTokens)],
-      [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
-      [t('table.calls'), fmtFull(todayCalls)],
-      [t('table.avgPerCall'), fmtFull(avgPerCall)],
-    ];
     return (
       <div className={shared.tipPanel}>
         <div className={shared.tipHeader}>{t('footer.railHeader')}</div>
         <div className={shared.tipList}>
-          {rows.map(([k, v]) => (
+          {todayDetailRows.map(([k, v]) => (
             <div key={k} className={shared.tipListRow}>
               <span className={shared.tipListKey}>{k}</span>
               <span className={shared.tipListVal}>{v}</span>
@@ -287,7 +289,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     );
   })();
 
-  // 折叠态芯片，只展示滚动 5 小时窗口，位于圆形按钮上方。
+  // 折叠态 Go 芯片取滚动 5 小时窗口。
   const railRolling = goWindows.find((w) => w.key === 'rolling');
 
   // Go 额度 tooltip，宽列芯片与折叠 rail 共用，卡片化三档窗口明细，
@@ -386,22 +388,12 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const railLevel = railRolling === undefined ? undefined : goLevelOf(goPercent(railRolling.win));
   const railCls = railLevel ? getChipClass(railLevel) : '';
 
-  // 展开态比例条 tooltip 即宽列比例条，顺序与热力图一致，含缓存、输入、输出、总计、缓存命中率、调用次数与平均每次调用
+  // 展开态比例条 tooltip 即宽列比例条，行清单与折叠 rail 共用
   const barContent = (() => {
     if (!today || todayTokens === 0) return null;
-    const avgPerCall = todayCalls > 0 ? Math.round(todayTokens / todayCalls) : 0;
-    const rows: [string, string][] = [
-      [t('table.cacheRead'), fmtFull(cacheTokens)],
-      [t('table.input'), fmtFull(inputTokens)],
-      [t('table.output'), fmtFull(outputTokens)],
-      [t('table.total'), fmtFull(todayTokens)],
-      [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
-      [t('table.calls'), fmtFull(todayCalls)],
-      [t('table.avgPerCall'), fmtFull(avgPerCall)],
-    ];
     return (
       <div className={`${shared.tipPanelRows} ${shared.tipList}`}>
-        {rows.map(([k, v]) => (
+        {todayDetailRows.map(([k, v]) => (
           <div key={k} className={shared.tipListRow}>
             <span className={shared.tipListKey}>{k}</span>
             <span className={shared.tipListVal}>{v}</span>
@@ -428,7 +420,6 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       ].filter((w): w is ZaiWindowEntry => w.win !== null)
       : [];
   const zaiWeb = zai?.status === 'ok' ? zai.webSearches : null;
-  const zaiResetsOf = (win: GoWindow): string => goResetsAt(t, win);
   const zaiChip = ({ key, short, win }: ZaiWindowEntry) => {
     const pct = goPercent(win);
     const level = goLevelOf(pct);
@@ -490,7 +481,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                 label={w.full}
                 pct={pct}
                 level={goLevelOf(pct)}
-                reset={zaiResetsOf(w.win)}
+                reset={resetsOf(w.win)}
                 points={pointsText}
               />
             );
@@ -629,17 +620,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         </Tooltip>
       );
     }
-    if (zai?.status === 'no-key') {
-      return (
-        <Tooltip content={zaiTipContent} side="top" delayMs={400}>
-          <span className={css.goRailChipBox}>
-            <span className={css.goRailChipLabel}>{t('zai.short.label')}</span>
-            <span className={css.goRailChipPct}>—</span>
-          </span>
-        </Tooltip>
-      );
-    }
-    if (zai?.status === 'no-plan') {
+    if (zai?.status === 'no-key' || zai?.status === 'no-plan') {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>

@@ -14,8 +14,8 @@ import { usageStatsRemote } from './remote.ts';
 
 import type { UsageSnapshot } from '../types.ts';
 
-/** 快照协议类型单一定义在 types.ts（host snapshot() 构建共用），此处 re-export 保持对外引用面。 */
-export type { UsageAgg, SeriesPoint, ModelStat, SessionStat, UsageSnapshot } from '../types.ts';
+/** 快照协议类型单一定义在 types.ts（host snapshot() 构建共用），此处仅 re-export 实际被引用的名字。 */
+export type { ModelStat, SessionStat, UsageSnapshot } from '../types.ts';
 
 /** 每 `intervalMs` 轮询一次服务端快照；返回 [快照, 是否出错, 手动刷新, 出错明细]。 */
 export function useSnapshot(intervalMs = SNAPSHOT_INTERVAL_MS): [UsageSnapshot | null, boolean, () => void, string | null] {

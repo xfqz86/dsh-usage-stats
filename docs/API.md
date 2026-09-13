@@ -79,12 +79,12 @@ Client 严格编解码在 `src/remote/contribution.ts`。
   窗口重新起算。
 - 响应 `value`：`ZaiQuota` 定义在 `src/types.ts`，结构为
   `{ status: 'ok' | 'no-key' | 'no-plan' | 'error', fetchedAt, plan, session, weekly, webSearches }`，
-  `session` 和 `weekly` 为 `ZaiWindow | null`，结构为 `{ percent, resetsAt, used, limit }`，`resetsAt` 为 ISO 字符串，`percent` 已夹到 0..100，`used` 和 `limit` 为点数明细，来自官方条目的 `currentValue` 和 `usage` 字段，官方未下发时为 `null`，`webSearches` 为 `ZaiWebSearchQuota | null`，结构为 `{ used, limit, percent, resetsAt }`，`plan` 为 `string | null`，如 `"Z.ai pro"`，`status` 由客户端按文案本地化展示，`ok` 时三窗口可能部分为 `null`，按官方 `limits` 实际返回决定，开放未来窗口兼容。
+  `session` 和 `weekly` 为 `ZaiWindow | null`，结构为 `{ percent, resetsAt, used, limit }`，`resetsAt` 为 ISO 字符串，`percent` 为官方原始浮点（服务端仅保证非负、不夹上限），展示时由前端 `goPercent`（`Math.round` 并夹到 0..100）与 `goLevelOf` 分档，`used` 和 `limit` 为点数明细，来自官方条目的 `currentValue` 和 `usage` 字段，官方未下发时为 `null`，`webSearches` 为 `ZaiWebSearchQuota | null`，结构为 `{ used, limit, percent, resetsAt }`，`plan` 为 `string | null`，如 `"Z.ai pro"`，`status` 由客户端按文案本地化展示，`ok` 时三窗口可能部分为 `null`，按官方 `limits` 实际返回决定，开放未来窗口兼容。
 - **key 解析**：仅 DSH 凭据中心 `ZAI_CODING_CN_API_KEY` → `ZAI_API_KEY`，经 `ctx.credentials` 读取，不直接读 `process.env`，不使用 `GLM_API_KEY`。
 - **端点** `GET https://api.z.ai/api/monitor/usage/quota/limit` + 浏览器 UA，与 GoQuota 同款，可防前置拦截，`Authorization: Bearer <key>`，`Accept: application/json`，15s 超时；参考 `openusage` 的 `ZAIUsageClient.quotaURL` 与 `ZAIUsageMapper`，`CREDIT_LIMIT` 和 `TOKENS_LIMIT` 按 `unit` 归类，`unit:3` 小时×数量<1 天为会话 5 小时，`unit:6` 周和 `unit:4` 天等多日为本周，`TIME_LIMIT` 为月度 Web 搜索计数。
 - **缓存**：有效 TTL = `min(5 分钟, max(3 分钟, intervalMinutes))`；未带间隔
   默认 5 分钟；**单飞**，即并发请求只打一次官方端点；**不落账本**，仅内存缓存。
-- **归一化**：`data.limits` 逐条按 `type`、`rawType` 归类，`CREDIT_LIMIT` 和 `TOKENS_LIMIT` 为百分比窗口，按 `unit` 的实际时长归为 `session` 和 `weekly`，`TIME_LIMIT` 为 `webSearches`，`percentage` 缺失时该窗口视为非法，`currentValue` 和 `usage` 缺失时 `webSearches` 视为非法；`nextResetTime` 为 epoch 毫秒，统一转为 ISO `resetsAt`；`percent` 经 `Math.round` 夹到 0..100 后由前端 `goPercent` 和 `goLevelOf` 分档；非法条目按 `openusage` 的校验策略，若已识别类型但归一化失败则整批判为 `error`，否则按空数据返回 `ok`，三窗口为 `null`。
+- **归一化**：`data.limits` 逐条按 `type`、`rawType` 归类，`CREDIT_LIMIT` 和 `TOKENS_LIMIT` 为百分比窗口，按 `unit` 的实际时长归为 `session` 和 `weekly`，`TIME_LIMIT` 为 `webSearches`，`percentage` 缺失时该窗口视为非法，`currentValue` 和 `usage` 缺失时 `webSearches` 视为非法；`nextResetTime` 为 epoch 毫秒，统一转为 ISO `resetsAt`；`percent` 服务端仅归一非负、保留原始浮点，`Math.round` 与夹到 0..100 由前端 `goPercent` 在展示时完成，再由 `goLevelOf` 分档；非法条目按 `openusage` 的校验策略，若已识别类型但归一化失败则整批判为 `error`，否则按空数据返回 `ok`，三窗口为 `null`。
 - **语义**：无 key、401、403 → `no-key`；`success:false` 且 `msg` 含 `"coding plan"`，如 `"当前用户不存在coding plan"`，→ `no-plan`，为合法 key 但无 GLM Coding Plan，前端展示“未开通 GLM Coding Plan”空态；非 2xx 除 401、403 外、超时、网络异常、JSON 结构非法、已识别窗口归一化失败 → `error`；成功 → `ok`，空 `limits:[]` 仍为 `ok` 且三窗口为 `null`，前端展示“暂无额度数据”。
 
 ## 4. usageStats/rebuild

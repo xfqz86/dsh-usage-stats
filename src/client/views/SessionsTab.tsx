@@ -25,8 +25,6 @@ const PAGE_SIZE = 20;
 /** 排序键：与表头一一对应。 */
 type SortKey = 'session' | 'calls' | 'input' | 'output' | 'cacheRead' | 'hitRate' | 'total' | 'avg' | 'lastActive';
 
-/** 缓存命中率：cacheRead 除以 cacheRead 与 input 之和再乘 100，保留 1 位小数，分母为 0 时为 null。 */
-/** 平均每次调用：total / calls 取整；calls 为 0 时为 null。 */
 /** 最近活跃文案：0 表未知，自然日为今天显示「今天 HH:MM」、昨天显示「昨天 HH:MM」，更早显示完整日期。 */
 function formatLastActive(
   lastActive: number,

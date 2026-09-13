@@ -30,7 +30,7 @@ export type { CredentialsService } from './quota.ts';
 const ZAI_QUOTA_URL = 'https://api.z.ai/api/monitor/usage/quota/limit';
 
 /** 解析 Z.ai API Key：仅走 DSH 凭据中心，经 ZAI_CODING_CN_API_KEY 到 ZAI_API_KEY。 */
-export async function resolveZaiKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
+async function resolveZaiKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
   return resolveFirstKey(credentials, ['ZAI_CODING_CN_API_KEY', 'ZAI_API_KEY']);
 }
 
@@ -50,7 +50,7 @@ function normalizeZaiWindow(raw: unknown): ZaiWindow | null {
   const rec = raw as Record<string, unknown>;
   const percent = parseNonNegNumber(rec.percentage);
   if (percent === null) return null;
-  // 夹在 0..100，由 utils.goPercent 再做最终夹取，此处保留原始浮点
+  // percent 不在此处夹取，保留官方原始浮点；最终由前端 goPercent 取整并夹到 0..100
   let resetsAt = '';
   const rt = rec.nextResetTime;
   if (typeof rt === 'number' && Number.isFinite(rt) && rt > 0) {
@@ -132,10 +132,9 @@ function parseLimits(limits: unknown[]): { session: ZaiWindow | null; weekly: Za
       percentEntries.push(rec);
     } else if (type === 'TIME_LIMIT' || effective === 'TIME_LIMIT') {
       if (timeEntry === null) timeEntry = rec;
-    } else if (type === 'CREDIT_LIMIT' || type === 'TOKENS_LIMIT' || type === 'TIME_LIMIT') {
+    } else if (type === 'CREDIT_LIMIT' || type === 'TOKENS_LIMIT') {
       // 兼容仅含 type 字段且无 rawType 的情况
-      if (type === 'TIME_LIMIT' && timeEntry === null) timeEntry = rec;
-      else if ((type === 'CREDIT_LIMIT' || type === 'TOKENS_LIMIT')) percentEntries.push(rec);
+      percentEntries.push(rec);
     }
   }
 
@@ -158,24 +157,6 @@ function parseLimits(limits: unknown[]): { session: ZaiWindow | null; weekly: Za
     } else {
       // TIME_LIMIT 存在但非法，仍算已识别，避免误判为空数据
       sawRecognized = true;
-    }
-  }
-
-  // 兜底：若未按 rawType 命中，尝试按 type 精确匹配，兼容旧 payload 仅含 type 字段且值为 CREDIT_LIMIT 等的情况
-  // 已在上循环覆盖，额外处理 TIME_LIMIT 遗漏
-  if (webSearches === null) {
-    for (const raw of limits) {
-      if (raw === null || typeof raw !== 'object') continue;
-      const rec = raw as Record<string, unknown>;
-      const type = typeof rec.type === 'string' ? rec.type : '';
-      if (type === 'TIME_LIMIT' && timeEntry === null) {
-        const norm = normalizeZaiWebSearch(rec);
-        if (norm !== null) {
-          sawRecognized = true;
-          webSearches = norm;
-        }
-        break;
-      }
     }
   }
 
@@ -210,20 +191,13 @@ export async function fetchZaiQuota(credentials?: CredentialsService): Promise<Z
     let msg = '';
     if (typeof body.msg === 'string') msg = body.msg;
     else if (typeof body.message === 'string') msg = body.message;
-    if (success === false && typeof msg === 'string' && msg.toLowerCase().includes('coding plan')) {
+    if (success === false && msg.toLowerCase().includes('coding plan')) {
       return { status: 'no-plan', fetchedAt: Date.now(), plan: null, session: null, weekly: null, webSearches: null };
     }
-    // 成功码校验：code 200 或 success true 才视为可用，否则按 error 处理，除上述 no-plan 外
+    // 成功码校验：code 缺省或为 200、或 success true 才继续解析，其余判 error
     const code = body.code;
-    if (code !== undefined && code !== 200 && code !== '200' && success !== true) {
-      // 某些旧响应可能无 success 字段，仅靠 code；此处若 code 非 200 且未被 no-plan 捕获，视为错误
-      // 但若 code 缺失且 success 未显式 false，仍继续尝试解析 data.limits
-      if (typeof code === 'number' || typeof code === 'string') {
-        // 有明确错误码且非 200，判 error
-        if (Number(code) !== 200) {
-          return { status: 'error', fetchedAt: Date.now(), plan: null, session: null, weekly: null, webSearches: null };
-        }
-      }
+    if (code !== undefined && Number(code) !== 200 && success !== true) {
+      return { status: 'error', fetchedAt: Date.now(), plan: null, session: null, weekly: null, webSearches: null };
     }
     const dataRaw = body.data;
     let dataObj: Record<string, unknown> | null = null;

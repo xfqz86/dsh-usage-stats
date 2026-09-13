@@ -18,18 +18,16 @@ import { usageStatsRemote } from './remote.ts';
 
 import type {
   DeepSeekBalance,
-  DeepSeekBalanceInfo,
   GoQuota,
   GoWindow,
   QuotaRequest,
   ZaiQuota,
-  ZaiWebSearchQuota,
   ZaiWindow,
 } from '../types.ts';
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol';
 
-/** 协议类型单一定义在 types.ts，此处 re-export 保持对外引用面。 */
-export type { DeepSeekBalance, DeepSeekBalanceInfo, GoQuota, GoWindow, ZaiQuota, ZaiWebSearchQuota, ZaiWindow };
+/** 协议类型单一定义在 types.ts，此处仅 re-export 实际被引用的名字。 */
+export type { GoQuota, GoWindow, ZaiWindow };
 
 /** 额度轮询：返回 [数据, 手动刷新]，未启用/失败未加载时为 null。 */
 export function useQuota<T>(options: {

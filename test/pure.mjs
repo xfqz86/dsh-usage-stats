@@ -36,8 +36,6 @@ import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
   buildDateStack,
   buildModelStack,
-  buildSet,
-  curveOf,
   dateRangeCutoff,
   dayTotal,
   filterModelsByRange,
@@ -48,10 +46,9 @@ import {
   heatGridOf,
   hitRateOfDay,
   lastActiveDayKind,
+  modelCatalog,
   modelRangeCutoff,
   modelRangeToDays,
-  modelCatalog,
-  paginateGroups,
   pctOf,
   pieFullCircleOf,
   pieSlicesOf,
@@ -594,40 +591,9 @@ describe('stats：会话分组', () => {
     ]);
     assert.equal(groups.length, 2);
   });
-
-  it('paginateGroups 子不占页位且越界回空', () => {
-    const mains = ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ main: sess(id, { lastActive: i }), children: [], agg: { calls: 0, usage: agg(0, 0) }, childCount: 0 }));
-    assert.equal(paginateGroups(mains, 2, 2).length, 2);
-    assert.deepEqual(paginateGroups(mains, 9, 2), []);
-    assert.deepEqual(paginateGroups([], 1, 20), []);
-  });
 });
 
 describe('stats：时间范围', () => {
-  it('buildSet 7d 补零且末桶为今天', () => {
-    const buckets = buildSet([pt(6, 5), pt(0, 7)], '7d');
-    assert.equal(buckets.length, 7);
-    assert.equal(buckets[6].t, startOfDay(Date.now()));
-    assert.equal(buckets[6].input, 7);
-    assert.equal(buckets[3].input, 0);
-    assert.equal(buckets[0].t, startOfDay(buckets[0].t));
-  });
-
-  it('buildSet 桶按本地日历逐日推进（DST 安全）', () => {
-    const buckets = buildSet([pt(0, 1)], '7d');
-    for (let i = 0; i < buckets.length - 1; i += 1) {
-      const expect = new Date(buckets[i].t);
-      expect.setDate(expect.getDate() + 1);
-      assert.equal(buckets[i + 1].t, expect.getTime());
-    }
-  });
-
-  it('buildSet all 从最早日到今天', () => {
-    const buckets = buildSet([pt(3, 1), pt(0, 2)], 'all');
-    assert.equal(buckets.length, 4);
-    assert.equal(buckets[3].input, 2);
-  });
-
   it('todayOf 取今日点', () => {
     assert.equal(todayOf([pt(1, 1), pt(0, 9)]).input, 9);
     assert.equal(todayOf([pt(2, 1), pt(1, 2)]), undefined);
@@ -660,13 +626,6 @@ describe('stats：图表几何', () => {
     const lvls = g.cells.map((c) => c.lvl);
     assert.ok(lvls.every((l) => l >= 0 && l <= 4));
     assert.equal(Math.max(...lvls), 4);
-  });
-
-  it('curveOf 空回 null', () => {
-    assert.equal(curveOf([]), null);
-    const g = curveOf([pt(0, 5)]);
-    assert.ok(g.line.startsWith('M'));
-    assert.equal(g.hits.length, 1);
   });
 
   it('pieSlicesOf 最大余数总和 100', () => {
@@ -1227,7 +1186,7 @@ describe('quota：zai', () => {
     }
   });
 
-  it('key 优先用 ZAI_CODING_CN', async () => {
+  it('首个 key 解析失败回退到 ZAI_API_KEY', async () => {
     let auth = '';
     const restore = mockFetch(async (_url, init) => {
       auth = init.headers.authorization;

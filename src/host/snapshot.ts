@@ -41,7 +41,7 @@ export function usageOf(agg: Agg): UsageAgg {
 }
 
 /** 无用量会话的占位 usage。 */
-export const zeroUsage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+const zeroUsage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
 
 /** 截断已排序序列至共享上限（`SERIES_MAX_DAYS`，与客户端 `all` 范围对齐），避免长历史下每 4s 全量序列化开销。 */
 function truncateSeries(series: SeriesPoint[]): SeriesPoint[] {

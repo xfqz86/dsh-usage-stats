@@ -5,7 +5,7 @@
 | 形态 | 产物 | 安装 |
 |------|------|------|
 | GitHub 源码 | 仓库源码 + `prepare: tsdown` | `dsh plugin add github:xfqz86/dsh-usage-stats` |
-| GitHub 预构建 | `release` 分支（仅 `lib/` + `package.json` + `cordis.patch.yml` + `README.md` + `CHANGELOG.md` + `LICENSE`） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
+| GitHub 预构建 | `release` 分支（仅最终交付物，见下） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
 | npm | `@xfqz86/dsh-usage-stats` | `dsh plugin add @xfqz86/dsh-usage-stats` |
 | tarball | `xfqz86-dsh-usage-stats-*.tgz` + 固定别名 `xfqz86-dsh-usage-stats.tgz` | `dsh plugin add ./xxx.tgz` 或 `.../releases/latest/download/xfqz86-dsh-usage-stats.tgz` |
 
@@ -15,7 +15,7 @@
 
 | 工作流 | 触发 | 动作 |
 |--------|------|------|
-| CI (`ci.yml`) | `push` 到 `dev`/`main`、PR | `tsc` + `build` + `smoke` + `client-bundle` + `prune` + `pack` 校验 |
+| CI (`ci.yml`) | `push` 到 `dev`/`main`、PR | `tsc` + `build` + `styles` + `smoke` + `client-bundle` + `prune` + `pack` 校验 |
 | Sync release branch (`release-branch.yml`) | `push` 到 `main` | 生产态构建 + 剪枝，覆盖 `release` 分支（`dev` 不触发） |
 | Release (`release.yml`) | 推送 `v*` 标签 | 校验 tag 与版本一致且 `docs/releases/v<版本>.md` 存在，构建并发布 npm + GitHub Release（正文取该说明文件，附件含版本化与固定别名两份 tarball） |
 
@@ -23,10 +23,9 @@
 
 ## 本地验证
 
-```bash
-npx tsc --noEmit && pnpm build && node test/smoke.mjs && node test/client-bundle.mjs
+发版前过一遍 AGENTS §9 的全部检查（`npx tsc --noEmit`、`npx eslint .`、`pnpm build` 与四个测试脚本），再加生产态校验：
 
-# 生产态校验
+```bash
 NODE_ENV=production pnpm build
 pnpm pack --dry-run   # 应为 7 文件，无 *.map
 ```
@@ -55,8 +54,6 @@ git tag v0.3.0 && git push origin v0.3.0  # 触发 Release：发布 npm + GitHub
 - **面向用户写**：这个版本做了什么、用户能看到什么变化，说清结果即可。
 - **不写内部实现**：接口改名、类型、构建、依赖、测试这类细节留在 `CHANGELOG.md`，不进这里。
 - **文件名等于 tag**：`v0.3.0` → `docs/releases/v0.3.0.md`。`release.yml` 在 tag 校验阶段强制该文件存在，缺失直接失败，不会发布到 npm 也不会建 Release。
-
-即 `CHANGELOG.md` 记开发者视角的完整改动，`docs/releases/*.md` 记用户视角的更新说明，两者随发版同批更新。
 
 ## npm 认证（择一）
 

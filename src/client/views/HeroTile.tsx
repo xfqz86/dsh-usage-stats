@@ -8,7 +8,7 @@
 import { cacheTotal } from '../../utils.ts';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { fmtFull, pctOf } from '../stats.ts';
+import { avgPerCall, fmtFull, pctOf } from '../stats.ts';
 
 import css from './HeroTile.module.css';
 
@@ -39,7 +39,8 @@ export function HeroTile({
     : null;
 
   // 三色比例条 tooltip，顺序与热力图一致，含缓存、输入、输出、总计、缓存命中率、调用次数与平均每次调用，标签左、数值右。
-  const avgPerCall = calls > 0 ? Math.round(tokens / calls) : 0;
+  // tooltip 仅在 tokens > 0 时渲染，此处 ?? 0 仅为类型兜底，展示上不会出现。
+  const avg = avgPerCall(tokens, calls) ?? 0;
   const barContent = tokens > 0
     ? (
       <div className={`${shared.tipPanelRows} ${shared.tipList}`}>
@@ -50,7 +51,7 @@ export function HeroTile({
           [t('table.total'), fmtFull(tokens)],
           [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
           [t('table.calls'), fmtFull(calls)],
-          [t('table.avgPerCall'), fmtFull(avgPerCall)],
+          [t('table.avgPerCall'), fmtFull(avg)],
         ] as const).map(([k, v]) => (
           <div key={k} className={shared.tipListRow}>
             <span className={shared.tipListKey}>{k}</span>

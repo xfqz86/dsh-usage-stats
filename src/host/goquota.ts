@@ -35,7 +35,7 @@ interface GoErrorEnvelope {
 }
 
 /** 解析 OpenCode Go API Key：仅走 DSH 凭据中心 OPENCODE_GO_API_KEY。 */
-export async function resolveGoKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
+async function resolveGoKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
   return resolveFirstKey(credentials, ['OPENCODE_GO_API_KEY']);
 }
 

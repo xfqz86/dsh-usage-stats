@@ -69,7 +69,7 @@ export function goLevelOf(pct: number): 'over' | 'warn' | 'ok' {
   return 'ok';
 }
 
-/** 额度抓取强制下限：官方端点任何情况下不低于该间隔打一次，与客户端设置下限对齐。 */
+/** 额度轮询 TTL 下限：仅约束自动轮询的有效 TTL（见 effectiveQuotaTtl），手动 force 刷新不受限。 */
 export const QUOTA_MIN_FETCH_MS = 3 * 60 * 1000;
 /** 额度结果缓存上限：默认 5 分钟；客户端可按抓取间隔调短有效缓存。 */
 export const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;

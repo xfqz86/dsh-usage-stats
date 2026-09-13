@@ -26,7 +26,7 @@ export type { CredentialsService } from './quota.ts';
 const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance';
 
 /** 解析 DeepSeek API Key，仅走 DSH 凭据中心，支持 DEEPSEEK_API_KEY 等。 */
-export async function resolveDeepSeekKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
+async function resolveDeepSeekKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
   return resolveFirstKey(credentials, ['DEEPSEEK_API_KEY', 'DEEPSEEK_APIKEY', 'DEEPSEEK_API_TOKEN', 'DEEPSEEK_TOKEN']);
 }
 

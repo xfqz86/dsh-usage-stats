@@ -15,7 +15,7 @@
  * 用法：
  * ```tsx
  * <Tooltip content={() => <MyPanel />} side="top" delayMs={300}><span>...</span></Tooltip>
- * <Tooltip follow content={barRows} side="top"><span className={css.barRow} /></Tooltip>
+ * <Tooltip follow content={barRows} side="top"><span>...</span></Tooltip>
  * ```
  *
  * 独立成文件，一个组件一个文件，样式见 `./Tooltip.module.css`。

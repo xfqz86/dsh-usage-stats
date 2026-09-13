@@ -109,6 +109,7 @@ export default class UsageStatsService extends TypertRemoteService {
         // 实时补齐会话 header 的 parentSession、origin、delegationDepth，子代理归属。
         // header 字段 cwd、createdAt、parentSession、origin、delegationDepth 均来自
         // harness 的 SessionHeader，AGENTS §0，直接复用，不手写字段形状。
+        // meta 补齐是尽力而为：写失败只记日志，不连累下方用量事件折叠。
         const hdr = (session as { header?: SessionHeader }).header;
         if (hdr) {
           const patch: Parameters<typeof ledger.setMeta>[1] = {};
@@ -117,7 +118,13 @@ export default class UsageStatsService extends TypertRemoteService {
           if (typeof hdr.delegationDepth === 'number' && Number.isFinite(hdr.delegationDepth)) patch.delegationDepth = hdr.delegationDepth;
           if (typeof hdr.cwd === 'string') patch.cwd = hdr.cwd;
           if (typeof hdr.createdAt === 'number' && Number.isFinite(hdr.createdAt)) patch.createdAt = hdr.createdAt;
-          if (Object.keys(patch).length > 0) ledger.setMeta(id, patch);
+          if (Object.keys(patch).length > 0) {
+            try {
+              ledger.setMeta(id, patch);
+            } catch (e) {
+              console.warn('[usage-stats] 会话元数据补齐失败，跳过', id, e);
+            }
+          }
         }
         // fork 继承前缀属于父会话：seq 落在 inheritedEventCount 之前的事件不折，
         // 避免父的用量在子会话下重复计入（与扫描路径同口径）。

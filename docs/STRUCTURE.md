@@ -20,7 +20,7 @@ dsh-usage-stats/
 │   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
 │   │       └── verify.mjs ← 校验交付物仅含 7 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
-│       ├── ci.yml ← CI：类型检查 / 构建 / 冒烟测试（每次 PR 与推送 dev/main 执行）
+│       ├── ci.yml ← CI：类型检查 / 构建 / 样式契约 / 冒烟测试（每次 PR 与推送 dev/main 执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
 ├── docs/
@@ -34,8 +34,8 @@ dsh-usage-stats/
 │   │   ├── 04-models.png
 │   │   ├── 05-settings.png
 │   │   └── footer.png
-│   ├── API.md ← 服务端 HTTP 协议与偏好设置约定（随接口演进维护）
-│   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付三种形态：release / npm / tarball）
+│   ├── API.md ← Remote 协议与偏好设置约定（随接口演进维护）
+│   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付四种形态：源码 / release / npm / tarball）
 │   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
 │   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）
 ├── scripts/

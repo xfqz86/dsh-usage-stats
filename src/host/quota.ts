@@ -41,7 +41,8 @@ export async function resolveFirstKey(
 /**
  * 带 TTL 缓存与单飞的查询工厂：每个调用处实例独立缓存。
  * 常规调用在 TTL 内直接回缓存；force 为用户手动刷新，完全绕过 TTL 与下限、
- * 立即重拉官方端点，仅经单飞合并并发请求，成功后缓存窗口重新起算。
+ * 立即重拉官方端点，仅经单飞合并并发请求，返回后缓存窗口重新起算
+ * （失败的结构化结果同样写入缓存，失败窗口内不重复打官方端点）。
  */
 export function createQuotaQuery<T, C>(
   fetch: (credentials?: C) => Promise<T>,

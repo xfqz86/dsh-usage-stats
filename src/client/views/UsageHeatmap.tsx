@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 import { cacheTotal } from '../../utils.ts';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { fmtFull, heatGridOf, pctOf, type HeatGridCell } from '../stats.ts';
+import { avgPerCall, fmtFull, heatGridOf, pctOf, type HeatGridCell } from '../stats.ts';
 
 import css from './UsageHeatmap.module.css';
 
@@ -56,7 +56,7 @@ export function UsageHeatmap({
     const calls = c.calls;
     const cacheRead = day?.cacheRead ?? 0;
     const hitRate = (cacheRead + input) > 0 ? Math.round((cacheRead / (cacheRead + input)) * 1000) / 10 : null;
-    const avg = calls > 0 ? Math.round(total / calls) : 0;
+    const avg = avgPerCall(total, calls) ?? 0;
     const rows: [string, string][] = [
       [t('table.cacheRead'), fmtFull(cache)],
       [t('table.input'), fmtFull(input)],
