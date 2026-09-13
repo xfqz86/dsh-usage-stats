@@ -7,14 +7,15 @@
  *     Cloudflare 以 error 1010 拦截。
  *   - key 解析：仅走 DSH 凭据中心 `OPENCODE_GO_API_KEY`，即 `ctx.credentials`，
  *     由 `~/.dsh/.credentials.yaml` 等统一托管，不直接读 `process.env`。
+ *   - 语义：无 key → no-key；401/403 读响应体，`error.type` 为 EntitlementError
+ *     （已配置 Key 但未开通订阅，如 403 + "OpenCode Go subscription required."）
+ *     判 no-plan，其余 401/403（Key 无效等）仍判 no-key。
  *   - 结果带 TTL 缓存 5 分钟与单飞机制，并发请求只打一次官方端点。
  *
  * GoWindow / GoQuota 协议类型定义在 types.ts，与客户端 useGoQuota 统一。
- * 纯数据模块：请求失败 / 未配置 key 都返回带 status 的结构化结果，由
- * 客户端按 status 本地化文案，不在服务端拼用户文案。
+ * 纯数据模块：请求失败 / 未配置 key / 未开通订阅都返回带 status 的结构化结果，
+ * 由客户端按 status 本地化文案，不在服务端拼用户文案。
  */
-import { QUOTA_MIN_FETCH_MS } from '../utils.ts';
-
 import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
 
 import type { GoQuota, GoWindow } from '../types.ts';
@@ -26,8 +27,12 @@ export type { CredentialsService } from './quota.ts';
 
 /** OpenCode Go 官方额度端点，固定域名。 */
 const GO_QUOTA_URL = 'https://opencode.ai/zen/go/v1/usage';
-/** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
-export const GO_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
+
+/** 官方错误信封（Anthropic 风格）：401/403 响应体形如 { type:'error', error:{ type, message } }。 */
+interface GoErrorEnvelope {
+  type?: unknown
+  error?: { type?: unknown; message?: unknown } | null
+}
 
 /** 解析 OpenCode Go API Key：仅走 DSH 凭据中心 OPENCODE_GO_API_KEY。 */
 export async function resolveGoKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
@@ -59,7 +64,17 @@ export async function fetchGoQuota(credentials?: CredentialsService): Promise<Go
       signal: AbortSignal.timeout(15000),
     });
     if (response.status === 401 || response.status === 403) {
-      // 无订阅 / Key 无效：同样属预期场景。
+      // 已配置 Key 但被官方拒绝：读响应体区分「未开通订阅」（EntitlementError）
+      // 与「Key 无效」，前者属预期场景，客户端以「未开通订阅」提示而非误导性的
+      // 「未配置 API Key」；响应体非 JSON 或结构异样时维持 no-key。
+      const body = (await response.json().catch(() => null)) as GoErrorEnvelope | null;
+      const err = body !== null && typeof body === 'object' && body.error !== null && typeof body.error === 'object'
+        ? body.error
+        : null;
+      if (err !== null && err.type === 'EntitlementError') {
+        return { status: 'no-plan', fetchedAt: Date.now(), rolling: null, weekly: null, monthly: null };
+      }
+      // 其余 401/403（Key 无效等）：维持 no-key 语义。
       return { status: 'no-key', fetchedAt: Date.now(), rolling: null, weekly: null, monthly: null };
     }
     if (!response.ok) {

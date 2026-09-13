@@ -1026,6 +1026,24 @@ describe('quota：go', () => {
     }
   });
 
+  it('403 EntitlementError（未订阅）判 no-plan，其余 401/403 仍判 no-key', async () => {
+    let restore = mockFetch(async () => jsonResponse(403, {
+      type: 'error',
+      error: { type: 'EntitlementError', message: 'OpenCode Go subscription required.' },
+    }));
+    try {
+      assert.equal((await fetchGoQuota(creds('k'))).status, 'no-plan');
+    } finally {
+      restore();
+    }
+    restore = mockFetch(async () => jsonResponse(403, {}));
+    try {
+      assert.equal((await fetchGoQuota(creds('k'))).status, 'no-key');
+    } finally {
+      restore();
+    }
+  });
+
   it('窗口归一化：合法保留、非法置 null', async () => {
     const restore = mockFetch(async () => jsonResponse(200, {
       usage: { rolling: { percent: 10.4, resetsAt: 'r' }, weekly: { percent: 'bad' }, monthly: null },

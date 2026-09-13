@@ -1,4 +1,4 @@
-/* Z.ai 未开通空态：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
+/* 额度状态提示卡：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
    浅色走设计 token，深色沿用额度 tooltip 既有的半透明白（深色气泡上保证可读）。 */
 
 .root {
@@ -47,4 +47,14 @@
 
 .tip .text {
   color: rgba(255, 255, 255, 0.88);
+}
+
+/* 错误变体：告警图标与虚线描边掺错误色；深底描边同样着色，文字沿用深底白色。 */
+.error {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, transparent);
+}
+
+.error .icon {
+  color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
 }

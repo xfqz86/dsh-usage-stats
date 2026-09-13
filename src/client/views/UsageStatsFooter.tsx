@@ -22,9 +22,9 @@ import { useEffect, useRef, useState } from 'react';
 
 
 import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
+import { HintCard } from '../components/HintCard.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
 import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../useQuota.ts';
 import { useSnapshot } from '../useSnapshot.ts';
@@ -326,6 +326,14 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       );
     }
     if (go.status === 'no-key') return wrap(t('go.notConfigured'));
+    if (go.status === 'no-plan') {
+      return (
+        <div className={shared.tipPanelGo}>
+          <TipTitle>{t('go.title')}</TipTitle>
+          <HintCard text={t('go.noPlan')} tone="tip" />
+        </div>
+      );
+    }
     return wrap(t('go.unavailable'));
   })();
 
@@ -453,7 +461,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         return (
           <div className={shared.tipPanelGo}>
             <TipTitle>{t('zai.title')}</TipTitle>
-            <ZaiNoPlan text={t('zai.noPlan')} tone="tip" />
+            <HintCard text={t('zai.noPlan')} tone="tip" />
           </div>
         );
       }
@@ -504,7 +512,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     );
   })();
 
-  // 折叠态 Go 芯片内容，ok 时展示滚动 5 小时窗口，no-key、error 与加载中均共用 goTipContent，
+  // 折叠态 Go 芯片内容，ok 时展示滚动 5 小时窗口，no-key、no-plan、error 与加载中均共用 goTipContent，
   // 内容为卡片化明细或提示卡，go 为 null 时内容为空串、气泡自然隐藏。
   const renderGoRail = (): React.ReactNode => {
     if (go?.status === 'ok' && railRolling !== undefined) {
@@ -517,7 +525,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         </Tooltip>
       );
     }
-    if (go?.status === 'no-key') {
+    if (go?.status === 'no-key' || go?.status === 'no-plan') {
       return (
         <Tooltip content={goTipContent} side="top" delayMs={400}>
           <span className={`${css.goRailChipBox}`}>
@@ -705,14 +713,11 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                   <span className={css.goChip}>{t('zai.short.webSearches')} {zaiWeb.used}/{zaiWeb.limit}</span>
                 </Tooltip>
               )}
-              {zai.status === 'no-key' && (
+              {(zai.status === 'no-key' || zai.status === 'no-plan') && (
                 <Tooltip content={zaiTipContent} side="top" delayMs={400}>
-                  <span className={css.goChip}>—</span>
-                </Tooltip>
-              )}
-              {zai.status === 'no-plan' && (
-                <Tooltip content={zaiTipContent} side="top" delayMs={400}>
-                  <span className={css.goChip}>—</span>
+                  <span className={`${css.goChip} ${css.goChipHint}`}>
+                    {zai.status === 'no-plan' ? t('state.noPlan') : t('state.noKey')}
+                  </span>
                 </Tooltip>
               )}
               {zai.status === 'error' && (
@@ -727,9 +732,11 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
               <span className={css.goLabel}>{t('go.label')}</span>
               {go.status === 'ok' && goWindows.length > 0 && goWindows.map(goChip)}
               {go.status === 'ok' && goWindows.length === 0 && <span className={css.goChip}>—</span>}
-              {go.status === 'no-key' && (
+              {(go.status === 'no-key' || go.status === 'no-plan') && (
                 <Tooltip content={goTipContent} side="top" delayMs={400}>
-                  <span className={css.goChip}>—</span>
+                  <span className={`${css.goChip} ${css.goChipHint}`}>
+                    {go.status === 'no-plan' ? t('state.noPlan') : t('state.noKey')}
+                  </span>
                 </Tooltip>
               )}
               {go.status === 'error' && (
@@ -759,7 +766,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
               )}
               {deepseek.status === 'no-key' && (
                 <BaseTooltip label={t('deepseek.notConfigured')} side="top" delayMs={400}>
-                  <span className={css.goChip}>—</span>
+                  <span className={`${css.goChip} ${css.goChipHint}`}>{t('state.noKey')}</span>
                 </BaseTooltip>
               )}
               {deepseek.status === 'error' && (

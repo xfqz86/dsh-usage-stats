@@ -11,8 +11,8 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
+import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { ZaiNoPlan } from '../components/ZaiNoPlan.tsx';
 import { dayTotal, fmt, fmtFull, todayOf } from '../stats.ts';
 
 import { HeroTile } from './HeroTile.tsx';
@@ -150,16 +150,13 @@ export function OverviewTab({
               </div>,
             ])}
           </div>
-          <div className={css.tileFetchedAt}>
-            {t('updatedAt')} {new Date(deepseek.fetchedAt).toLocaleTimeString()}
-          </div>
         </>
       );
     }
     if (deepseek.status === 'no-key') {
       return <span className={shared.goHint}>{t('deepseek.notConfigured')}</span>;
     }
-    return <span className={shared.goHint}>{t('deepseek.unavailable')}</span>;
+    return <HintCard text={t('deepseek.unavailable')} variant="error" />;
   }
 
   // Go 额度内容的条件渲染，避免嵌套三元
@@ -193,16 +190,16 @@ export function OverviewTab({
               );
             })}
           </div>
-          <div className={css.tileFetchedAt}>
-            {t('updatedAt')} {new Date(go.fetchedAt).toLocaleTimeString()}
-          </div>
         </>
       );
     }
     if (go.status === 'no-key') {
       return <span className={shared.goHint}>{t('go.notConfigured')}</span>;
     }
-    return <span className={shared.goHint}>{t('go.unavailable')}</span>;
+    if (go.status === 'no-plan') {
+      return <HintCard text={t('go.noPlan')} />;
+    }
+    return <HintCard text={t('go.unavailable')} variant="error" />;
   }
 
   // Z.ai 额度内容的条件渲染，避免嵌套三元
@@ -300,9 +297,6 @@ export function OverviewTab({
               );
             })()}
           </div>
-          <div className={css.tileFetchedAt}>
-            {t('updatedAt')} {new Date(zai.fetchedAt).toLocaleTimeString()}
-          </div>
         </>
       );
     }
@@ -310,16 +304,9 @@ export function OverviewTab({
       return <span className={shared.goHint}>{t('zai.notConfigured')}</span>;
     }
     if (zai.status === 'no-plan') {
-      return (
-        <>
-          <ZaiNoPlan text={t('zai.noPlan')} />
-          <div className={css.tileFetchedAt}>
-            {t('updatedAt')} {new Date(zai.fetchedAt).toLocaleTimeString()}
-          </div>
-        </>
-      );
+      return <HintCard text={t('zai.noPlan')} />;
     }
-    return <span className={shared.goHint}>{t('zai.unavailable')}</span>;
+    return <HintCard text={t('zai.unavailable')} variant="error" />;
   }
 
   return (
@@ -358,19 +345,24 @@ export function OverviewTab({
             <div className={`${css.tile} ${css.tileDeepSeek}`}>
               <div className={shared.sectionHead}>
                 <span className={shared.sectionLabel}>{t('deepseek.title')}</span>
-                {deepseek?.status === 'ok' && (
-                  <button
-                    type="button"
-                    className={css.goRefresh}
-                    aria-label={t('deepseek.refresh')}
-                    title={t('deepseek.refresh')}
-                    onClick={onRefreshDeepSeek}
-                  >
-                    <IconRefreshOutline16 size={12} />
-                  </button>
-                )}
+                {/* 刷新按钮常驻：任何状态（含失败与未配置）都允许手动重查。 */}
+                <button
+                  type="button"
+                  className={css.goRefresh}
+                  aria-label={t('deepseek.refresh')}
+                  title={t('deepseek.refresh')}
+                  onClick={onRefreshDeepSeek}
+                >
+                  <IconRefreshOutline16 size={12} />
+                </button>
               </div>
               {renderDeepSeekContent()}
+              {/* 更新时间常驻：数据已加载即显示，方便核对接口查询时间。 */}
+              {deepseek !== null && (
+                <div className={css.tileFetchedAt}>
+                  {t('updatedAt')} {new Date(deepseek.fetchedAt).toLocaleTimeString()}
+                </div>
+              )}
             </div>
           )}
 
@@ -378,19 +370,24 @@ export function OverviewTab({
             <div className={`${css.tile} ${css.tileGo}`}>
               <div className={shared.sectionHead}>
                 <span className={shared.sectionLabel}>{t('go.title')}</span>
-                {go?.status === 'ok' && (
-                  <button
-                    type="button"
-                    className={css.goRefresh}
-                    aria-label={t('go.refresh')}
-                    title={t('go.refresh')}
-                    onClick={onRefreshGo}
-                  >
-                    <IconRefreshOutline16 size={12} />
-                  </button>
-                )}
+                {/* 刷新按钮常驻：任何状态（含失败与未配置）都允许手动重查。 */}
+                <button
+                  type="button"
+                  className={css.goRefresh}
+                  aria-label={t('go.refresh')}
+                  title={t('go.refresh')}
+                  onClick={onRefreshGo}
+                >
+                  <IconRefreshOutline16 size={12} />
+                </button>
               </div>
               {renderGoContent()}
+              {/* 更新时间常驻：数据已加载即显示，方便核对接口查询时间。 */}
+              {go !== null && (
+                <div className={css.tileFetchedAt}>
+                  {t('updatedAt')} {new Date(go.fetchedAt).toLocaleTimeString()}
+                </div>
+              )}
             </div>
           )}
 
@@ -412,20 +409,24 @@ export function OverviewTab({
                     {zai.plan}
                   </span>
                 )}
-                {/* 未开通态也允许手动刷新，开通订阅后可第一时间重查。 */}
-                {(zai?.status === 'ok' || zai?.status === 'no-plan') && (
-                  <button
-                    type="button"
-                    className={css.goRefresh}
-                    aria-label={t('zai.refresh')}
-                    title={t('zai.refresh')}
-                    onClick={onRefreshZai}
-                  >
-                    <IconRefreshOutline16 size={12} />
-                  </button>
-                )}
+                {/* 刷新按钮常驻：任何状态（含失败与未配置）都允许手动重查。 */}
+                <button
+                  type="button"
+                  className={css.goRefresh}
+                  aria-label={t('zai.refresh')}
+                  title={t('zai.refresh')}
+                  onClick={onRefreshZai}
+                >
+                  <IconRefreshOutline16 size={12} />
+                </button>
               </div>
               {renderZaiContent()}
+              {/* 更新时间常驻：数据已加载即显示，方便核对接口查询时间。 */}
+              {zai !== null && (
+                <div className={css.tileFetchedAt}>
+                  {t('updatedAt')} {new Date(zai.fetchedAt).toLocaleTimeString()}
+                </div>
+              )}
             </div>
           )}
         </div>

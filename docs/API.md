@@ -40,15 +40,18 @@ Client 严格编解码在 `src/remote/contribution.ts`。
   手动触发**完全绕过 TTL 缓存立即重新抓取**（仅并发经单飞合并），成功后缓存
   窗口重新起算。
 - 响应 `value`：`GoQuota` 定义在 `src/types.ts`，结构为
-  `{ status: 'ok' | 'no-key' | 'error', fetchedAt, rolling, weekly, monthly }`，
+  `{ status: 'ok' | 'no-key' | 'no-plan' | 'error', fetchedAt, rolling, weekly, monthly }`，
   `status` 由客户端按文案本地化展示。
 - **key 解析**：仅 DSH 凭据中心 `OPENCODE_GO_API_KEY`，经 `ctx.credentials` 读取，由 `~/.dsh/.credentials.yaml` 统一托管，不直接读 `process.env` 或 `auth.json`。
 - **端点** `https://opencode.ai/zen/go/v1/usage` + 浏览器 UA，否则被前置
   Cloudflare 以 error 1010 拦截。
 - **缓存**：有效 TTL = `min(5 分钟, max(3 分钟, intervalMinutes))`；未带间隔
   默认 5 分钟；**单飞**，即并发请求只打一次官方端点。
-- **语义**：无 key、401、403 → `no-key`；请求失败或结构非法 → `error`；
-  成功 → `ok`。
+- **语义**：无 key → `no-key`；401/403 读响应体，`error.type` 为 `EntitlementError`
+  （已配置 Key 但未开通订阅，如 403 +
+  `{"type":"error","error":{"type":"EntitlementError","message":"OpenCode Go subscription required."}}`）
+  → `no-plan`，其余 401/403（Key 无效等）仍为 `no-key`；
+  请求失败或结构非法 → `error`；成功 → `ok`。
 
 ## 3.1 usageStats/deepseekBalance
 
