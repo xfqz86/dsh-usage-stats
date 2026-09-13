@@ -52,7 +52,7 @@ git tag v0.3.0 && git push origin v0.3.0  # 触发 Release：发布 npm + GitHub
 `docs/releases/v<版本>.md` 就是 GitHub Release 的正文，每个版本必须新增：
 
 - **面向用户写**：这个版本做了什么、用户能看到什么变化，说清结果即可。
-- **不写内部实现**：接口改名、类型、构建、依赖、测试这类细节留在 `CHANGELOG.md`，不进这里。
+- **不写内部实现**：接口改名、类型、构建、依赖、测试这类细节不进这里，也不进 `CHANGELOG.md` 条目（同理面向用户写），记 `AGENTS.md`/`docs/*` 与代码注释。
 - **文件名等于 tag**：`v0.3.0` → `docs/releases/v0.3.0.md`。`release.yml` 在 tag 校验阶段强制该文件存在，缺失直接失败，不会发布到 npm 也不会建 Release。
 
 ## npm 认证（择一）
