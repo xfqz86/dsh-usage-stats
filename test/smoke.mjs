@@ -5,7 +5,7 @@
  * node:sqlite 文件），直接调用 7 个 @Remote 方法，验证：
  *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/
  *     dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
- *   - 绝对基线（AGENTS §9）：快照 foldedEvents 锚定 fixture 的 394 条可折叠
+ *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠
  *     事件，初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
  *   - 方法与手写严格贡献相容：真实出入值过 zod 信封，错误码透传不断解析；
  *   - rebuild 并发返回 usageStats/busy，clear/seal 语义正确；
@@ -13,7 +13,16 @@
  *   - 重启恢复：重开同一 sqlite 文件、会话清单返回空，仍能从介质重建统计
  *     （不依赖重扫日志）；
  *   - 旧代次会话兼容：harness 两路以 SessionFormatUnsupportedError 拒绝时，raw 兜底
- *     自读磁盘最高代次原始日志（多帧 zstd / 未压缩明文）把用量折入账本，只折最高代次。
+ *     自读磁盘最高代次原始日志（多帧 zstd / 未压缩明文）把用量折入账本，只折最高代次；
+ *   - 清零墓碑回归（独立 DSH_HOME）：清零后重启保持归零且不再扫描，重建恢复 394
+ *     后墓碑清除，再重启统计仍在；
+ *   - fork 继承前缀回归（独立 DSH_HOME）：query 与 raw 两路都只折自有事件；
+ *   - 压缩调用计入回归（独立 DSH_HOME）：compaction/summary 的用量计入总量与模型
+ *     拆分，缺 usage/零用量不入账，实时路径同样接纳；
+ *   - 偏好设置命名空间注册与落盘（独立 DSH_HOME，挂 harness 真实文件后端
+ *     @deepseek-ai/dsh-settings-file）：默认值齐备且未改动时不建文档、update 只把
+ *     显式改过的字段写进 $DSH_HOME/settings.yaml 的 usage-stats 段、describe 下发的
+ *     schema 可 JSON 序列化。
  * 信任与认证由网关载体统一处理，本测试只覆盖业务语义。
  *
  * 运行 `node --experimental-strip-types test/smoke.mjs`：lib 内 Remote

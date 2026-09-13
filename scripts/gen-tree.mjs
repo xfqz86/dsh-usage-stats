@@ -43,6 +43,7 @@ const NOTES = {
   '.github/workflows/release-branch.yml': '同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）',
   '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）',
   'docs/API.md': 'Remote 协议与偏好设置约定（随接口演进维护）',
+  'docs/ARCHITECTURE.md': '架构与统计口径唯一权威（账本/数据流/折叠/墓碑/口径；AGENTS.md 只留规则与指针）',
   'docs/STYLE.md': '风格经验沉淀（lint 之外的统一约定，新会话先读）',
   'docs/PUBLISH.md': '发布流程（GitHub Actions 交付四种形态：源码 / release / npm / tarball）',
   'docs/STRUCTURE.md': '生成文件：由 `pnpm tree` 重新生成，勿手改',

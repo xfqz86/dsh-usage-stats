@@ -25,8 +25,13 @@ dsh-usage-stats/
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
 ├── docs/
 │   ├── releases/
+│   │   ├── v0.1.0.md
+│   │   ├── v0.1.1.md
+│   │   ├── v0.2.0.md
+│   │   ├── v0.2.1.md
 │   │   ├── v0.3.0.md
-│   │   └── v0.4.0.md
+│   │   ├── v0.4.0.md
+│   │   └── v0.4.1.md
 │   ├── screenshot/
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png
@@ -35,6 +40,7 @@ dsh-usage-stats/
 │   │   ├── 05-settings.png
 │   │   └── footer.png
 │   ├── API.md ← Remote 协议与偏好设置约定（随接口演进维护）
+│   ├── ARCHITECTURE.md ← 架构与统计口径唯一权威（账本/数据流/折叠/墓碑/口径；AGENTS.md 只留规则与指针）
 │   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付四种形态：源码 / release / npm / tarball）
 │   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
 │   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）

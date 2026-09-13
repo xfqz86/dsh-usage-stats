@@ -23,7 +23,7 @@
 
 ## 本地验证
 
-发版前过一遍 AGENTS §9 的全部检查（`npx tsc --noEmit`、`npx eslint .`、`pnpm build` 与四个测试脚本），再加生产态校验：
+发版前过一遍 `AGENTS.md`「验证」一节的全部检查（`npx tsc --noEmit`、`npx eslint .`、`pnpm build` 与四个测试脚本），再加生产态校验：
 
 ```bash
 NODE_ENV=production pnpm build

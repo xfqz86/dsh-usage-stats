@@ -50,11 +50,14 @@
 | `SNAPSHOT_INTERVAL_MS` | 4000 | `client/api.ts` | 快照轮询间隔（`useSnapshot` 默认值，不再各处手写 4000） |
 | `PAGE_SIZE` | 20 | 各 Tab 内 | 故意 per-file 常量，不共享，避免跨 Tab 耦合 |
 
-## 6. 文件头注释
+## 6. 注释内容
 
 - 每个源码文件以块注释开头，**首句 = 该文件职责**（`pnpm tree` 取首句生成 `STRUCTURE.md`，
   到第一个 `。！？!?` 为止）。改职责先改首句，再跑 `pnpm tree`。
 - `locales.ts` 式单行头注是允许的例外。
+- 注释只写代码自身说不出的约束与理由（why），不复述代码行为、不复制文档内容、
+  不写修复历史与过程叙事：历史归 `CHANGELOG.md`，机制/协议归
+  `docs/ARCHITECTURE.md`/`docs/API.md`，注释里需要提及时留一行指针。
 
 ## 7. TypeScript 只写可擦除语法
 
@@ -94,10 +97,10 @@
 - 间隔来自偏好设置，服务端 TTL 由请求体 `intervalMinutes` 推导（见 §5 公式），
   两侧下限 3 分钟对齐。
 
-## 10. 折叠与去重（一句话版）
+## 10. 折叠与去重
 
-`foldRecord` 是实时与扫描的唯一入口：`seq>=0` 按 `maxSeq` 水位，`seq=-1` 按主键存在性；
-零用量事件直接丢弃不入账本。改折叠语义先改 `AGENTS.md §5/§6`，再改代码。
+折叠、去重与 fork 继承前缀的语义唯一权威是 `docs/ARCHITECTURE.md` §4；
+改折叠语义先改该文件，再改代码。
 
 ## 11. 同一概念一种写法
 
