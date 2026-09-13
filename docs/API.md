@@ -96,7 +96,10 @@ Client 严格编解码在 `src/remote/contribution.ts`。
 
 - 清空 sqlite 全量表，同 rebuild 共 9 张，复位聚合缓存 → `{ cleared: true, foldedEvents }`，
   **不重扫**，与重建的区别为重建会重新读取历史会话而清零不会，统计直接归零。
-  设置页有入口，需二次确认。
+  清零另在 `agg_checkpoint` 落 `cleared_at` 墓碑：清零后账本为空，若没有墓碑，下次进程启动
+  bootstrap 会把空库当首启、全量重扫磁盘日志令历史复活；bootstrap 在空库且有墓碑时跳过
+  首启扫描，统计保持归零，新会话照常实时入账。`rebuild` 经 `ledger.clear()` 清掉 checkpoint，
+  墓碑随之移除并重扫历史，是恢复统计的出口。设置页有入口，需二次确认。
 
 **扫描在飞期间（快照 `scanning` 为真）的清零/重建**：设置页两按钮置灰并给出原因、已打开的二次确认框随扫描开始自动关闭。
 这两个操作会与在飞扫描交错写同一账本与聚合，服务端以 `usageStats/busy` 拒绝，客户端不再发起注定失败的请求。

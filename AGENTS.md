@@ -74,8 +74,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
 1. **openLedger**：建目录/表、迁移、载入 meta、预编译 `LedgerStatements`。
 2. **scanOnce**：会话 id 全集=磁盘 `findSessionLogs(深度≤3，按代次择优)` ∪ harness 清单；4 路 worker，优先 harness 读取（`sessionQuery.readSession` → `persistence.open+read`），失败或空时回退自读磁盘原始日志（`rawlog` 多帧 zstd 解码，覆盖 harness 迁移拒绝的旧格式）；两路都按 fork 继承前缀过滤（`store.ts` 的 `liveEventsOf`），经 `foldRecord` 共用路径，`running` 防重入（`force` 持锁重入除外）。
 3. **实时增量**：`ctx.on('session/event')` → `foldRecord` → `foldLedgerEvent` + `incrementAgg`，经 seq 水位、seq=-1 主键、`append` 返回值三层去重，补齐 `parentSession/origin/depth/cwd/createdAt`。
-4. **重启恢复**：`bootstrap()` 优先 `hasAggregates→rebuildWithDelta`（加载 `agg_*` + 补 `sealedUntil` 后增量），其次 `hasEvents→rebuildFromEvents`，否则全量扫描；日志删除仍可从介质恢复。
-5. **重建**：`usageStats/rebuild` → `ledger.clear()`+`resetStore`+`scanOnce`；`clear` 仅清库，`seal` 手动物化。
+4. **重启恢复**：`bootstrap()` 优先 `hasAggregates→rebuildWithDelta`（加载 `agg_*` + 补 `sealedUntil` 后增量），其次 `hasEvents→rebuildFromEvents`，否则全量扫描；日志删除仍可从介质恢复。空库且 `agg_checkpoint` 有 `cleared_at` 清零墓碑时跳过首启扫描（否则空库被当首启、历史统计复活，违背 clear 承诺）。
+5. **重建**：`usageStats/rebuild` → `ledger.clear()`+`resetStore`+`scanOnce`；`clear` 清库后落清零墓碑（`markCleared`，必须在 clear 之后写），`rebuild` 经 `ledger.clear()` 清掉墓碑后重扫，是恢复历史的出口；`seal` 手动物化。
 
 **折叠语义**：`foldRecord` 处理种子/`title`/`usable(data.usage存在)` 事件，零用量事件直接丢弃不入账本；经三层去重后 `append`+`foldLedgerEvent` 折入日桶/总桶/模型、模型×日并更新 `maxSeq/lastActive`（`seq>=0` 才推进水位）；`foldLedgerEvent` 归一非有限/负数→0并向下取整，若传 `ledger` 则同步 `incrementAgg`（失败仅 `lastError`）。
 
@@ -113,7 +113,7 @@ node --experimental-strip-types test/styles.mjs
 node test/client-bundle.mjs
 ```
 - `pure.mjs`：`node:test` 纯函数与额度解析单测，直引 `src/*.ts` 源码（仅可擦除语法，见 `docs/STYLE.md §7`），断言：工具/聚合/计量事件判定与模型身份（`usable` 收对话与压缩调用、拒 `assistant/attempt`；`modelKeyOf` 两处取源）/日志解析/rawlog 代次与多帧 zstd/fork 继承前缀（`inheritedCountOf`/`inheritedPrefixOf`/`liveEventsOf`）/手写严格贡献（方法表/收发合法拒非法/信封分支）/命名空间句柄（经 `get` 取、不暂存 `ctx.remote`）/偏好设置（归一化与夹取、路径写入只带显式字段、作用域视图引用稳定、解绑带作用域身份（热重载不误清新作用域）、不可用或只读时不发注定被拒的写入、旧 localStorage 迁移：等作用域落定、成功写文档才删旧键、不可用时保留；服务端命名空间注册，schema 解析值等于共享默认值、注册失败只降级偏好不抛错）/格式化/分组/时间范围/图表几何/快照截断/三额度 fixture（含无 key、无 plan、非法归一、key 回退、go 缓存单飞），无外网请求，不碰 sqlite。
-- `smoke.mjs`：真实 cordis `Context` + mock `sessionQuery/sessionPersistence`（凭据中心缺席时额度查询直接返回 `no-key`），真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→@Remote 标记存活→实时重放20条去重→真实结果过 zod 信封→rebuild 并发 `usageStats/busy`→rebuild一致→三额度 no-key→seal→空清单仍从介质重建394→clear 归零。另有四个独立 `DSH_HOME` 用例：旧代次会话 raw 兜底（`SessionFormatUnsupportedError` → 自读最高代次，只折一次）、fork 继承前缀过滤（query 与 raw 两路都只折自有事件）、压缩调用计入（`compaction/summary` 的用量计入总量与模型拆分，缺 usage/零用量不入账，实时路径同样接纳）、偏好设置命名空间注册与落盘（挂 harness 真实文件后端 `@deepseek-ai/dsh-settings-file`：默认值齐备且未改动时不建文档、update 只把显式改过的字段写进 `$DSH_HOME/settings.yaml` 的 `usage-stats` 段、describe 下发的 schema 可 JSON 序列化）。
+- `smoke.mjs`：真实 cordis `Context` + mock `sessionQuery/sessionPersistence`（凭据中心缺席时额度查询直接返回 `no-key`），真实 `node:sqlite`（`DSH_HOME` 临时目录）+ `test/session-events.jsonl`（397 行，394 条 `assistant/message+usage`）；断言：落盘→快照394→@Remote 标记存活→实时重放20条去重→真实结果过 zod 信封→rebuild 并发 `usageStats/busy`→rebuild一致→三额度 no-key→seal→空清单仍从介质重建394→clear 归零。另有五个独立 `DSH_HOME` 用例：旧代次会话 raw 兜底（`SessionFormatUnsupportedError` → 自读最高代次，只折一次）、fork 继承前缀过滤（query 与 raw 两路都只折自有事件）、清零墓碑（清零落 `cleared_at` 后重启保持归零且 `scans=0`、重建恢复 394、再重启仍在）、压缩调用计入（`compaction/summary` 的用量计入总量与模型拆分，缺 usage/零用量不入账，实时路径同样接纳）、偏好设置命名空间注册与落盘（挂 harness 真实文件后端 `@deepseek-ai/dsh-settings-file`：默认值齐备且未改动时不建文档、update 只把显式改过的字段写进 `$DSH_HOME/settings.yaml` 的 `usage-stats` 段、describe 下发的 schema 可 JSON 序列化）。
 - `styles.mjs`：样式契约，扫描全部 `*.module.css`，断言引用的每个变量都在主题包 `@deepseek-ai/dsh-client-ui-theme`（devDependency，与 harness 运行时同包）声明过且前缀合法——未声明的变量会让声明在计算值阶段失效，深色模式下表现为写死浅色的色块（详见 `docs/STYLE.md §8`）。
 - `client-bundle.mjs`：验证 `window.__ModuleLoader__.load` 注册、每 `*.module.css` 对应 `data-plugin-css` 样式含 scoped 类名。
 

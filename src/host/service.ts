@@ -154,7 +154,14 @@ export default class UsageStatsService extends TypertRemoteService {
         store.lastScanAt = Date.now();
         return;
       }
-      // 3) 首启：无数据 → 全量扫描日志并物化
+      // 3) 首启：无数据 → 全量扫描日志并物化。清零墓碑在场则跳过——用户已明确
+      //    清零（账本 9 表全空才会落到这里），重扫会把刚抹掉的历史统计带回来，
+      //    违背「清零不会重新读取历史会话」的承诺；恢复历史的出口是 rebuild，
+      //    其经 ledger.clear() 整表清掉 agg_checkpoint，墓碑随之移除。
+      if (ledger.getClearedAt() !== null) {
+        console.info('[usage-stats] 清零墓碑生效，跳过首启全量扫描（重建可重新统计历史）');
+        return;
+      }
       await scanOnce(ctx, store, ledger, { initial: true });
     };
     void bootstrap().catch((e) => console.error('[usage-stats] 初始化失败', e));
@@ -174,7 +181,7 @@ export default class UsageStatsService extends TypertRemoteService {
   }
 
   /**
-   * usageStats/rebuild：清空账本 → 复位聚合缓存 → 全量重扫日志导入。
+   * usageStats/rebuild：清空账本（顺带清掉清零墓碑）→ 复位聚合缓存 → 全量重扫日志导入。
    * @returns 重建确认与折叠事件数；进行中返回 usageStats/busy。
    */
   @Remote('rebuild')
@@ -198,7 +205,8 @@ export default class UsageStatsService extends TypertRemoteService {
   }
 
   /**
-   * usageStats/clear：清空账本 → 复位聚合缓存，不重扫，统计直接归零。
+   * usageStats/clear：清空账本 → 复位聚合缓存 → 落清零墓碑，不重扫，统计直接归零；
+   * 重启后 bootstrap 据墓碑跳过首启全量扫描，历史统计不复活（rebuild 是恢复出口）。
    * @returns 清零确认与折叠事件数；进行中返回 usageStats/busy。
    */
   @Remote('clear')
@@ -211,6 +219,9 @@ export default class UsageStatsService extends TypertRemoteService {
     try {
       this.ledger.clear();
       resetStore(store);
+      // 落清零墓碑：清库已整表抹掉 agg_checkpoint，标记必须在其后写；
+      // 否则重启后空库落进 bootstrap 首启分支，历史统计会原样扫回来。
+      this.ledger.markCleared();
     } finally {
       store.running = false;
     }

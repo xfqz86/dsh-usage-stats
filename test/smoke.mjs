@@ -464,6 +464,91 @@ await mounted.dispose()
   rmSync(legacyHome, { recursive: true, force: true })
 }
 
+// ===== 清零墓碑回归用例（独立 DSH_HOME，不触碰上面的 394 基线）=====
+// 等价真实场景：设置页清零（账本 9 表全空）→ 重启 dsh。若空库直接落进 bootstrap
+// 首启分支，会全量重扫磁盘日志、把刚清掉的历史统计原样带回来，与「清零不会重新
+// 读取历史会话」的文案矛盾。断言：清零落墓碑后重启保持归零且扫描从未发生
+// （scans/lastScanAt 均为 0）；「重建」清墓碑并重扫恢复历史，再次重启数据仍在。
+{
+  const tombHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-tomb-'))
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = tombHome
+
+  // 第一次进程：首启扫描折满 394 → 清零归零并落墓碑
+  const first = await mount(sessionQuery, sessionPersistence)
+  {
+    const deadline = Date.now() + 10_000
+    for (;;) {
+      const s = first.svc.snapshot({ sessionId: null })
+      assertEnvelope('snapshot', s)
+      // scanning 为假且 lastScanAt 已落：扫描 finally 收尾（物化聚合）已完成，
+      // 否则紧随其后的 clear 会撞上 running=true 被 usageStats/busy 拒绝。
+      if (s.foldedEvents === EXPECTED_FOLDED && s.scanning === false && s.lastScanAt > 0) break
+      if (Date.now() > deadline) throw new Error('等待清零前首启扫描折叠超时')
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    // 留出 finally 尾部余量，再清零。
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  const cleared = await first.svc.clear()
+  assertEnvelope('clear', cleared)
+  if (cleared.foldedEvents !== 0) {
+    console.error(`FAIL: 清零后 foldedEvents=${String(cleared.foldedEvents)}，应为 0`)
+    process.exit(1)
+  }
+  await first.dispose()
+
+  // 第二次进程 = 重启：空库 + 墓碑 → 跳过首启扫描，统计保持归零。
+  // bootstrap 异步启动：轮询 2s 作为回归哨兵，若墓碑失效这里会折满 394 而被抓包。
+  const second = await mount(sessionQuery, sessionPersistence)
+  {
+    const deadline = Date.now() + 2_000
+    while (Date.now() < deadline) {
+      const s = second.svc.snapshot({ sessionId: null })
+      assertEnvelope('snapshot', s)
+      if (s.foldedEvents !== 0 || s.scans !== 0) {
+        console.error(`FAIL: 清零后重启历史复活：foldedEvents=${String(s.foldedEvents)} scans=${String(s.scans)}，应保持归零且未扫描`)
+        process.exit(1)
+      }
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    const settled = second.svc.snapshot({ sessionId: null })
+    assertEnvelope('snapshot', settled)
+    if (settled.foldedEvents !== 0 || settled.scans !== 0 || settled.lastScanAt !== 0) {
+      console.error(`FAIL: 清零墓碑未生效：foldedEvents=${String(settled.foldedEvents)} scans=${String(settled.scans)} lastScanAt=${String(settled.lastScanAt)}，应全为 0`)
+      process.exit(1)
+    }
+    console.log('clear tombstone restart:', JSON.stringify({ foldedEvents: settled.foldedEvents, scans: settled.scans }))
+  }
+
+  // 同进程重建：清墓碑 + 全量重扫 → 历史统计恢复
+  const rebuilt = await second.svc.rebuild()
+  assertEnvelope('rebuild', rebuilt)
+  if (rebuilt.foldedEvents !== EXPECTED_FOLDED) {
+    console.error(`FAIL: 重建后 foldedEvents=${String(rebuilt.foldedEvents)}，应为 ${String(EXPECTED_FOLDED)}`)
+    process.exit(1)
+  }
+  await second.dispose()
+
+  // 第三次进程 = 再次重启：重建后走预统计/事件重放，数据仍在且不再归零
+  const third = await mount(sessionQuery, sessionPersistence)
+  {
+    const deadline = Date.now() + 10_000
+    for (;;) {
+      const s = third.svc.snapshot({ sessionId: null })
+      assertEnvelope('snapshot', s)
+      if (s.foldedEvents === EXPECTED_FOLDED) break
+      if (Date.now() > deadline) throw new Error('等待重建后重启恢复折叠超时')
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  }
+  await third.dispose()
+  console.log('clear tombstone rebuild-recover:', JSON.stringify({ foldedEvents: EXPECTED_FOLDED }))
+
+  process.env.DSH_HOME = previousHome
+  rmSync(tombHome, { recursive: true, force: true })
+}
+
 // ===== fork 继承前缀回归用例（独立 DSH_HOME，不触碰上面的 394 基线与旧代次用例）=====
 // 等价真实场景：子会话日志的物理前缀是从父会话复制来的历史事件（`session/end-seed`
 // 带 `inherited: true` 标记分界），harness 读取会连前缀一起返回。若整份日志折叠，
