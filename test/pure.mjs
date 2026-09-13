@@ -945,19 +945,26 @@ describe('snapshot：构建与截断', () => {
 });
 
 describe('quota：go', () => {
-  it('query 缓存命中只打一次', async () => {
+  it('query TTL 内命中缓存，force 立即重拉不受下限约束', async () => {
     let calls = 0;
     const restore = mockFetch(async () => {
       calls += 1;
-      return jsonResponse(200, { usage: {} });
+      return jsonResponse(200, { usage: { rolling: { percent: calls * 10, resetsAt: 'r' } } });
     });
     try {
       const a = await queryGoQuota(5, false, creds('k'));
       const b = await queryGoQuota(5, false, creds('k'));
-      const c = await queryGoQuota(5, true, creds('k'));
       assert.equal(calls, 1);
       assert.equal(a, b);
-      assert.equal(b, c);
+      // force 完全绕过 TTL 与强制下限：距上次抓取再近也立即重拉官方端点
+      const c = await queryGoQuota(5, true, creds('k'));
+      assert.equal(calls, 2);
+      assert.notEqual(c, a);
+      assert.equal(c.rolling.percent, 20);
+      // 重拉后缓存窗口以新抓取时间起算，TTL 内继续命中
+      const d = await queryGoQuota(5, false, creds('k'));
+      assert.equal(calls, 2);
+      assert.equal(d, c);
     } finally {
       restore();
     }

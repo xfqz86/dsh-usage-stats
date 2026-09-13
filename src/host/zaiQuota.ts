@@ -17,9 +17,7 @@
  * 客户端按 status 本地化文案，不在服务端拼用户文案。
  * 本功能不写入 ledger，仅只读查询与内存缓存。
  */
-import { QUOTA_MIN_FETCH_MS } from '../utils.ts';
-
-import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
+import { createQuotaQuery, resolveFirstKey, QUOTA_UA } from './quota.ts';
 
 import type { ZaiQuota, ZaiWebSearchQuota, ZaiWindow } from '../types.ts';
 import type { CredentialsService } from './quota.ts';
@@ -30,8 +28,6 @@ export type { CredentialsService } from './quota.ts';
 
 /** Z.ai 官方额度端点，固定域名，参考 openusage ZAIUsageClient.quotaURL。 */
 const ZAI_QUOTA_URL = 'https://api.z.ai/api/monitor/usage/quota/limit';
-/** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
-export const ZAI_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 Z.ai API Key：仅走 DSH 凭据中心，经 ZAI_CODING_CN_API_KEY 到 ZAI_API_KEY。 */
 export async function resolveZaiKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {

@@ -42,10 +42,9 @@
 |---|---|---|---|
 | `SERIES_MAX_DAYS` | 366 | `utils.ts` | 快照截断与图表 `all` 上限 |
 | `DAY_MS` | 86_400_000 | `utils.ts` | 日期差换算（禁推进） |
-| `QUOTA_MIN_FETCH_MS` | 3 分钟 | `utils.ts` | 额度抓取下限 |
+| `QUOTA_MIN_FETCH_MS` | 3 分钟 | `utils.ts` | 额度轮询 TTL 下限（仅作用于自动轮询，手动 force 刷新不受限） |
 | `QUOTA_CACHE_TTL_MS` | 5 分钟 | `utils.ts` | 额度缓存上限 |
 | `effectiveQuotaTtl()` | — | `utils.ts` | `min(上限, max(下限, 间隔))`，三额度共用 |
-| `GO/DEEPSEEK/ZAI_MIN_FETCH_MS` | 别名 | 各额度模块 | 仅为对外兼容保留，对内用共享常量 |
 | `SCAN_WORKERS` | 4 | `scan.ts` | 扫描并发数 |
 | `SNAPSHOT_LIMIT` | 500 | `client/api.ts` | 快照会话明细上限 |
 | `SNAPSHOT_INTERVAL_MS` | 4000 | `client/api.ts` | 快照轮询间隔（`useSnapshot` 默认值，不再各处手写 4000） |

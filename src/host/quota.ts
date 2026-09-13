@@ -7,7 +7,7 @@
  */
 import { credentialRef } from '@deepseek-ai/dsh-credentials';
 
-import { QUOTA_MIN_FETCH_MS, effectiveQuotaTtl } from '../utils.ts';
+import { effectiveQuotaTtl } from '../utils.ts';
 
 import type { CredentialProvider } from '@deepseek-ai/dsh-credentials';
 
@@ -40,7 +40,8 @@ export async function resolveFirstKey(
 
 /**
  * 带 TTL 缓存与单飞的查询工厂：每个调用处实例独立缓存。
- * force 绕过 TTL 但仍受强制下限保护（距上次抓取不足时直接回缓存）。
+ * 常规调用在 TTL 内直接回缓存；force 为用户手动刷新，完全绕过 TTL 与下限、
+ * 立即重拉官方端点，仅经单飞合并并发请求，成功后缓存窗口重新起算。
  */
 export function createQuotaQuery<T, C>(
   fetch: (credentials?: C) => Promise<T>,
@@ -51,11 +52,6 @@ export function createQuotaQuery<T, C>(
     const effectiveTtlMs = effectiveQuotaTtl(intervalMinutes);
     const now = Date.now();
     if (!force && cache !== null && now - cache.at < effectiveTtlMs) return cache.value;
-    if (force && cache !== null && now - cache.at < QUOTA_MIN_FETCH_MS && inflight === null) {
-      // force 距上次抓取过近且无进行中的请求：打官方端点频率受强制下限保护，
-      // 返回上一次结果即可，避免刷爆官方额度接口。
-      return cache.value;
-    }
     if (inflight === null) {
       inflight = fetch(credentials).then((value) => {
         cache = { at: Date.now(), value };

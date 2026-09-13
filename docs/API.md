@@ -37,8 +37,8 @@ Client 严格编解码在 `src/remote/contribution.ts`。
 - 目的：OpenCode Go 订阅额度，包含滚动 5 小时、本周、本月 `percent` 和 `resetsAt`。
 - body `{ intervalMinutes?: number, force?: boolean }` —— `intervalMinutes` 是
   客户端抓取间隔，单位为分钟，见 §5；`force: true` 对应概览 Go 磁贴的立即刷新按钮，
-  绕过有效 TTL 缓存强制重新抓取，但**仍受 3 分钟强制下限保护**，距上次抓取不足
-  3 分钟时返回最近一次结果，避免刷爆官方端点。
+  手动触发**完全绕过 TTL 缓存立即重新抓取**（仅并发经单飞合并），成功后缓存
+  窗口重新起算。
 - 响应 `value`：`GoQuota` 定义在 `src/types.ts`，结构为
   `{ status: 'ok' | 'no-key' | 'error', fetchedAt, rolling, weekly, monthly }`，
   `status` 由客户端按文案本地化展示。
@@ -55,8 +55,8 @@ Client 严格编解码在 `src/remote/contribution.ts`。
 - 目的：DeepSeek 余额，包含当前余额 `is_available` 和多币种 `balance_infos`，每项含 `currency`、`total_balance`、`granted_balance`、`topped_up_balance`，金额为字符串，预留今日消耗 `todayAmount`、`todayCurrency`，v1 固定为 `null`。
 - body `{ intervalMinutes?: number, force?: boolean }` —— `intervalMinutes` 是
   客户端抓取间隔，单位为分钟，见 §5；`force: true` 对应概览 DeepSeek 磁贴的立即刷新按钮，
-  绕过有效 TTL 缓存强制重新抓取，但**仍受 3 分钟强制下限保护**，距上次抓取不足
-  3 分钟时返回最近一次结果，避免刷爆官方端点。
+  手动触发**完全绕过 TTL 缓存立即重新抓取**（仅并发经单飞合并），成功后缓存
+  窗口重新起算。
 - 响应 `value`：`DeepSeekBalance` 定义在 `src/types.ts`，结构为
   `{ status: 'ok' | 'no-key' | 'error', fetchedAt, isAvailable, balances: DeepSeekBalanceInfo[], todayAmount, todayCurrency }`，
   `DeepSeekBalanceInfo` 为 `{ currency, totalBalance, grantedBalance, toppedUpBalance }`，金额保持字符串，避免浮点丢失，`status` 由客户端按文案本地化展示；`isAvailable` 仅当官方 `is_available === true` 且类型为 boolean 时为 `true`，其余归一化为 `false`。
@@ -72,8 +72,8 @@ Client 严格编解码在 `src/remote/contribution.ts`。
 - 目的：Z.ai 智谱额度，包含滚动 5 小时、本周 `percent` 和 `resetsAt`，以及每月 Web 搜索 `used`、`limit` 和 `resetsAt`，计划名 `plan` 来自 `data.level`。
 - body `{ intervalMinutes?: number, force?: boolean }` —— `intervalMinutes` 是
   客户端抓取间隔，单位为分钟，见 §5；`force: true` 对应概览 Z.ai 磁贴的立即刷新按钮，
-  绕过有效 TTL 缓存强制重新抓取，但**仍受 3 分钟强制下限保护**，距上次抓取不足
-  3 分钟时返回最近一次结果，避免刷爆官方端点。
+  手动触发**完全绕过 TTL 缓存立即重新抓取**（仅并发经单飞合并），成功后缓存
+  窗口重新起算。
 - 响应 `value`：`ZaiQuota` 定义在 `src/types.ts`，结构为
   `{ status: 'ok' | 'no-key' | 'no-plan' | 'error', fetchedAt, plan, session, weekly, webSearches }`，
   `session` 和 `weekly` 为 `ZaiWindow | null`，结构为 `{ percent, resetsAt, used, limit }`，`resetsAt` 为 ISO 字符串，`percent` 已夹到 0..100，`used` 和 `limit` 为点数明细，来自官方条目的 `currentValue` 和 `usage` 字段，官方未下发时为 `null`，`webSearches` 为 `ZaiWebSearchQuota | null`，结构为 `{ used, limit, percent, resetsAt }`，`plan` 为 `string | null`，如 `"Z.ai pro"`，`status` 由客户端按文案本地化展示，`ok` 时三窗口可能部分为 `null`，按官方 `limits` 实际返回决定，开放未来窗口兼容。
