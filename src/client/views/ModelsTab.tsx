@@ -19,7 +19,7 @@ import { StackedBar } from '../components/StackedBar.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { avgPerCall, fmt, fmtFull, hitRateOfDay, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts';
+import { avgPerCall, fmt, fmtFull, hitRateOfDay, largestRemainderPcts, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
 import css from './ModelsTab.module.css';
@@ -69,29 +69,14 @@ export function ModelsTab({
     setPage(1);
   }, [range, setPage]);
 
-  // 占比：基于过滤后总和，非最大值，最大余数法保证 1 位小数总和 100%
+  // 占比：基于过滤后总和，非最大值，最大余数法保证 1 位小数总和 100%（stats.largestRemainderPcts，与饼图同一口径）
   // 需在排序前计算，保证 share 与过滤后顺序一一对应，再按排序键重排时 share 随行
   const sortedModels = useMemo(() => {
     if (filteredModels.length === 0) return [];
     const sumTotal = filteredModels.reduce((s, m) => s + usageTotal(m.usage), 0);
-    let shares: number[] = [];
-    if (sumTotal > 0) {
-      const raws = filteredModels.map((m) => (usageTotal(m.usage) / sumTotal) * 100);
-      const floors = raws.map((v) => Math.floor(v * 10) / 10);
-      const sumFloorsTenths = floors.reduce((a, b) => a + Math.round(b * 10), 0);
-      const remainingTenths = 1000 - sumFloorsTenths;
-      const order = raws
-        .map((v, i) => ({ i, frac: v * 10 - Math.floor(v * 10) }))
-        .sort((a, b) => b.frac - a.frac);
-      const result = [...floors];
-      for (let k = 0; k < remainingTenths && k < order.length; k += 1) {
-        const idx = order[k].i;
-        result[idx] = Math.round((result[idx] + 0.1) * 10) / 10;
-      }
-      shares = result;
-    } else {
-      shares = filteredModels.map(() => 0);
-    }
+    const shares = sumTotal > 0
+      ? largestRemainderPcts(filteredModels.map((m) => (usageTotal(m.usage) / sumTotal) * 100))
+      : filteredModels.map(() => 0);
     const withShares = filteredModels.map((m, i) => ({ m, i, share: shares[i] ?? 0 }));
     return stableSort(withShares, (a, b) => {
       switch (sortKey) {

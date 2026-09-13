@@ -1,15 +1,12 @@
 /* 英雄磁贴 HeroTile：今日与总 tokens 共用的合并磁贴样式。
-   占 2 列，包含大数、命中率、调用和缓存/输入/输出三色比例条。
-   颜色全部使用设计 token。 */
+   包含大数、命中率、调用和缓存/输入/输出三色比例条，颜色全部使用设计 token。 */
 /* .cell / .cellIcon 等基元见 UsageStatsCommon.module.css。 */
 
 .cellHero {
-  grid-column: span 2;
-  gap: 4px;
-}
-
-.cellHero .cellIcon {
-  margin-bottom: 0;
+  /* 卡片随行高拉伸（与热力图齐平）：纵向 space-between 让图标行贴顶、
+     比例条钉底，大数与命中率行随高度均匀散开，避免底部大片留白。 */
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .heroHead {

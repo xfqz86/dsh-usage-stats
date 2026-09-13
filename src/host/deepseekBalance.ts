@@ -13,8 +13,6 @@
  * 客户端按 status 本地化文案，不在服务端拼用户文案。
  * 本功能不写入 ledger，仅只读查询与内存缓存。
  */
-import { QUOTA_MIN_FETCH_MS } from '../utils.ts';
-
 import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
 
 import type { DeepSeekBalance, DeepSeekBalanceInfo } from '../types.ts';
@@ -26,11 +24,9 @@ export type { CredentialsService } from './quota.ts';
 
 /** DeepSeek 官方余额端点，固定域名。 */
 const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance';
-/** 服务端强制下限：复用共享常量，对外保持原名，与客户端设置下限对齐。 */
-export const DEEPSEEK_MIN_FETCH_MS = QUOTA_MIN_FETCH_MS;
 
 /** 解析 DeepSeek API Key，仅走 DSH 凭据中心，支持 DEEPSEEK_API_KEY 等。 */
-export async function resolveDeepSeekKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
+async function resolveDeepSeekKeyWithCredentials(credentials?: CredentialsService): Promise<string | null> {
   return resolveFirstKey(credentials, ['DEEPSEEK_API_KEY', 'DEEPSEEK_APIKEY', 'DEEPSEEK_API_TOKEN', 'DEEPSEEK_TOKEN']);
 }
 

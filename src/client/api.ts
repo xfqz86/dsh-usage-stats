@@ -18,7 +18,7 @@ export const SNAPSHOT_INTERVAL_MS = 4000;
 export const SNAPSHOT_LIMIT = 500;
 
 /**
- * 账本写操作 Remote 调用：rebuild/clear 同一写法（seal 另行直接调用，不走本封装）。
+ * 账本写操作 Remote 调用：rebuild/clear 同一写法（seal 仅协议保留，界面未暴露）。
  * 成功后调 onRefresh 重拉快照；失败抛错，由调用方落回 idle。二次确认与 busy/done 状态机归 useConfirmOp。
  */
 export async function postLedgerApi(endpoint: 'rebuild' | 'clear', onRefresh: () => void): Promise<void> {

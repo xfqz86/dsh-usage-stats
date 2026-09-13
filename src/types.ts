@@ -14,9 +14,9 @@ export interface GoWindow {
   resetsAt: string
 }
 
-/** 额度查询结果，status 由客户端本地化展示。 */
+/** 额度查询结果，status 由客户端本地化展示；no-plan 为已配置 Key 但未开通订阅。 */
 export interface GoQuota {
-  status: 'ok' | 'no-key' | 'error'
+  status: 'ok' | 'no-key' | 'no-plan' | 'error'
   fetchedAt: number
   rolling: GoWindow | null
   weekly: GoWindow | null

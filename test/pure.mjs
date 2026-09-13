@@ -36,8 +36,6 @@ import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
   buildDateStack,
   buildModelStack,
-  buildSet,
-  curveOf,
   dateRangeCutoff,
   dayTotal,
   filterModelsByRange,
@@ -47,10 +45,10 @@ import {
   groupSessions,
   heatGridOf,
   hitRateOfDay,
+  lastActiveDayKind,
+  modelCatalog,
   modelRangeCutoff,
   modelRangeToDays,
-  modelCatalog,
-  paginateGroups,
   pctOf,
   pieFullCircleOf,
   pieSlicesOf,
@@ -593,40 +591,9 @@ describe('stats：会话分组', () => {
     ]);
     assert.equal(groups.length, 2);
   });
-
-  it('paginateGroups 子不占页位且越界回空', () => {
-    const mains = ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ main: sess(id, { lastActive: i }), children: [], agg: { calls: 0, usage: agg(0, 0) }, childCount: 0 }));
-    assert.equal(paginateGroups(mains, 2, 2).length, 2);
-    assert.deepEqual(paginateGroups(mains, 9, 2), []);
-    assert.deepEqual(paginateGroups([], 1, 20), []);
-  });
 });
 
 describe('stats：时间范围', () => {
-  it('buildSet 7d 补零且末桶为今天', () => {
-    const buckets = buildSet([pt(6, 5), pt(0, 7)], '7d');
-    assert.equal(buckets.length, 7);
-    assert.equal(buckets[6].t, startOfDay(Date.now()));
-    assert.equal(buckets[6].input, 7);
-    assert.equal(buckets[3].input, 0);
-    assert.equal(buckets[0].t, startOfDay(buckets[0].t));
-  });
-
-  it('buildSet 桶按本地日历逐日推进（DST 安全）', () => {
-    const buckets = buildSet([pt(0, 1)], '7d');
-    for (let i = 0; i < buckets.length - 1; i += 1) {
-      const expect = new Date(buckets[i].t);
-      expect.setDate(expect.getDate() + 1);
-      assert.equal(buckets[i + 1].t, expect.getTime());
-    }
-  });
-
-  it('buildSet all 从最早日到今天', () => {
-    const buckets = buildSet([pt(3, 1), pt(0, 2)], 'all');
-    assert.equal(buckets.length, 4);
-    assert.equal(buckets[3].input, 2);
-  });
-
   it('todayOf 取今日点', () => {
     assert.equal(todayOf([pt(1, 1), pt(0, 9)]).input, 9);
     assert.equal(todayOf([pt(2, 1), pt(1, 2)]), undefined);
@@ -659,13 +626,6 @@ describe('stats：图表几何', () => {
     const lvls = g.cells.map((c) => c.lvl);
     assert.ok(lvls.every((l) => l >= 0 && l <= 4));
     assert.equal(Math.max(...lvls), 4);
-  });
-
-  it('curveOf 空回 null', () => {
-    assert.equal(curveOf([]), null);
-    const g = curveOf([pt(0, 5)]);
-    assert.ok(g.line.startsWith('M'));
-    assert.equal(g.hits.length, 1);
   });
 
   it('pieSlicesOf 最大余数总和 100', () => {
@@ -921,6 +881,21 @@ describe('模型统计重定向：候选过滤（设置页自动完成）', () =
   });
 });
 
+describe('lastActiveDayKind：最近活跃自然日判定', () => {
+  // 固定本地时间 2026-09-14 09:30，用例不随当前时间漂移
+  const now = new Date(2026, 8, 14, 9, 30).getTime();
+  const at = (d, h, m) => new Date(2026, 8, d, h, m).getTime();
+
+  it('按本地自然日划分，不用 24 小时窗', () => {
+    assert.equal(lastActiveDayKind(at(14, 0, 1), now), 'today');
+    // 昨天 23:59 距今不到 10 小时，24 小时窗会误判为今天
+    assert.equal(lastActiveDayKind(at(13, 23, 59), now), 'yesterday');
+    // 昨天 02:47，即用户报错的凌晨场景
+    assert.equal(lastActiveDayKind(at(13, 2, 47), now), 'yesterday');
+    assert.equal(lastActiveDayKind(at(12, 12, 0), now), 'earlier');
+  });
+});
+
 describe('snapshot：构建与截断', () => {
   it('快照截断至 366 天且总量不受影响', () => {
     const store = createStore();
@@ -945,19 +920,26 @@ describe('snapshot：构建与截断', () => {
 });
 
 describe('quota：go', () => {
-  it('query 缓存命中只打一次', async () => {
+  it('query TTL 内命中缓存，force 立即重拉不受下限约束', async () => {
     let calls = 0;
     const restore = mockFetch(async () => {
       calls += 1;
-      return jsonResponse(200, { usage: {} });
+      return jsonResponse(200, { usage: { rolling: { percent: calls * 10, resetsAt: 'r' } } });
     });
     try {
       const a = await queryGoQuota(5, false, creds('k'));
       const b = await queryGoQuota(5, false, creds('k'));
-      const c = await queryGoQuota(5, true, creds('k'));
       assert.equal(calls, 1);
       assert.equal(a, b);
-      assert.equal(b, c);
+      // force 完全绕过 TTL 与强制下限：距上次抓取再近也立即重拉官方端点
+      const c = await queryGoQuota(5, true, creds('k'));
+      assert.equal(calls, 2);
+      assert.notEqual(c, a);
+      assert.equal(c.rolling.percent, 20);
+      // 重拉后缓存窗口以新抓取时间起算，TTL 内继续命中
+      const d = await queryGoQuota(5, false, creds('k'));
+      assert.equal(calls, 2);
+      assert.equal(d, c);
     } finally {
       restore();
     }
@@ -1014,6 +996,24 @@ describe('quota：go', () => {
     restore = mockFetch(async () => { throw new Error('down'); });
     try {
       assert.equal((await fetchGoQuota(creds('k'))).status, 'error');
+    } finally {
+      restore();
+    }
+  });
+
+  it('403 EntitlementError（未订阅）判 no-plan，其余 401/403 仍判 no-key', async () => {
+    let restore = mockFetch(async () => jsonResponse(403, {
+      type: 'error',
+      error: { type: 'EntitlementError', message: 'OpenCode Go subscription required.' },
+    }));
+    try {
+      assert.equal((await fetchGoQuota(creds('k'))).status, 'no-plan');
+    } finally {
+      restore();
+    }
+    restore = mockFetch(async () => jsonResponse(403, {}));
+    try {
+      assert.equal((await fetchGoQuota(creds('k'))).status, 'no-key');
     } finally {
       restore();
     }
@@ -1186,7 +1186,7 @@ describe('quota：zai', () => {
     }
   });
 
-  it('key 优先用 ZAI_CODING_CN', async () => {
+  it('首个 key 解析失败回退到 ZAI_API_KEY', async () => {
     let auth = '';
     const restore = mockFetch(async (_url, init) => {
       auth = init.headers.authorization;

@@ -102,6 +102,13 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* 说明文字芯片（宽列 no-key / no-plan）：完全沿用数值芯片的原底色与拉伸居中
+   版式（见 .unifiedGoRow .goChip），只把横杠换成说明文字；overflow 兜底裁剪，
+   完整指引保留在 tooltip；折叠 rail 不用此修饰，仍显示横杠。 */
+.goChipHint {
+  overflow: hidden;
+}
+
 
 
 /* ---- 合一按钮宽列：Go 额度行 + 今日用量行在同一按钮内，任意位置点击均打开弹窗 ---- */

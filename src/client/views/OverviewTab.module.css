@@ -33,13 +33,16 @@
   background: transparent;
   box-shadow: none;
   min-width: 0;
+  /* 行高由跨两行的热力图内容撑开：卡片需纵向填满所在行，
+     上下边缘才与热力图卡片齐平，否则卡片以自然高度悬浮、行间缝隙变大。 */
+  display: flex;
+  flex-direction: column;
 }
 
-.tileToday :global(.cellHero),
-.tileTotal :global(.cellHero) {
-  /* 覆盖 HeroTile 默认的 grid-column: span 2，避免在命名区域内再跨列 */
-  grid-column: auto !important;
-  width: 100%;
+/* HeroTile 卡片填满定位层 */
+.tileToday > * {
+  flex: 1;
+  min-height: 0;
 }
 
 .tileTotal {
@@ -49,6 +52,13 @@
   background: transparent;
   box-shadow: none;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tileTotal > * {
+  flex: 1;
+  min-height: 0;
 }
 
 .tileHeatmap {
@@ -277,31 +287,6 @@
 .deepseekDetailValue {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.deepseekToday {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
-}
-
-.deepseekTodayLabel {
-  font-size: 11px;
-  color: var(--dsw-alias-label-tertiary);
-  white-space: nowrap;
-}
-
-.deepseekTodayValue {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--dsw-alias-label-primary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  text-align: right;
 }
 
 /* ---- 磁贴底部更新时间：DeepSeek / Go / Z.ai 三卡共用 ----

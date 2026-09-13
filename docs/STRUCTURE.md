@@ -20,7 +20,7 @@ dsh-usage-stats/
 │   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
 │   │       └── verify.mjs ← 校验交付物仅含 7 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
-│       ├── ci.yml ← CI：类型检查 / 构建 / 冒烟测试（每次 PR 与推送 dev/main 执行）
+│       ├── ci.yml ← CI：类型检查 / 构建 / 样式契约 / 冒烟测试（每次 PR 与推送 dev/main 执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
 ├── docs/
@@ -34,8 +34,8 @@ dsh-usage-stats/
 │   │   ├── 04-models.png
 │   │   ├── 05-settings.png
 │   │   └── footer.png
-│   ├── API.md ← 服务端 HTTP 协议与偏好设置约定（随接口演进维护）
-│   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付三种形态：release / npm / tarball）
+│   ├── API.md ← Remote 协议与偏好设置约定（随接口演进维护）
+│   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付四种形态：源码 / release / npm / tarball）
 │   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
 │   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）
 ├── scripts/
@@ -44,6 +44,8 @@ dsh-usage-stats/
 ├── src/
 │   ├── client/
 │   │   ├── components/
+│   │   │   ├── HintCard.module.css ← 额度状态提示卡：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
+│   │   │   ├── HintCard.tsx ← 额度状态提示卡：图标徽标配短文案，概览磁贴与侧边栏 tooltip 共用。
 │   │   │   ├── ModelPieChart.module.css ← 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
@@ -56,9 +58,7 @@ dsh-usage-stats/
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
 │   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 当前只接受纯文本（`label: string | (() => string)`，0.1.5-rc.2 仍未变）， 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、 maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增—— - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div 以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space； - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
-│   │   │   ├── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
-│   │   │   ├── ZaiNoPlan.module.css ← Z.ai 未开通空态：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
-│   │   │   └── ZaiNoPlan.tsx ← Z.ai 未开通空态：品牌色图标徽标配短文案，概览磁贴与侧边栏 tooltip 共用。
+│   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
 │   │   ├── views/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。

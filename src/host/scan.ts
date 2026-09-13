@@ -59,7 +59,7 @@ const shortOf = (id: string): string =>
  * 尝试从预统计物化表加载聚合，属于快速启动路径。
  * 成功返回 true，已填充 store，无预统计返回 false，调用方需回退到事件重放或扫描。
  */
-export function tryLoadAggregates(store: UsageStore, ledger: Ledger): boolean {
+function tryLoadAggregates(store: UsageStore, ledger: Ledger): boolean {
   if (!ledger.hasAggregates()) return false;
   const ok = ledger.loadAggregates(store);
   if (ok) {
@@ -168,7 +168,6 @@ export async function scanOnce(
               }
             }
           }
-          if (snapshots.length > 0) store.scanError = null;
         }
       } catch (e) {
         store.scanError = 'persistence.list: ' + errorMessage(e);
@@ -184,20 +183,21 @@ export async function scanOnce(
     async function worker(): Promise<void> {
       while (i < idList.length) {
         const id = idList[i]; i += 1;
-        // 预填充 header 元数据，若有则填充，保证即使无 seed 记录时也不为空
-        const hdr = headerMap.get(id);
-        if (hdr && (hdr.cwd !== undefined || hdr.createdAt !== undefined || hdr.parentSession !== undefined
-          || hdr.origin !== undefined || hdr.delegationDepth !== undefined)) {
-          ledger.setMeta(id, {
-            cwd: hdr.cwd,
-            createdAt: hdr.createdAt,
-            lastActive: hdr.createdAt,
-            parentSession: hdr.parentSession,
-            origin: hdr.origin,
-            delegationDepth: hdr.delegationDepth,
-          });
-        }
         try {
+          // 预填充 header 元数据，若有则填充，保证即使无 seed 记录时也不为空。
+          // 在 try 内执行：setMeta 抛错不能杀死整个 worker 循环，只影响该会话。
+          const hdr = headerMap.get(id);
+          if (hdr && (hdr.cwd !== undefined || hdr.createdAt !== undefined || hdr.parentSession !== undefined
+            || hdr.origin !== undefined || hdr.delegationDepth !== undefined)) {
+            ledger.setMeta(id, {
+              cwd: hdr.cwd,
+              createdAt: hdr.createdAt,
+              lastActive: hdr.createdAt,
+              parentSession: hdr.parentSession,
+              origin: hdr.origin,
+              delegationDepth: hdr.delegationDepth,
+            });
+          }
           // harness 读取：sessionQuery.readSession / persistence.open+read（读句柄用后关闭）。
           // 两路都按 inheritedEventCount 丢掉 fork 继承前缀：子会话日志物理包含父会话历史，
           // 重复折入会把父的用量在子会话下再算一遍。

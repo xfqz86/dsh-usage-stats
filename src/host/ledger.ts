@@ -37,12 +37,12 @@ import type { UsageStore } from './store.ts';
  */
 export const LEDGER_VERSION = 6;
 /** 归属目录名，位于 storages 下，与插件同名。 */
-export const LEDGER_DIR_NAME = 'dsh-usage-stats';
+const LEDGER_DIR_NAME = 'dsh-usage-stats';
 /** 账本 sqlite 文件名。 */
-export const DB_FILE_NAME = 'ledger.sqlite';
+const DB_FILE_NAME = 'ledger.sqlite';
 
 /** 账本数据库文件绝对路径，默认位于 $DSH_HOME/storages/dsh-usage-stats/。 */
-export function ledgerDatabasePath(): string {
+function ledgerDatabasePath(): string {
   return join(getDshHome(), 'storages', LEDGER_DIR_NAME, DB_FILE_NAME);
 }
 
@@ -230,7 +230,7 @@ interface LedgerStatements {
 }
 
 /** 新建空会话元数据，字段可增量补齐。 */
-export function emptySessionMeta(): SessionMeta {
+function emptySessionMeta(): SessionMeta {
   return { title: '', cwd: '', createdAt: 0, lastActive: 0, parentSession: '', origin: '', delegationDepth: 0 };
 }
 
@@ -351,8 +351,10 @@ export class Ledger {
     const version = typeof row?.user_version === 'number' ? row.user_version : 0;
     if (version !== LEDGER_VERSION) {
       if (version === 3 || version === 2) {
-        // 2->4 与 3->4 均为增量迁移：2->3 为 agg 表增量（已由 IF NOT EXISTS 完成），
-        // 3->4 为 session_meta 新增 parent_session / origin / delegation_depth 三列。
+        // 2/3 -> 6 均为增量迁移：events / session_meta / agg_* 建表语句幂等
+        // （IF NOT EXISTS，含 2->3 的 agg 表增量），session_meta 补
+        // parent_session / origin / delegation_depth 三列；其余旧版本（4/5 等）
+        // 统计口径已变，走下方分支清空重建，空表触发全量重扫。
         try { this.db.exec("ALTER TABLE session_meta ADD COLUMN parent_session TEXT NOT NULL DEFAULT ''"); } catch {}
         try { this.db.exec("ALTER TABLE session_meta ADD COLUMN origin TEXT NOT NULL DEFAULT ''"); } catch {}
         try { this.db.exec('ALTER TABLE session_meta ADD COLUMN delegation_depth INTEGER NOT NULL DEFAULT 0'); } catch {}
@@ -846,7 +848,7 @@ export class Ledger {
           total: Number(r.total) || 0,
           calls: Number(r.calls) || 0,
         },
-        maxSeq: typeof r.max_seq === 'number' ? r.max_seq : Number(r.max_seq) || -1,
+        maxSeq: typeof r.max_seq === 'number' ? r.max_seq : -1,
         lastActive: Number(r.last_active) || 0,
       });
     }

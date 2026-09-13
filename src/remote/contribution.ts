@@ -100,7 +100,7 @@ const usageSnapshotSchema = z.object({
 const goWindowSchema = z.object({ percent: z.number(), resetsAt: z.string() });
 
 const goQuotaSchema = z.object({
-  status: z.union([z.literal('ok'), z.literal('no-key'), z.literal('error')]),
+  status: z.union([z.literal('ok'), z.literal('no-key'), z.literal('no-plan'), z.literal('error')]),
   fetchedAt: z.number(),
   rolling: goWindowSchema.nullable(),
   weekly: goWindowSchema.nullable(),

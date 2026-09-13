@@ -189,57 +189,24 @@ export function groupSessions(list: SessionStat[]): SessionGroup[] {
   return groups;
 }
 
-/** 按主会话分组分页，子代理不占页位。 */
-export function paginateGroups(groups: SessionGroup[], page: number, pageSize: number): SessionGroup[] {
-  if (!groups || groups.length === 0) return [];
-  const p = Math.max(1, Math.floor(page));
-  const size = Math.max(1, Math.floor(pageSize));
-  const start = (p - 1) * size;
-  if (start >= groups.length) return [];
-  return groups.slice(start, start + size);
-}
-
-/** 全角字符，含 CJK 表意文字、假名、谚文、全角标点，在视觉上占 2 个半角单位。 */
-const FULLWIDTH_RE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/;
-
-/** 字符串的视觉宽度，半角单位，全角字符计 2，其余计 1。 */
-export function visualWidth(s: string): number {
-  let w = 0;
-  for (const ch of s) w += FULLWIDTH_RE.test(ch) ? 2 : 1;
-  return w;
-}
-
-/** 对齐填充字符：U+3000 恰好 1em，与全角字符等宽，NBSP 为半角空格。 */
-const PAD_FULL = '\u3000';
-const PAD_HALF = '\u00a0';
-
-/**
- * 补 n 个半角单位的填充：每 2 单位用 U+3000 即 1em，余 1 单位用 NBSP。
- * NBSP、U+3000 都不是可折叠空格，tooltip 的 white-space: pre-line 不会
- * 吞掉它们，U+3000 恰好 1em，能跟全角标签严格对齐，NBSP 用于半角缺口。
- */
-function padUnits(n: number): string {
-  return PAD_FULL.repeat(n >> 1) + PAD_HALF.repeat(n & 1);
-}
-
-/**
- * 构建对齐的多行 tooltip 文本：标签列按视觉宽度补足，全角字符计 2 个半角
- * 单位，避免中英混排按字符数填充导致的错位，数字列右对齐。
- * @param rows [标签, 数字] 数组
- */
-export function alignedRows(rows: [string, string][]): string {
-  if (rows.length === 0) return '';
-  const maxLabel = Math.max(...rows.map((r) => visualWidth(r[0])));
-  const maxNum = Math.max(...rows.map((r) => visualWidth(r[1])));
-  return rows
-    .map((r) => r[0] + padUnits(maxLabel - visualWidth(r[0])) + PAD_HALF + padUnits(maxNum - visualWidth(r[1])) + r[1])
-    .join('\n');
-}
-
 /** 本地日划分，utils.ts 单一事实来源。 */
 export { startOfDay } from '../utils.ts';
 export const dayLabel = (t: number): string => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate(); };
 export const fullDayLabel = (t: number): string => dateKeyOf(t);
+
+/**
+ * 最近活跃的自然日分类：按本地日历日比较，今天 / 昨天 / 更早。
+ * 昨天用 setDate 回退一天再取零点，夏令时切换日也正确；不能用
+ * 「距今不足 24 小时」判定，否则昨天凌晨的会话次日会被误标今天。
+ */
+export function lastActiveDayKind(lastActive: number, nowMs: number): 'today' | 'yesterday' | 'earlier' {
+  const day = startOfDay(lastActive);
+  if (day === startOfDay(nowMs)) return 'today';
+  const yesterday = new Date(nowMs);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (day === startOfDay(yesterday.getTime())) return 'yesterday';
+  return 'earlier';
+}
 
 /** 取序列中最新一天的点，底部角标读今日数据用。 */
 export function todayOf(series: SeriesPoint[]): SeriesPoint | undefined {
@@ -249,95 +216,6 @@ export function todayOf(series: SeriesPoint[]): SeriesPoint | undefined {
     if (series[i].t < today) break;
   }
   return undefined;
-}
-
-/** 按范围分桶（遗留路径，仅支持 '7d' | '14d' | '30d' | 'all'，其余按 'all' 处理）。 */
-export function buildSet(series: SeriesPoint[], range: string): SeriesPoint[] {
-  const daysMap: Record<string, number> = { '7d': 7, '14d': 14, '30d': 30 };
-  const days = daysMap[range] ?? null;
-  const raw = (series?.length ? series : []);
-  const map: Record<number, SeriesPoint> = {};
-  raw.forEach((p) => { if (p?.t != null) map[p.t] = p; });
-  const todayStart = startOfDay(Date.now());
-  const zero = (t: number): SeriesPoint =>
-    ({ t, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, calls: 0 });
-  // 桶 key 从今天零点按本地日历逐日推进，Date.setDate，与 heatGridOf 同款，
-  // 不用 todayStart - i * DAY_MS 毫秒回推：夏令时切换日的相邻本地零点间隔
-  // 不是 24h，毫秒回推会让桶 key 整体漂移、匹配不上 host 端 startOfDay 的
-  // 产出；非 DST 时区两者完全等价，t 仍为本地零点毫秒。
-  const cursor = new Date(todayStart);
-
-  if (days !== null) {
-    cursor.setDate(cursor.getDate() - (days - 1));
-    const buckets: SeriesPoint[] = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const t = cursor.getTime();
-      buckets.push(Object.assign(zero(t), map[t]));
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    return buckets;
-  }
-  // 全量范围：从最早一天到今天，含两端，桶数 = diff + 1
-  let spanDays = 1;
-  if (raw.length > 0) {
-    let firstT = todayStart;
-    raw.forEach((p) => { if (p.t != null && p.t < firstT) firstT = p.t; });
-    const diff = Math.round((todayStart - startOfDay(firstT)) / DAY_MS);
-    spanDays = Math.max(1, diff + 1);
-  }
-  cursor.setDate(cursor.getDate() - (spanDays - 1));
-  const buckets: SeriesPoint[] = [];
-  for (let i = spanDays - 1; i >= 0; i--) {
-    const t = cursor.getTime();
-    buckets.push(Object.assign(zero(t), map[t]));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return buckets;
-}
-
-export interface CurveGeometry {
-  line: string
-  area: string
-  W: number
-  H: number
-  hits: { cx: number; cy: number; v: number; label: string; b: SeriesPoint }[]
-}
-
-/** Catmull-Rom → 三次贝塞尔平滑路径，与 harness 图表同款平滑。 */
-function smoothPath(pts: number[][]): string {
-  if (!pts || pts.length === 0) return '';
-  if (pts.length === 1) return 'M' + pts[0][0] + ',' + pts[0][1];
-  let d = 'M' + pts[0][0] + ',' + pts[0][1];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] || pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] || p2;
-    d += ' C' + (p1[0] + (p2[0] - p0[0]) / 6) + ',' + (p1[1] + (p2[1] - p0[1]) / 6) + ' '
-      + (p2[0] - (p3[0] - p1[0]) / 6) + ',' + (p2[1] - (p3[1] - p1[1]) / 6) + ' '
-      + p2[0] + ',' + p2[1];
-  }
-  return d;
-}
-
-/** 由日分桶构建 SVG 曲线几何。 */
-export function curveOf(buckets: SeriesPoint[], W = 300, H = 140): CurveGeometry | null {
-  if (!buckets.length) return null;
-  const PAD = 6;
-  let max = 1;
-  buckets.forEach((x) => { const v = dayTotal(x); if (v > max) max = v; });
-  const pts = buckets.map((x, i) => {
-    const v = dayTotal(x);
-    const px = PAD + (W - 2 * PAD) * (buckets.length === 1 ? 0.5 : i / (buckets.length - 1));
-    const py = H - PAD - (H - 2 * PAD) * (v / max);
-    return [px, py, v];
-  });
-  const line = smoothPath(pts.map((p) => [p[0], p[1]]));
-  const area = pts.length
-    ? line + ' L' + pts[pts.length - 1][0] + ',' + (H - PAD) + ' L' + pts[0][0] + ',' + (H - PAD) + ' Z'
-    : '';
-  const hits = pts.map((p, i) => ({ cx: p[0], cy: p[1], v: p[2], label: dayLabel(buckets[i].t), b: buckets[i] }));
-  return { line, area, W, H, hits };
 }
 
 /** 热力图单个格子的数据，Codex 风格 26 周网格的一格。 */
@@ -972,11 +850,11 @@ export function pieFullCircleOf(slices: PieSlice[]): PieSlice | null {
   return best;
 }
 
-export function pieSlicesOf(models: ModelStat[]): PieSlice[] {
-  const sum = models.reduce((s, m) => s + usageTotal(m.usage), 0);
-  if (sum <= 0 || models.length === 0) return [];
-  // 与 ModelsTab 表格一致：最大余数法 1 位小数占比，保证总和 100%
-  const raws = models.map((m) => (usageTotal(m.usage) / sum) * 100);
+/**
+ * 最大余数法占比：原始百分比配分到 0.1 精度并把余数按小数部分降序逐个补
+ * 0.1%，保证总和恰为 100；饼图与模型表共用同一口径。
+ */
+export function largestRemainderPcts(raws: number[]): number[] {
   const floors = raws.map((v) => Math.floor(v * 10) / 10);
   const sumFloorsTenths = floors.reduce((a, b) => a + Math.round(b * 10), 0);
   const remainingTenths = 1000 - sumFloorsTenths;
@@ -986,6 +864,14 @@ export function pieSlicesOf(models: ModelStat[]): PieSlice[] {
     const idx = order[k].i;
     shares[idx] = Math.round((shares[idx] + 0.1) * 10) / 10;
   }
+  return shares;
+}
+
+export function pieSlicesOf(models: ModelStat[]): PieSlice[] {
+  const sum = models.reduce((s, m) => s + usageTotal(m.usage), 0);
+  if (sum <= 0 || models.length === 0) return [];
+  // 与 ModelsTab 表格一致：最大余数法 1 位小数占比，保证总和 100%
+  const shares = largestRemainderPcts(models.map((m) => (usageTotal(m.usage) / sum) * 100));
   // 角度分配：按 raws 精确比例，避免 0.1% 舍入导致角度总和偏差
   let angle = -Math.PI / 2; // 从 12 点钟开始
   const slices: PieSlice[] = [];
