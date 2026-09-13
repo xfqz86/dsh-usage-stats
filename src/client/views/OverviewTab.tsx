@@ -112,7 +112,7 @@ export function OverviewTab({
   // DeepSeek 余额内容的条件渲染，避免嵌套三元
   function renderDeepSeekContent() {
     if (deepseek === null) {
-      return <span className={shared.goHint}>{t('deepseek.notConfigured')}</span>;
+      return <span className={shared.goHint}>{t('state.loading')}</span>;
     }
     if (deepseek.status === 'ok') {
       if (!deepseek.isAvailable) {
@@ -162,7 +162,7 @@ export function OverviewTab({
   // Go 额度内容的条件渲染，避免嵌套三元
   function renderGoContent() {
     if (go === null) {
-      return <span className={shared.goHint}>{t('go.notConfigured')}</span>;
+      return <span className={shared.goHint}>{t('state.loading')}</span>;
     }
     if (go.status === 'ok') {
       return (
@@ -205,7 +205,7 @@ export function OverviewTab({
   // Z.ai 额度内容的条件渲染，避免嵌套三元
   function renderZaiContent() {
     if (zai === null) {
-      return <span className={shared.goHint}>{t('zai.notConfigured')}</span>;
+      return <span className={shared.goHint}>{t('state.loading')}</span>;
     }
     if (zai.status === 'ok') {
       if (
