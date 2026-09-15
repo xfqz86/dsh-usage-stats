@@ -73,7 +73,7 @@ dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release
 dsh plugin --profile web add https://github.com/xfqz86/dsh-usage-stats/releases/latest/download/xfqz86-dsh-usage-stats.tgz
 ```
 
-> 固定地址，始终指向最新 Release 的 tarball；也可在 [Releases](https://github.com/xfqz86/dsh-usage-stats/releases) 复制指定版本的 `xfqz86-dsh-usage-stats-*.tgz` 链接。
+> 固定地址，始终指向最新 Release 的 tarball。
 
 ### 本地开发
 
@@ -133,11 +133,11 @@ usage-stats:
 
 ## 开发者
 
-- 工程规范与架构说明见 `AGENTS.md`
+- 工程规范见 `AGENTS.md`；架构、数据流与统计口径见 `docs/ARCHITECTURE.md`
 - 风格经验（lint 之外的统一约定）见 `docs/STYLE.md`
 - 接口协议见 `docs/API.md`
 - 模块结构见 `docs/STRUCTURE.md`，由 `pnpm tree` 生成
-- 发布流程见 `docs/PUBLISH.md`
+- 发布流程见 `.agents/skills/release/SKILL.md`（发版技能，可直接加载执行）
 - 更新日志见 `CHANGELOG.md`，每次发版同步记录功能更新与 Bug 修复
 
 ## License

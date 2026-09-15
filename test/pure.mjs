@@ -2,8 +2,28 @@
  * 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
  *
  * 运行 `node --experimental-strip-types test/pure.mjs`（或 `pnpm test:pure`）；
- * 直接 import `src/*.ts` 源码：纯模块仅含可擦除类型语法，Node ≥22 类型剥离可执行。
- * 额度查询的 fetch 经全局 mock，不产生真实外网请求；快照截断用内存 store，不碰 sqlite。
+ * 直接 import `src/*.ts` 源码：纯模块仅含可擦除类型语法（见 docs/STYLE.md §7），
+ * Node ≥22 类型剥离可执行。额度查询的 fetch 经全局 mock，不产生真实外网请求；
+ * 快照截断用内存 store，不碰 sqlite。
+ *
+ * 覆盖范围：
+ *   - utils：日期与键（startOfDay/dateKeyOf/splitModelKey）、共享常量、
+ *     effectiveQuotaTtl 按 min/max 夹取；
+ *   - 额度展示与文本：goPercent/goLevelOf/goResetsAt、parseJsonLine/errorMessage/
+ *     cacheTotal；
+ *   - agg 口径：newAgg/ink（reasoning 不计 total、缺字段归零仍计次）、usable 收
+ *     对话与压缩调用、拒 assistant/attempt；modelKeyOf 两处取源；
+ *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、
+ *     截断尾帧、坏帧）；
+ *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
+ *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支；
+ *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
+ *   - 偏好设置：归一化与夹取、路径写入只带显式字段、作用域视图引用稳定、解绑带
+ *     作用域身份（热重载不误清新作用域）、不可用或只读时不发注定被拒的写入、旧
+ *     localStorage 迁移（等作用域落定、成功写文档才删旧键、不可用时保留）；服务端
+ *     命名空间注册（schema 解析值等于共享默认值、注册失败只降级偏好不抛错）；
+ *   - stats：格式化/会话分组/时间范围/图表几何/快照截断；
+ *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
  */
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -472,10 +492,13 @@ describe('remote：手写严格贡献', () => {
     const codec = snap.parameters[0].codec;
     assert.equal(codec.mode, 'strict');
     if (codec.mode !== 'strict') throw new Error('unreachable');
-    codec.schema.parse({ sessionId: null });
-    codec.schema.parse({ sessionId: 's-1', limit: 500 });
-    assert.throws(() => codec.schema.parse({ sessionId: 42 }));
-    assert.throws(() => codec.schema.parse({ sessionId: null, limit: 'x' }));
+    // 双形态都指向同一份 zod 定义：schema 供已发布版，create 供 checkout 新版。
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    schema.parse({ sessionId: null });
+    schema.parse({ sessionId: 's-1', limit: 500 });
+    assert.throws(() => schema.parse({ sessionId: 42 }));
+    assert.throws(() => schema.parse({ sessionId: null, limit: 'x' }));
   });
 
   it('结果信封成功分支严格、错误分支透传', () => {
@@ -483,7 +506,8 @@ describe('remote：手写严格贡献', () => {
     assert.ok(quota);
     assert.equal(quota.result.mode, 'strict');
     if (quota.result.mode !== 'strict') throw new Error('unreachable');
-    const { schema } = quota.result;
+    const schema = quota.result.create();
+    assert.equal(schema, quota.result.schema);
     // 成功分支缺字段必须拒绝（值分支精确）。
     assert.throws(() => schema.parse({ ok: true, value: {} }));
     // 错误分支接受已知码与未知码（网关透传不断信封解析）。

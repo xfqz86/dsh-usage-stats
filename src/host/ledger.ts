@@ -910,4 +910,19 @@ export class Ledger {
   getSealedUntil(): number {
     return this.getCheckpoint('sealed_until') ?? 0;
   }
+
+  /**
+   * 清零墓碑：清零后落标记，重启 bootstrap 空库且有标记时跳过首启全量扫描，
+   * 否则空库会被当作首启、把磁盘日志里的历史统计原样扫回来。
+   * 复用 agg_checkpoint（与 sealed_until 同款键值用法，无结构变更）；
+   * 必须在 clear 之后写——clear 经 clearAggregates 整表清空 checkpoint。
+   */
+  markCleared(): void {
+    this.setCheckpoint('cleared_at', Date.now());
+  }
+
+  /** 清零墓碑时间；从未清零返回 null。 */
+  getClearedAt(): number | null {
+    return this.getCheckpoint('cleared_at');
+  }
 }
