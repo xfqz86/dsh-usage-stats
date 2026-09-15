@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-16
+
 ### 修复
 
 - **兼容新版 dsh**：新版 dsh 换了插件校验方式，旧包在新版下用量详情打不开；现在新旧版本都能正常打开
@@ -15,10 +17,7 @@
 
 - 文档重组：明确各文档职责边界与唯一信息归属，新增 `docs/ARCHITECTURE.md` 集中架构与统计口径，消除多份文档间的重复表述（无功能变化）
 - 发版流程由文档规整为技能（`.agents/skills/release`），并补打 tag 前的版本一致性检查脚本（无功能变化）
-
-### 变更
-
-- 发布页的插件压缩包只附固定文件名的一份（`xfqz86-dsh-usage-stats.tgz`），不再按版本各附一份；latest 下载地址照旧指向最新版本（功能无变化）
+- 发布页的插件压缩包只附固定文件名的一份，不再按版本各附一份；latest 下载地址照旧指向最新版本（无功能变化）
 
 ## [0.4.1] - 2026-09-14
 
@@ -109,7 +108,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.2.1...v0.3.0
