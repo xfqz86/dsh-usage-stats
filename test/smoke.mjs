@@ -167,6 +167,11 @@ function assertEnvelope(method, value) {
     console.error(`FAIL: ${method} 结果无严格 codec`)
     process.exit(1)
   }
+  // 双形态同源：create 物化即 schema 本体（供 checkout 新版），旧版读 schema 字段。
+  if (parsed.create() !== parsed.schema) {
+    console.error(`FAIL: ${method} 的 create/schema 不同源`)
+    process.exit(1)
+  }
   parsed.schema.parse({ ok: true, value })
 }
 

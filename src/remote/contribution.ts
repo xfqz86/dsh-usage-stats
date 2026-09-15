@@ -178,14 +178,32 @@ function envelope(value: z.ZodTypeAny): z.ZodTypeAny {
   ]);
 }
 
+/**
+ * 严格 codec：同时带 `schema` 与 `create` 双形态。
+ *
+ * 已发布的 dsh（0.1.5-rc.2 / 0.1.6-alpha.1）读 `schema` 实例；
+ * checkout 新版 master 改为延迟物化、只认 `create()` 工厂（见 harness
+ * `perf(typert): materialize generated schemas on first use`，旧形态在
+ * `$mount` 校验里以 `has no create() factory` 拒绝，浏览器端 entry 报 failed）。
+ * 双字段各取所需：两者指向同一份 zod 定义，无行为差异。
+ */
+function strictCodec(typeSymbol: string, schema: z.ZodTypeAny): {
+  readonly mode: 'strict';
+  readonly typeSymbol: string;
+  readonly schema: z.ZodTypeAny;
+  readonly create: () => z.ZodTypeAny;
+} {
+  return { mode: 'strict', typeSymbol, schema, create: () => schema };
+}
+
 /** 单个具名必填 request 参数的描述符条目。 */
 function requestParam(typeSymbol: string, schema: z.ZodTypeAny): {
   readonly name: 'request';
   readonly wire: 'request';
   readonly source: 'json';
-  readonly codec: { readonly mode: 'strict'; readonly typeSymbol: string; readonly schema: z.ZodTypeAny };
+  readonly codec: ReturnType<typeof strictCodec>;
 } {
-  return { name: 'request', wire: 'request', source: 'json', codec: { mode: 'strict', typeSymbol, schema } };
+  return { name: 'request', wire: 'request', source: 'json', codec: strictCodec(typeSymbol, schema) };
 }
 
 /** 可挂载的严格贡献：7 个一元方法，无 lookup、无取消。 */
@@ -199,7 +217,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       method: 'snapshot',
       invocation: { kind: 'direct' },
       parameters: [requestParam(`${PACKAGE}/types#SnapshotRequest`, snapshotRequestSchema)],
-      result: { mode: 'strict', typeSymbol: `${PACKAGE}/types#UsageSnapshot`, schema: envelope(usageSnapshotSchema) },
+      result: strictCodec(`${PACKAGE}/types#UsageSnapshot`, envelope(usageSnapshotSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/rebuild`,
@@ -208,7 +226,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       method: 'rebuild',
       invocation: { kind: 'direct' },
       parameters: [],
-      result: { mode: 'strict', typeSymbol: `${PACKAGE}/types#RebuildResult`, schema: envelope(rebuildResultSchema) },
+      result: strictCodec(`${PACKAGE}/types#RebuildResult`, envelope(rebuildResultSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/clear`,
@@ -217,7 +235,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       method: 'clear',
       invocation: { kind: 'direct' },
       parameters: [],
-      result: { mode: 'strict', typeSymbol: `${PACKAGE}/types#ClearResult`, schema: envelope(clearResultSchema) },
+      result: strictCodec(`${PACKAGE}/types#ClearResult`, envelope(clearResultSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/seal`,
@@ -226,7 +244,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       method: 'seal',
       invocation: { kind: 'direct' },
       parameters: [],
-      result: { mode: 'strict', typeSymbol: `${PACKAGE}/types#SealResult`, schema: envelope(sealResultSchema) },
+      result: strictCodec(`${PACKAGE}/types#SealResult`, envelope(sealResultSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/goQuota`,
@@ -235,7 +253,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       method: 'goQuota',
       invocation: { kind: 'direct' },
       parameters: [requestParam(`${PACKAGE}/types#QuotaRequest`, quotaRequestSchema)],
-      result: { mode: 'strict', typeSymbol: `${PACKAGE}/types#GoQuota`, schema: envelope(goQuotaSchema) },
+      result: strictCodec(`${PACKAGE}/types#GoQuota`, envelope(goQuotaSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/deepseekBalance`,
@@ -244,7 +262,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       method: 'deepseekBalance',
       invocation: { kind: 'direct' },
       parameters: [requestParam(`${PACKAGE}/types#QuotaRequest`, quotaRequestSchema)],
-      result: { mode: 'strict', typeSymbol: `${PACKAGE}/types#DeepSeekBalance`, schema: envelope(deepSeekBalanceSchema) },
+      result: strictCodec(`${PACKAGE}/types#DeepSeekBalance`, envelope(deepSeekBalanceSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/zaiQuota`,
@@ -253,7 +271,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       method: 'zaiQuota',
       invocation: { kind: 'direct' },
       parameters: [requestParam(`${PACKAGE}/types#QuotaRequest`, quotaRequestSchema)],
-      result: { mode: 'strict', typeSymbol: `${PACKAGE}/types#ZaiQuota`, schema: envelope(zaiQuotaSchema) },
+      result: strictCodec(`${PACKAGE}/types#ZaiQuota`, envelope(zaiQuotaSchema)),
     },
   ],
 };

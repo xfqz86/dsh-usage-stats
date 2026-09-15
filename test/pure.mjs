@@ -492,10 +492,13 @@ describe('remote：手写严格贡献', () => {
     const codec = snap.parameters[0].codec;
     assert.equal(codec.mode, 'strict');
     if (codec.mode !== 'strict') throw new Error('unreachable');
-    codec.schema.parse({ sessionId: null });
-    codec.schema.parse({ sessionId: 's-1', limit: 500 });
-    assert.throws(() => codec.schema.parse({ sessionId: 42 }));
-    assert.throws(() => codec.schema.parse({ sessionId: null, limit: 'x' }));
+    // 双形态都指向同一份 zod 定义：schema 供已发布版，create 供 checkout 新版。
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    schema.parse({ sessionId: null });
+    schema.parse({ sessionId: 's-1', limit: 500 });
+    assert.throws(() => schema.parse({ sessionId: 42 }));
+    assert.throws(() => schema.parse({ sessionId: null, limit: 'x' }));
   });
 
   it('结果信封成功分支严格、错误分支透传', () => {
@@ -503,7 +506,8 @@ describe('remote：手写严格贡献', () => {
     assert.ok(quota);
     assert.equal(quota.result.mode, 'strict');
     if (quota.result.mode !== 'strict') throw new Error('unreachable');
-    const { schema } = quota.result;
+    const schema = quota.result.create();
+    assert.equal(schema, quota.result.schema);
     // 成功分支缺字段必须拒绝（值分支精确）。
     assert.throws(() => schema.parse({ ok: true, value: {} }));
     // 错误分支接受已知码与未知码（网关透传不断信封解析）。
