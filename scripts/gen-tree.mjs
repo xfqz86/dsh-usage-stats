@@ -23,8 +23,8 @@ const EXCLUDED = new Set([
   'AGENTS.local.md', 'CLAUDE.local.md', 'pnpm-debug.log',
 ])
 
-/** 点开头条目默认不入树（本机 / 工具目录），白名单内纳入：CI 与 git 规则属仓库内容。 */
-const DOT_ALLOW = new Set(['.github', '.gitignore'])
+/** 点开头条目默认不入树（本机 / 工具目录），白名单内纳入：CI、git 规则与发版技能属仓库内容。 */
+const DOT_ALLOW = new Set(['.agents', '.github', '.gitignore'])
 
 /** .gitignore 路径（用于尊重 git 忽略规则）。 */
 const GITIGNORE_PATH = join(ROOT, '.gitignore')
@@ -42,10 +42,10 @@ const NOTES = {
   '.github/workflows/ci.yml': 'CI：类型检查 / 构建 / 样式契约 / 冒烟测试（每次 PR 与推送 dev/main 执行）',
   '.github/workflows/release-branch.yml': '同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）',
   '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）',
+  '.agents/skills/release/SKILL.md': '发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）',
   'docs/API.md': 'Remote 协议与偏好设置约定（随接口演进维护）',
   'docs/ARCHITECTURE.md': '架构与统计口径唯一权威（账本/数据流/折叠/墓碑/口径；AGENTS.md 只留规则与指针）',
   'docs/STYLE.md': '风格经验沉淀（lint 之外的统一约定，新会话先读）',
-  'docs/PUBLISH.md': '发布流程（GitHub Actions 交付四种形态：源码 / release / npm / tarball）',
   'docs/STRUCTURE.md': '生成文件：由 `pnpm tree` 重新生成，勿手改',
   'AGENTS.md': '工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）',
   'README.md': '面向普通用户的功能说明',

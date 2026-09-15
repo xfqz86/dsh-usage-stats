@@ -97,7 +97,7 @@ node test/client-bundle.mjs
 - **注释的权威边界**：注释只对两件事是权威——文件职责（头部块注释首句，`docs/STRUCTURE.md` 的数据源）与代码自身说不出的局部约束；内容标准（只写 why、不复述代码、不复制文档、不写修复历史）见 `docs/STYLE.md` §6。
 - 每份文档开头一句职责声明；用户文档（README/CHANGELOG/releases）允许用户语言概述，但不承载实现细节。
 - 本文件为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它。
-- 发版同步：`package.json version` 变更必须同批追加 `CHANGELOG.md` 条目与 `docs/releases/v<版本>.md`（面向用户的更新说明，`release.yml` 强制存在），流程见 `docs/PUBLISH.md`。
+- 发版同步：`package.json version` 变更必须同批追加 `CHANGELOG.md` 条目与 `docs/releases/v<版本>.md`（面向用户的更新说明，`release.yml` 强制存在），流程见 `.agents/skills/release/SKILL.md`（发版技能）。
 - 纯重构与文档整理在 CHANGELOG 简记一行；结构变化跑 `pnpm tree` 重生成 `docs/STRUCTURE.md`。
 
 | 主题 | 权威文件 |
@@ -106,7 +106,7 @@ node test/client-bundle.mjs
 | 架构、数据流、账本/折叠/统计口径事实 | `docs/ARCHITECTURE.md` |
 | Remote 线路协议、偏好设置协议 | `docs/API.md` |
 | 风格与统一写法 | `docs/STYLE.md` |
-| 发布与交付 | `docs/PUBLISH.md` |
+| 发布与交付 | `.agents/skills/release/SKILL.md`（技能） |
 | 目录结构与文件职责 | `docs/STRUCTURE.md`（生成） |
 | 用户视角：功能、安装、设置 | `README.md` |
 | 版本历史 | `CHANGELOG.md` + `docs/releases/` |

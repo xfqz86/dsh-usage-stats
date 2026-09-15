@@ -5,7 +5,7 @@
 # 产物：
 #   - npmjs：@xfqz86/dsh-usage-stats（预构建 lib，无 prepare，避免安装时 build 脚本授权）
 #   - tarball：GitHub Release 附件 + workflow artifact（pnpm pack 产物）
-#   - GitHub Release 正文：docs/releases/v<版本>.md（面向用户的人话版更新说明，见 docs/PUBLISH.md）
+#   - GitHub Release 正文：docs/releases/v<版本>.md（面向用户的人话版更新说明，见 .agents/skills/release/SKILL.md）
 #   - GitHub 安装：依赖 prepare + release 分支（见 release-branch.yml），此处仅校验
 #
 # npm 发布方式（择一）：
@@ -73,10 +73,10 @@ jobs:
             echo "::error::Tag version $tag_version does not match package.json $package_version"
             exit 1
           fi
-          # GitHub Release 正文 = 该版本面向用户的人话版更新说明（见 docs/PUBLISH.md）
+          # GitHub Release 正文 = 该版本面向用户的人话版更新说明（见 .agents/skills/release/SKILL.md）
           notes="docs/releases/${GITHUB_REF_NAME}.md"
           if [[ ! -f "$notes" ]]; then
-            echo "::error::Missing release notes $notes — 每个版本必须写面向用户的更新说明，见 docs/PUBLISH.md"
+            echo "::error::Missing release notes $notes — 每个版本必须写面向用户的更新说明，见 .agents/skills/release/SKILL.md"
             exit 1
           fi
           echo "release notes: $notes"

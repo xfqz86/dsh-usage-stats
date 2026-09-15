@@ -6,6 +6,12 @@
 
 ```
 dsh-usage-stats/
+├── .agents/
+│   └── skills/
+│       └── release/
+│           ├── scripts/
+│           │   └── release-preflight.mjs ← 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否已同批就位。
+│           └── SKILL.md ← 发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）
 ├── .github/
 │   ├── actions/
 │   │   ├── gate/
@@ -41,7 +47,6 @@ dsh-usage-stats/
 │   │   └── footer.png
 │   ├── API.md ← Remote 协议与偏好设置约定（随接口演进维护）
 │   ├── ARCHITECTURE.md ← 架构与统计口径唯一权威（账本/数据流/折叠/墓碑/口径；AGENTS.md 只留规则与指针）
-│   ├── PUBLISH.md ← 发布流程（GitHub Actions 交付四种形态：源码 / release / npm / tarball）
 │   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
 │   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）
 ├── scripts/

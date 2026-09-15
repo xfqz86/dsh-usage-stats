@@ -198,12 +198,13 @@ export default tseslint.config(
     },
   },
 
-  // scripts、测试与构建配置：Node ESM，关闭类型感知规则（.mjs 非 TS）
+  // scripts、测试、构建配置与仓库内技能脚本：Node ESM，关闭类型感知规则（.mjs 非 TS）
   {
     files: [
       'scripts/**/*.{mjs,cjs,js}',
       'test/**/*.{mjs,cjs,js}',
       '.github/**/*.{mjs,cjs,js}',
+      '.agents/**/scripts/**/*.{mjs,cjs,js}',
       'tsdown.config.ts',
       'eslint.config.mjs',
     ],

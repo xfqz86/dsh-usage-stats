@@ -137,7 +137,7 @@ usage-stats:
 - 风格经验（lint 之外的统一约定）见 `docs/STYLE.md`
 - 接口协议见 `docs/API.md`
 - 模块结构见 `docs/STRUCTURE.md`，由 `pnpm tree` 生成
-- 发布流程见 `docs/PUBLISH.md`
+- 发布流程见 `.agents/skills/release/SKILL.md`（发版技能，可直接加载执行）
 - 更新日志见 `CHANGELOG.md`，每次发版同步记录功能更新与 Bug 修复
 
 ## License

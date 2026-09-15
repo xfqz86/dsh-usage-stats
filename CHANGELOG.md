@@ -2,7 +2,7 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循语义化版本。
 
-维护约定见 `docs/PUBLISH.md`：每次发版（`package.json version` 变更）必须同步追加该版本条目；条目面向用户写，实现细节（类型、状态码、文件与组件名等）不进条目，纯重构与文档整理简记一行。
+维护约定见 `.agents/skills/release/SKILL.md`：每次发版（`package.json version` 变更）必须同步追加该版本条目；条目面向用户写，实现细节（类型、状态码、文件与组件名等）不进条目，纯重构与文档整理简记一行。
 
 ## [Unreleased]
 
@@ -14,6 +14,7 @@
 ### 清理
 
 - 文档重组：明确各文档职责边界与唯一信息归属，新增 `docs/ARCHITECTURE.md` 集中架构与统计口径，消除多份文档间的重复表述（无功能变化）
+- 发版流程由文档规整为技能（`.agents/skills/release`），并补打 tag 前的版本一致性检查脚本（无功能变化）
 
 ## [0.4.1] - 2026-09-14
 
