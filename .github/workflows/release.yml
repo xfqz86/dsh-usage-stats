@@ -4,7 +4,9 @@
 #       docs/releases/v<版本>.md 更新说明存在；workflow_dispatch 仅构建不发布，不校验
 # 产物：
 #   - npmjs：@xfqz86/dsh-usage-stats（预构建 lib，无 prepare，避免安装时 build 脚本授权）
-#   - tarball：GitHub Release 附件 + workflow artifact（pnpm pack 产物）
+#   - tarball：GitHub Release 附件为固定别名 xfqz86-dsh-usage-stats.tgz（README 的 latest 固定地址，
+#     永不变动）；workflow artifact 保持 npm 的版本化命名，装指定版本请用 npm
+#     （见 .agents/skills/release/SKILL.md 交付形态）
 #   - GitHub Release 正文：docs/releases/v<版本>.md（面向用户的人话版更新说明，见 .agents/skills/release/SKILL.md）
 #   - GitHub 安装：依赖 prepare + release 分支（见 release-branch.yml），此处仅校验
 #
@@ -102,12 +104,8 @@ jobs:
         run: |
           mkdir -p package
           NPM_CONFIG_CACHE="$RUNNER_TEMP/npm-cache" npm pack --pack-destination "$GITHUB_WORKSPACE/package"
-          # 固定文件名别名：供 README 的 stable tarball 地址使用，地址永不变动
-          versioned=$(ls package/xfqz86-dsh-usage-stats-*.tgz 2>/dev/null | head -n1)
-          if [ -n "$versioned" ]; then
-            cp "$versioned" package/xfqz86-dsh-usage-stats.tgz
-            echo "created stable alias: $(basename "$versioned")"
-          fi
+          # 保持 npm 的版本化命名：与后续 npm publish 同源同一文件
+          versioned=$(ls "$GITHUB_WORKSPACE"/package/xfqz86-dsh-usage-stats-*.tgz | head -n1)
           ls -lh package/
           echo "versioned=$versioned" >> "$GITHUB_OUTPUT"
 
@@ -158,7 +156,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           ls -lh package/
-          # 仅发布版本化包，stable 别名（xfqz86-dsh-usage-stats.tgz）仅供 GitHub Releases 固定地址使用，不发到 npm
+          # 仅发布版本化包（stable 别名不发 npm，仅作 GitHub Release 附件；别名在发布步骤之后才生成）
           # 优先 OIDC（trusted publishing，需在 npmjs 配置 publisher 指向本仓库 workflow=release.yml + environment=npm）
           # 若提供 NPM_TOKEN secret，则回退到 token 方式（兼容旧流程）
           if [ -n "$NODE_AUTH_TOKEN" ]; then
@@ -169,10 +167,22 @@ jobs:
             npm publish ./package/xfqz86-dsh-usage-stats-*.tgz --access public --provenance
           fi
 
+      - name: Create stable tarball alias
+        id: alias
+        shell: bash
+        run: |
+          # 附件用固定文件名：README 的 latest 下载地址据此永不变动；指定版本从 npm 取
+          versioned=$(ls package/xfqz86-dsh-usage-stats-*.tgz | head -n1)
+          stable=package/xfqz86-dsh-usage-stats.tgz
+          cp "$versioned" "$stable"
+          diff <(tar -tzf "$versioned") <(tar -tzf "$stable")
+          ls -lh package/
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release with tarball
         uses: softprops/action-gh-release@v3
         with:
-          files: package/*.tgz
+          files: ${{ steps.alias.outputs.stable }}
           # 正文取该版本的人话版更新说明（docs/releases/v<版本>.md，由上方 tag 校验强制存在）；
           # 不用 generate_release_notes：自动生成的是提交与 PR 清单，属内部实现，面向用户不可读
           body_path: docs/releases/${{ github.ref_name }}.md

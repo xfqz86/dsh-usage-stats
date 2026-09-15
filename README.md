@@ -73,7 +73,7 @@ dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release
 dsh plugin --profile web add https://github.com/xfqz86/dsh-usage-stats/releases/latest/download/xfqz86-dsh-usage-stats.tgz
 ```
 
-> 固定地址，始终指向最新 Release 的 tarball；也可在 [Releases](https://github.com/xfqz86/dsh-usage-stats/releases) 复制指定版本的 `xfqz86-dsh-usage-stats-*.tgz` 链接。
+> 固定地址，始终指向最新 Release 的 tarball。
 
 ### 本地开发
 

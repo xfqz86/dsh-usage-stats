@@ -18,7 +18,7 @@ description: dsh-usage-stats 的发版流程——改三处版本信息（packag
 | GitHub 源码 | 仓库源码，安装时 `prepare: tsdown` 自构建 | `dsh plugin add github:xfqz86/dsh-usage-stats` |
 | GitHub 预构建 | `release` 分支（只含交付物） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
 | npm | `@xfqz86/dsh-usage-stats` | `dsh plugin add @xfqz86/dsh-usage-stats` |
-| tarball | `xfqz86-dsh-usage-stats-<版本>.tgz` + 固定别名 `xfqz86-dsh-usage-stats.tgz` | `dsh plugin add ./xxx.tgz`，或 GitHub Releases 的 latest 固定地址（README 引用，永不变动） |
+| tarball | `xfqz86-dsh-usage-stats.tgz`（固定文件名，无版本号，每个 Release 都叫这个）；带版本号的那份不发 GitHub Release，只作 workflow artifact 与 npm 发布源 | `dsh plugin add <下载地址>`，README 给的是 `/releases/latest/download/…` 固定地址 |
 
 ## 分支
 
@@ -78,7 +78,7 @@ git tag v<版本> && git push origin v<版本>
 
 **这一步之前要问用户。** 推送 tag 等于正式对外发布（npm + GitHub Release）；除非用户本次已明确说「直接发」，先把版本号、更新说明与 CI 结果报给用户确认。
 
-推送后盯 `release.yml` 跑完（`gh run watch` 或网页），确认 npm 已发布、GitHub Release 正文是更新说明、附件含版本化与固定别名两份 tarball，再回报用户。
+推送后盯 `release.yml` 跑完（`gh run watch` 或网页），确认 npm 已发布、GitHub Release 正文是更新说明、附件只有固定文件名的 `xfqz86-dsh-usage-stats.tgz`，再回报用户。
 
 ## 更新说明与 CHANGELOG 的写法
 

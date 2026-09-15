@@ -41,7 +41,7 @@ const NOTES = {
   '.github/actions/verify-pack/action.yml': '校验复合动作：交付物仅含白名单文件且 package.json 已剪枝',
   '.github/workflows/ci.yml': 'CI：类型检查 / 构建 / 样式契约 / 冒烟测试（每次 PR 与推送 dev/main 执行）',
   '.github/workflows/release-branch.yml': '同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）',
-  '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）',
+  '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）',
   '.agents/skills/release/SKILL.md': '发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）',
   'docs/API.md': 'Remote 协议与偏好设置约定（随接口演进维护）',
   'docs/ARCHITECTURE.md': '架构与统计口径唯一权威（账本/数据流/折叠/墓碑/口径；AGENTS.md 只留规则与指针）',

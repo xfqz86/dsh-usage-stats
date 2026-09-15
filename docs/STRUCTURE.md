@@ -28,7 +28,7 @@ dsh-usage-stats/
 │   └── workflows/
 │       ├── ci.yml ← CI：类型检查 / 构建 / 样式契约 / 冒烟测试（每次 PR 与推送 dev/main 执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
-│       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件 + workflow artifact）
+│       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）
 ├── docs/
 │   ├── releases/
 │   │   ├── v0.1.0.md
