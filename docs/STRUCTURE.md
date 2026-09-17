@@ -37,7 +37,8 @@ dsh-usage-stats/
 │   │   ├── v0.2.1.md
 │   │   ├── v0.3.0.md
 │   │   ├── v0.4.0.md
-│   │   └── v0.4.1.md
+│   │   ├── v0.4.1.md
+│   │   └── v0.4.2.md
 │   ├── screenshot/
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png
