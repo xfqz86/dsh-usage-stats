@@ -97,9 +97,11 @@
 ## 6. 构建与产物形态
 
 - `lib/index.js`（Host，Node ESM，`@xfqz86/dsh-usage-stats`）：仅 Node 内置+本地，
-  DSH 服务 cordis 注入。
+  DSH 服务 cordis 注入；**任何构建都不压缩**（含生产发布）——SRC 分发的线路字段名
+  取自方法源码文本，压缩重命名参数会让网关拒收带参请求（协议见 `docs/API.md` §1，
+  回归自检见 `test/smoke.mjs`）。
 - `lib/client.js`（Browser CJS 闭包 `window.__ModuleLoader__.load({id,factory})`）：
-  `externals` 复刻冻结表（`react/primitives/slots` 等），其余内联；非 `production`
-  保留 sourcemap。
+  `externals` 复刻冻结表（`react/primitives/slots` 等），其余内联；`production`
+  压缩且无 sourcemap，非 `production` 不压缩并保留 sourcemap。
 - CSS：`scripts/css-modules-inline.mjs`（lightningcss `cssModules`）将 `*.module.css`
   编译为 scoped 映射 + `<style data-plugin-css>` 注入（源码仍真实 CSS Modules）。

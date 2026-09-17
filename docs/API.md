@@ -18,6 +18,11 @@
 - Host 侧走 @Remote 装饰器标记 + 实时服务绑定的 SRC 分发（与 dev 模式同源），
   Client 侧挂载手写严格贡献（独立仓库跑不了 harness 生成器管线，见
   `src/remote/contribution.ts` 头注释）；只改实现体不动贡献，改签名必须同步。
+- **参数名即线路字段名**：SRC 分发下网关从服务端方法源码文本
+  （`Function.prototype.toString`）读参数名，作为请求 `args` 的字段名；带参方法的参数名
+  必须与贡献里的 `wire` 逐字相同（本仓库四个带参方法均为 `request`），改名即改协议。
+  服务端产物因此不做压缩（见 `docs/ARCHITECTURE.md` §6），
+  `test/smoke.mjs` 的「SRC 线路字段」自检逐方法对齐两侧。
 
 ## 2. usageStats/snapshot
 
