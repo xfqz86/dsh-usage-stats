@@ -13,7 +13,7 @@
  * SKILL.md）。产物固定落在 <tmp>/dsh-usage-stats-release/。任一项校验失败即非零退出并列出失败项。
  */
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -138,7 +138,11 @@ async function main() {
   const packed = run('pnpm', ['pack', '--pack-destination', OUT_DIR], { cwd: staging })
   if (packed.code !== 0) { fail(`打包失败：\n${packed.out}`); return }  const tgz = join(OUT_DIR, `${manifest.name.replace('@', '').replace('/', '-')}-${manifest.version}.tgz`)
   if (!existsSync(tgz)) { fail(`未产出预期 tarball：${tgz}`); return }
+  // 固定文件名的副本（与 GitHub Release 附件同名）：装机实测按它安装，路径不随版本号变化
+  const stable = join(OUT_DIR, `${manifest.name.replace('@', '').replace('/', '-')}.tgz`)
+  copyFileSync(tgz, stable)
   pass(`${tgz}（${(readFileSync(tgz).length / 1024).toFixed(1)} kB）`)
+  pass(`装机实测用固定副本：${stable}`)
 
   // 4) 包内容：7 文件、无 map、剪枝后的 manifest、包内服务端产物与刚验证过的一致
   console.log('4/5 校验包内容 …')
