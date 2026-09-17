@@ -76,7 +76,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - Host 侧 SRC 分发（装饰器标记+实时绑定）；Client 侧自挂载 `src/remote/contribution.ts` 的手写严格贡献（独立仓库跑不了 harness 生成器管线）——只改实现体不动贡献。
 - **偏好设置走 harness 用户设置体系，禁止 localStorage**：Host 注册 `usage-stats` 命名空间（`src/host/settings.ts`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `settingsScope` 绑定读写（`src/client/settings.ts`）；字段语义与旧版迁移见 `docs/API.md` §5。
 
-## 9. 验证（每次改动必须）
+## 9. 验证
+
+**分两档，别在日常提交上做全量校验：**
+
+- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上会跑类型检查、生产构建、测试与打包校验，交给 CI 兜底；纯文档/注释改动不必跑检查。
+- **发版前（打 tag 前）必须本地全量跑通**，这是发版的硬门槛：
+
 ```bash
 npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
@@ -87,7 +93,8 @@ node --experimental-strip-types test/styles.mjs
 node test/client-bundle.mjs
 node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产构建 + 出 tarball + 包内容与 Remote 签名校验
 ```
-- **提交前必须验通过发布形态**，不能只跑开发态构建：开发态掩盖生产态才暴露的问题（0.4.2 的线上故障即生产构建压缩改写了 Remote 方法参数名，网关按源码文本取线路字段名后全量拒收带参调用）。该脚本出包后，还须在真实 dsh 上装机实测它产出的 tarball（本机流程见 `AGENTS.local.md`）。
+
+- **发布形态必须单独验**，不能只跑开发态构建：开发态掩盖生产态才暴露的问题（0.4.2 的线上故障即生产构建压缩改写了 Remote 方法参数名，网关按源码文本取线路字段名后全量拒收带参调用）。该脚本出包后还须在真实 dsh 上装机实测它产出的 tarball（本机流程见 `AGENTS.local.md`），只在发版前做。
 - 各测试的覆盖范围与断言清单以 `test/*.mjs` 头注释为准，本文件不复述；样式契约背景见 `docs/STYLE.md` §8，测试直引源码的可擦除语法要求见 `docs/STYLE.md` §7。
 
 ## 10. 文档与注释治理（一事一地）
@@ -114,7 +121,7 @@ node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产
 | 版本历史 | `CHANGELOG.md` + `docs/releases/` |
 
 ## 11. 提交（Conventional Commits）
-格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；提交前须过 §9 全项。
+格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；验证按 §9 对应档位（发版前才需全量）。
 
 ## 12. 交付物
 仅陈述最终确定的规则/架构/协议/实现，不写入过程备注与待定方案；过程内容走会话记录，不入库。
