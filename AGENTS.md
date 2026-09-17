@@ -85,7 +85,9 @@ node --experimental-strip-types test/pure.mjs
 node --experimental-strip-types test/smoke.mjs
 node --experimental-strip-types test/styles.mjs
 node test/client-bundle.mjs
+node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产构建 + 出 tarball + 包内容与 Remote 签名校验
 ```
+- **提交前必须验通过发布形态**，不能只跑开发态构建：开发态掩盖生产态才暴露的问题（0.4.2 的线上故障即生产构建压缩改写了 Remote 方法参数名，网关按源码文本取线路字段名后全量拒收带参调用）。该脚本出包后，还须在真实 dsh 上装机实测它产出的 tarball（本机流程见 `AGENTS.local.md`）。
 - 各测试的覆盖范围与断言清单以 `test/*.mjs` 头注释为准，本文件不复述；样式契约背景见 `docs/STYLE.md` §8，测试直引源码的可擦除语法要求见 `docs/STYLE.md` §7。
 
 ## 10. 文档与注释治理（一事一地）

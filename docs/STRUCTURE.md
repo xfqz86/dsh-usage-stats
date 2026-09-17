@@ -10,7 +10,8 @@ dsh-usage-stats/
 │   └── skills/
 │       └── release/
 │           ├── scripts/
-│           │   └── release-preflight.mjs ← 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否已同批就位。
+│           │   ├── release-preflight.mjs ← 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否已同批就位。
+│           │   └── verify-release.mjs ← 发布形态验证：生产构建 → 打真 tarball → 校验包内容与 Remote 方法签名 → 还原开发态构建。
 │           └── SKILL.md ← 发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）
 ├── .github/
 │   ├── actions/

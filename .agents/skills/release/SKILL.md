@@ -46,19 +46,14 @@ node .agents/skills/release/scripts/release-preflight.mjs <版本号>
 
 ### 3. 过验证门禁
 
-先跑 `AGENTS.md` §9 的全部命令（`npx tsc --noEmit`、`npx eslint .`、`pnpm build` 与四个测试脚本），再补生产态交付物校验——CI 与发布走的都是生产态构建，开发态看不出剪枝问题。本地按下面五步走，**不能**写成 `NODE_ENV=production pnpm build && pnpm pack --dry-run`：
+先跑 `AGENTS.md` §9 的全部命令（`tsc` / `eslint` / `pnpm build` / 四个测试脚本 / 发布形态验证），再补装机实测——CI 与发布走的都是生产态，开发态看不出压缩与剪枝问题：
 
 ```bash
-NODE_ENV=production pnpm build        # 1) 生产态构建（压缩、无 map）
-INPUT_PATH=package.json \
-  INPUT_ALLOW="name,version,description,type,main,exports,files,engines,dsh,license,repository" \
-  node .github/actions/prune-package/prune.mjs   # 2) 原地剪枝并留 package.json.bak
-npm pack --dry-run                    # 3) 应为 7 文件、无 *.map
-mv package.json.bak package.json      # 4) 还原 package.json
-pnpm build                            # 5) 恢复开发态 lib/（否则 link: 装的是生产产物）
+node .agents/skills/release/scripts/verify-release.mjs   # 生产构建 → 出真 tarball → 包内容 / Remote 方法签名校验 → 还原开发态 lib/
+node .local/verify-release-e2e.mjs                       # 装机实测该 tarball：干净 profile 起真实 dsh + 浏览器看每个 usageStats 调用
 ```
 
-两个坑：`npm pack` 会执行 `prepare: tsdown` 把开发态构建重跑一遍、覆盖生产产物，所以必须先剪枝（`scripts` 被剪掉后就不再触发 `prepare`）；且 `NODE_ENV=production` 只作用于紧随的那一条命令，写成 `&&` 链里的一段会被 pack 绕开。
+`verify-release.mjs` 不碰工作区 `package.json`（临时目录 + 剪枝 manifest 打包，也避免 `prepare: tsdown` 把开发态构建覆盖进包），产出可安装的 tarball 到固定目录，并断言包内服务端 Remote 方法的参数名与源码一致——0.4.2 的线上故障（面板与额度全打不开）就是生产构建改写了参数名，只有这一层拦得住。装机实测依赖本机 profile 与浏览器，是本机要求（见 `AGENTS.local.md`）；CI 侧的对应防线是 `ci.yml` 的生产态构建 + `test/smoke.mjs` 的同名自检。
 
 ### 4. 提交并推 dev
 
