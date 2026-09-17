@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-09-17
+
 ### 修复
 
 - **新版 dsh 上统计面板打不开、额度也查不出来**：用新版 dsh 时面板一直显示「数据不可用，重试中」；原因是发布包打包时把服务端方法的参数名改短了，而新版 dsh 按这个参数名通信，两边对不上被拒。现在打包保留原参数名，并加了自动检查，防止以后再次出现
@@ -116,7 +118,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.3.0...v0.4.0
