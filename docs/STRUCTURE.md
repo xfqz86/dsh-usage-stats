@@ -71,7 +71,7 @@ dsh-usage-stats/
 │   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
-│   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 当前只接受纯文本（`label: string | (() => string)`，0.1.5-rc.2 仍未变）， 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、 maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增—— - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div 以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space； - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
+│   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 当前只接受纯文本（`label: string | (() => string)`）， 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、 maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增—— - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div 以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space； - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
 │   │   ├── views/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。

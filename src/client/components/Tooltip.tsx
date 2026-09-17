@@ -1,6 +1,6 @@
 /**
  * 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip
- * 当前只接受纯文本（`label: string | (() => string)`，0.1.5-rc.2 仍未变），
+ * 当前只接受纯文本（`label: string | (() => string)`），
  * 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个
  * 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、
  * maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增——

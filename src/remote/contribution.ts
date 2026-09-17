@@ -181,10 +181,9 @@ function envelope(value: z.ZodTypeAny): z.ZodTypeAny {
 /**
  * 严格 codec：同时带 `schema` 与 `create` 双形态。
  *
- * 已发布的 dsh（0.1.5-rc.2 / 0.1.6-alpha.1）读 `schema` 实例；
- * checkout 新版 master 改为延迟物化、只认 `create()` 工厂（见 harness
- * `perf(typert): materialize generated schemas on first use`，旧形态在
- * `$mount` 校验里以 `has no create() factory` 拒绝，浏览器端 entry 报 failed）。
+ * 已发布的 dsh 读 `schema` 实例；新版 checkout 改为延迟物化、只认 `create()`
+ * 工厂（见 harness `perf(typert): materialize generated schemas on first use`，
+ * 旧形态在 `$mount` 校验里以 `has no create() factory` 拒绝，浏览器端 entry 报 failed）。
  * 双字段各取所需：两者指向同一份 zod 定义，无行为差异。
  */
 function strictCodec(typeSymbol: string, schema: z.ZodTypeAny): {
