@@ -8,6 +8,8 @@
  *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠
  *     事件，初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
  *   - 方法与手写严格贡献相容：真实出入值过 zod 信封，错误码透传不断解析；
+ *     SRC 线路字段（产物方法源码参数名）与贡献 wire 名逐个对齐——生产构建压缩
+ *     方法签名会让新版网关拒收全部带参请求，此处立即失败；
  *   - rebuild 并发返回 usageStats/busy，clear/seal 语义正确；
  *   - 三路额度在凭据中心缺席时确定性 no-key，不产生任何真实外网请求；
  *   - 重启恢复：重开同一 sqlite 文件、会话清单返回空，仍能从介质重建统计
@@ -160,6 +162,41 @@ function descriptorOf(method) {
   return found
 }
 
+/**
+ * SRC 线路字段自检（构建产物 × 手写贡献）：新网关把方法源码文本里的参数名
+ * （`Function.prototype.toString`）当作线路字段名，压缩重命名参数即逐次拒收
+ * （曾经生产构建把 `snapshot(request)` 压成 `snapshot(e)`，请求被判
+ * `gateway/arguments-invalid: unexpected "request"`）。这里用同一读法取产物
+ * 原型方法的参数名，与贡献的 wire 名逐方法对齐——本地 `pnpm build`（不压缩）
+ * 与 CI 生产构建（压缩策略同发布）都必须在场，产物签名一旦被改写立即失败。
+ */
+function assertWireFields() {
+  for (const descriptor of USAGE_STATS_REMOTE.descriptors) {
+    const fn = Object.getOwnPropertyDescriptor(UsageStatsService.prototype, descriptor.method)?.value
+    if (typeof fn !== 'function') {
+      console.error(`FAIL: 产物缺 Remote 方法 ${descriptor.method}`)
+      process.exit(1)
+    }
+    const source = Function.prototype.toString.call(fn)
+    const open = source.indexOf('(')
+    const close = source.indexOf(')', open + 1)
+    if (open < 0 || close < 0) {
+      console.error(`FAIL: ${descriptor.method} 产物源码无参数列表（签名被改写？）：${source.slice(0, 80)}`)
+      process.exit(1)
+    }
+    const body = source.slice(open + 1, close).trim()
+    const names = body === '' ? [] : body.split(',').map((part) => part.trim())
+    const wires = descriptor.parameters.map((parameter) => parameter.wire)
+    if (names.length !== wires.length || names.some((name, i) => name !== wires[i])) {
+      console.error(
+        `FAIL: ${descriptor.method} 产物参数名 [${names.join(', ')}] 与贡献线路字段 [${wires.join(', ')}] 不一致`
+        + '（构建压缩了方法签名？见 tsdown.config.ts 服务端 minify）',
+      )
+      process.exit(1)
+    }
+  }
+}
+
 /** 真实结果过 zod 成功信封：方法实现与手写 codec 相容。 */
 function assertEnvelope(method, value) {
   const parsed = descriptorOf(method).result
@@ -174,6 +211,9 @@ function assertEnvelope(method, value) {
   }
   parsed.schema.parse({ ok: true, value })
 }
+
+// 产物方法源码参数名 = 手写贡献的线路字段（SRC 分发前提）
+assertWireFields()
 
 const mounted = await mount(sessionQuery, sessionPersistence)
 const svc = mounted.svc

@@ -9,6 +9,9 @@ lib/
 AGENTS.local.md
 CLAUDE.local.md
 
+# 本机私有脚本（发布包装机实测等，含本机绝对路径）
+.local/
+
 # dsh-agent-teams 插件生成的文件
 .agent-teams
 docs/sessions-*.md

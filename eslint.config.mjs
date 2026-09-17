@@ -18,6 +18,7 @@ export default tseslint.config(
       'node_modules/**',
       '.pnpm-store/**',
       '.agent-teams/**',
+      '.local/**',
       'test/session-events.jsonl',
       'docs/STRUCTURE.md',
       'dist/**',

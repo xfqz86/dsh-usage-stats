@@ -22,7 +22,11 @@
  *
  * 构建区分：
  * - 本地调试 `pnpm build`，`NODE_ENV` 非 production：不压缩、保留 sourcemap，便于跟踪问题
- * - 生产发布 `NODE_ENV=production pnpm build`，CI/release 使用：压缩 minify 且无 sourcemap，最终产物仅含压缩后的 2 个 js，无 map
+ * - 生产发布 `NODE_ENV=production pnpm build`，CI/release 使用：浏览器端压缩且无 sourcemap，
+ *   服务端恒不压缩——网关按方法源码文本（`Function.prototype.toString`）取 Remote 线路
+ *   字段名，压缩重命名参数（`snapshot(request)` → `snapshot(e)`）会让请求被判
+ *   `gateway/arguments-invalid` 拒收，故服务端产物必须保留方法签名。回归自检见
+ *   test/smoke.mjs「SRC 线路字段」，产物形态见 docs/ARCHITECTURE.md §6。
  */
 import ts from 'typescript';
 
@@ -60,7 +64,7 @@ function decoratorLowering(): { name: string; transform: (code: string, id: stri
   };
 }
 
-/** 是否为生产构建：仅 `NODE_ENV=production` 时压缩并去掉 sourcemap，便于本地调试时保留可读性与映射。 */
+/** 是否为生产构建：仅 `NODE_ENV=production` 时压缩浏览器端 bundle 并去掉 sourcemap，便于本地调试时保留可读性与映射。 */
 const isProd = process.env.NODE_ENV === 'production';
 
 /** bundle id = package.json `name`，必须与 package.json 的 name 完全一致，含 scope。 */
@@ -89,7 +93,9 @@ export default [
     fixedExtension: false,
     dts: false,
     clean: true,
-    minify: isProd,
+    // 恒不压缩（生产构建同样如此）：网关按方法源码文本取 Remote 线路字段名，
+    // 压缩重命名参数会让请求被判 gateway/arguments-invalid 拒收，见文件头注释。
+    minify: false,
     sourcemap: !isProd,
     plugins: [decoratorLowering()],
     // 服务端仅依赖 Node 内置 + 本地代码 + DSH 基座机制值导入
