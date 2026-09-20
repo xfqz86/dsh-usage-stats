@@ -151,6 +151,7 @@
   | `goEnabled` / `deepseekEnabled` / `zaiEnabled` | `true` | 关闭即**不再轮询**对应额度/余额，侧边栏与模态窗均不显示 |
   | `showGoInSidebar` / `showDeepSeekInSidebar` / `showZaiInSidebar` | `true` | 只门控侧边栏底部芯片（含宽列与 rail），模态窗内详情仍可见 |
   | `goFetchMinutes` / `deepseekFetchMinutes` / `zaiFetchMinutes` | `5`（下限 3） | 抓取间隔，作为对应请求的 `intervalMinutes`，服务端据此调整 TTL |
+  | `showSessionId` | `true` | 会话标题右侧 session-id 徽标开关：关闭后 `conversation.session.header.utilities` 的徽标 entry 渲染空 |
   | `modelRedirects` | `[]` | 模型统计重定向规则表，见下 |
 
   三组独立联动：关闭 `*Enabled` 时对应「侧边栏展示」与「抓取间隔」一并置灰。偏好不落

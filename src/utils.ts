@@ -136,6 +136,7 @@ export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
   zaiEnabled: true,
   showZaiInSidebar: true,
   zaiFetchMinutes: ZAI_FETCH_DEFAULT_MINUTES,
+  showSessionId: true,
   modelRedirects: [],
 };
 
@@ -209,6 +210,7 @@ export function normalizeUsageSettings(raw: Partial<UsageSettings> | null | unde
     zaiEnabled: bool(src.zaiEnabled, USAGE_SETTINGS_DEFAULTS.zaiEnabled),
     showZaiInSidebar: bool(src.showZaiInSidebar, USAGE_SETTINGS_DEFAULTS.showZaiInSidebar),
     zaiFetchMinutes: minutes(src.zaiFetchMinutes, clampZaiFetchMinutes, USAGE_SETTINGS_DEFAULTS.zaiFetchMinutes),
+    showSessionId: bool(src.showSessionId, USAGE_SETTINGS_DEFAULTS.showSessionId),
     modelRedirects: normalizeModelRedirects(src.modelRedirects),
   };
 }

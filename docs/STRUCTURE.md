@@ -64,6 +64,8 @@ dsh-usage-stats/
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
 │   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
+│   │   │   ├── SessionIdBadge.module.css ← 会话 ID 徽标（SessionIdBadge）：会话标题右侧工具区的等宽徽标与悬停复制按钮。
+│   │   │   ├── SessionIdBadge.tsx ← 会话 ID 徽标：会话标题右侧工具区的等宽 sessionId 展示与悬停复制。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用描边色填充， on 用成功绿，滑块用前景色（token 配色，深色模式随之翻转）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
 │   │   │   ├── StackedBar.module.css ← 统一堆叠柱状图（StackedBar）：合并 DateStackedBar / ModelStackedBar 及原 StackedBarCommon 的公共壳样式。
@@ -95,7 +97,7 @@ dsh-usage-stats/
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。
 │   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，采用 Tab 化布局。
 │   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定。
-│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情。
+│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情； 会话标题右侧工具区的 session-id 徽标，支持悬停复制。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端注册的 `usage-stats` 设置命名空间。

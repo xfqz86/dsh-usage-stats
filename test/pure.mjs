@@ -1292,8 +1292,14 @@ describe('偏好设置：归一化与写入操作', () => {
     );
   });
 
-  it('间隔夹到下限、小数取整，非有限值回退默认', () => {
-    assert.equal(normalizeUsageSettings({ goFetchMinutes: 1 }).goFetchMinutes, GO_FETCH_MIN_MINUTES);
+  it('会话徽标开关默认开启，非布尔回退默认', () => {
+    assert.equal(USAGE_SETTINGS_DEFAULTS.showSessionId, true);
+    assert.equal(normalizeUsageSettings({}).showSessionId, true);
+    assert.equal(normalizeUsageSettings({ showSessionId: false }).showSessionId, false);
+    assert.equal(normalizeUsageSettings({ showSessionId: 'yes' }).showSessionId, true);
+    assert.deepEqual(settingOps({ showSessionId: false }), [{ op: 'set', path: ['showSessionId'], value: false }]);
+  });
+  it('间隔夹到下限、小数取整，非有限值回退默认', () => {    assert.equal(normalizeUsageSettings({ goFetchMinutes: 1 }).goFetchMinutes, GO_FETCH_MIN_MINUTES);
     assert.equal(normalizeUsageSettings({ goFetchMinutes: 12.6 }).goFetchMinutes, 13);
     assert.equal(normalizeUsageSettings({ goFetchMinutes: Number.NaN }).goFetchMinutes, GO_FETCH_DEFAULT_MINUTES);
     assert.equal(normalizeUsageSettings({ deepseekFetchMinutes: 0 }).deepseekFetchMinutes, DEEPSEEK_FETCH_MIN_MINUTES);
