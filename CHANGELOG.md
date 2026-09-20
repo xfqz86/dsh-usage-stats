@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-20
+
+### 功能
+
+- **会话标题旁显示会话 ID**：标题右侧挂一个等宽 session-id 徽标，鼠标移上去（或键盘聚焦）浮现复制按钮，一键复制，成功后短暂变对勾。设置 Tab 新增「会话」分组开关，默认开启，关闭后徽标不再显示
+
+### 修复
+
+- **从发布包安装不再缺模块**：之前生产真正用到的运行库只写在开发依赖里，自己机器上能跑（开发目录直连），但别人从 npm 或压缩包安装时会缺少模块导致插件加载失败；现在运行库按官方要求声明（框架单例走对等依赖随 dsh 提供，校验库随包安装），发布包安装即完整
+
+### 清理
+
+- 文档与注释不再抄写依赖库的版本号，一律以 `package.json` 为准（避免升级后文档漂移，无功能变化）
+- 验证门禁分档：日常提交交给 CI 兜底，只在发版前本地跑全量（含发布形态与装机实测），不再每次提交都全量校验（无功能变化）
+
 ## [0.4.3] - 2026-09-17
 
 ### 修复
@@ -118,7 +133,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.0...v0.4.1
