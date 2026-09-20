@@ -8,7 +8,7 @@
 
 harness 每个包已导出完整精确的类型（`Context`/`ClientContext`/`SessionEvent`/`TokenUsage`/`PropsRuntime`/`InjectFace`/`Modal` 等），**禁止**为 `ctx/slots/locale/session/primitives/注入服务` 手写结构、最小接口或 ambient 镜像；**必须** `import type` harness 导出，用法与 `packages/extensions/ui-cordis` 等一致。
 
-实现：`@deepseek-ai/*` 已发布至 npm（**版本以 `package.json` 的 `devDependencies` 为准**，不在文档里抄写版本号），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 仅 `devDependencies`，服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。例外（值导入，`tsdown` host 侧 `neverBundle` 不打包、运行时由本包 `node_modules` 解析）：服务端额度/余额查询的 `credentialRef`（`@deepseek-ai/dsh-credentials`）；Remote 体系的 `TypertRemoteService/Remote/RemoteError`（`@deepseek-ai/dsh-typert-protocol`）与 `Service` 符号（`@deepseek-ai/cordis`，仅 `[Service.init]` 键）；Client 贡献 `src/remote/contribution.ts` 内联的 `zod`（随浏览器 bundle 打包）。
+实现：`@deepseek-ai/*` 已发布至 npm（**版本以 `package.json` 为准**，`peerDependencies` 与 `devDependencies` 中的镜像同 range，不在文档里抄写版本号），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 按三段声明：`dependencies` 仅第三方运行时库（当前仅 `@deepseek-ai/schemastery`，随包安装）；`peerDependencies` 为框架单例（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/dsh-credentials`，由 dsh 安装包提供、不随包安装，`devDependencies` 内必须镜像同 range）；其余（构建/测试/纯类型）全进 `devDependencies`。服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。值导入（`tsdown` host 侧 `neverBundle` 不打包）运行时解析：`dependencies` 走随包安装的副本，`peerDependencies` 走安装包单例；Client 贡献 `src/remote/contribution.ts` 内联的 `zod`（构建期来自 dev，随浏览器 bundle 打包）。
 
 服务端范式（类表单服务，Loader 实例化）：
 ```ts
