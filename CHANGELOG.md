@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-09-20
+
 ### 功能
 
 - **会话标题旁显示会话 ID**：标题右侧挂一个等宽 session-id 徽标，鼠标移上去（或键盘聚焦）浮现复制按钮，一键复制，成功后短暂变对勾。设置 Tab 新增「会话」分组开关，默认开启，关闭后徽标不再显示
@@ -131,7 +133,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.0...v0.4.1
