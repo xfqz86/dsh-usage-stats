@@ -17,7 +17,7 @@ import { subscribeUsageSettings, updateUsageSettings, usageSettingsView } from '
 import type { UsageSettingsView } from './settings.ts';
 import type { UsageSettings } from '../types.ts';
 
-/** 偏好设置 hook：读取即订阅服务端设置文档，同时支持 Go、DeepSeek 与 Z.ai 三组偏好。 */
+/** 偏好设置 hook：读取即订阅服务端设置文档，同时支持三组额度偏好与会话徽标开关。 */
 export function useUsageSettings(): [UsageSettings, (patch: Partial<UsageSettings>) => void] {
   const view = useSyncExternalStore(subscribeUsageSettings, usageSettingsView, usageSettingsView);
   const update = useCallback((patch: Partial<UsageSettings>) => {

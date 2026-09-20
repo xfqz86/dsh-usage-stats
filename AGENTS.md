@@ -8,7 +8,7 @@
 
 harness 每个包已导出完整精确的类型（`Context`/`ClientContext`/`SessionEvent`/`TokenUsage`/`PropsRuntime`/`InjectFace`/`Modal` 等），**禁止**为 `ctx/slots/locale/session/primitives/注入服务` 手写结构、最小接口或 ambient 镜像；**必须** `import type` harness 导出，用法与 `packages/extensions/ui-cordis` 等一致。
 
-实现：`@deepseek-ai/*` 已发布至 npm（版本对齐见 `AGENTS.local.md`），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 仅 `devDependencies`，服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。例外（值导入，`tsdown` host 侧 `neverBundle` 不打包、运行时由本包 `node_modules` 解析）：服务端额度/余额查询的 `credentialRef`（`@deepseek-ai/dsh-credentials`）；Remote 体系的 `TypertRemoteService/Remote/RemoteError`（`@deepseek-ai/dsh-typert-protocol`）与 `Service` 符号（`@deepseek-ai/cordis`，仅 `[Service.init]` 键）；Client 贡献 `src/remote/contribution.ts` 内联的 `zod`（随浏览器 bundle 打包）。
+实现：`@deepseek-ai/*` 已发布至 npm（**版本以 `package.json` 为准**，`peerDependencies` 与 `devDependencies` 中的镜像同 range，不在文档里抄写版本号），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 按三段声明：`dependencies` 仅第三方运行时库（当前仅 `@deepseek-ai/schemastery`，随包安装）；`peerDependencies` 为框架单例（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/dsh-credentials`，由 dsh 安装包提供、不随包安装，`devDependencies` 内必须镜像同 range）；其余（构建/测试/纯类型）全进 `devDependencies`。服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。值导入（`tsdown` host 侧 `neverBundle` 不打包）运行时解析：`dependencies` 走随包安装的副本，`peerDependencies` 走安装包单例；Client 贡献 `src/remote/contribution.ts` 内联的 `zod`（构建期来自 dev，随浏览器 bundle 打包）。
 
 服务端范式（类表单服务，Loader 实例化）：
 ```ts
@@ -76,7 +76,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - Host 侧 SRC 分发（装饰器标记+实时绑定）；Client 侧自挂载 `src/remote/contribution.ts` 的手写严格贡献（独立仓库跑不了 harness 生成器管线）——只改实现体不动贡献。
 - **偏好设置走 harness 用户设置体系，禁止 localStorage**：Host 注册 `usage-stats` 命名空间（`src/host/settings.ts`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `settingsScope` 绑定读写（`src/client/settings.ts`）；字段语义与旧版迁移见 `docs/API.md` §5。
 
-## 9. 验证（每次改动必须）
+## 9. 验证
+
+**分两档，别在日常提交上做全量校验：**
+
+- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上会跑类型检查、生产构建、测试与打包校验，交给 CI 兜底；纯文档/注释改动不必跑检查。
+- **发版前（打 tag 前）必须本地全量跑通**，这是发版的硬门槛：
+
 ```bash
 npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
@@ -87,7 +93,8 @@ node --experimental-strip-types test/styles.mjs
 node test/client-bundle.mjs
 node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产构建 + 出 tarball + 包内容与 Remote 签名校验
 ```
-- **提交前必须验通过发布形态**，不能只跑开发态构建：开发态掩盖生产态才暴露的问题（0.4.2 的线上故障即生产构建压缩改写了 Remote 方法参数名，网关按源码文本取线路字段名后全量拒收带参调用）。该脚本出包后，还须在真实 dsh 上装机实测它产出的 tarball（本机流程见 `AGENTS.local.md`）。
+
+- **发布形态必须单独验**，不能只跑开发态构建：开发态掩盖生产态才暴露的问题（0.4.2 的线上故障即生产构建压缩改写了 Remote 方法参数名，网关按源码文本取线路字段名后全量拒收带参调用）。该脚本出包后还须在真实 dsh 上装机实测它产出的 tarball（本机流程见 `AGENTS.local.md`），只在发版前做。
 - 各测试的覆盖范围与断言清单以 `test/*.mjs` 头注释为准，本文件不复述；样式契约背景见 `docs/STYLE.md` §8，测试直引源码的可擦除语法要求见 `docs/STYLE.md` §7。
 
 ## 10. 文档与注释治理（一事一地）
@@ -114,7 +121,7 @@ node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产
 | 版本历史 | `CHANGELOG.md` + `docs/releases/` |
 
 ## 11. 提交（Conventional Commits）
-格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；提交前须过 §9 全项。
+格式 `type(scope): subject`（`type` 英文 `feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert`，`scope` 可选 `client/host/build/docs/deps`，`subject` 中文小写无句号）；`body/footer` 中文，`BREAKING CHANGE:` 置脚注首行；一次提交一件事，禁 `wip/update`；验证按 §9 对应档位（发版前才需全量）。
 
 ## 12. 交付物
 仅陈述最终确定的规则/架构/协议/实现，不写入过程备注与待定方案；过程内容走会话记录，不入库。

@@ -10,6 +10,7 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 - OpenCode Go 额度，展示滚动 5 小时、本周、本月三档剩余额度
 - DeepSeek 余额，展示多币种余额
 - Z.ai 额度，展示滚动 5 小时与本周百分比，以及每月 Web 搜索次数
+- 会话标题旁 session-id 徽标，悬停浮现复制按钮（设置页可关，默认开）
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/footer.png" alt="侧边栏底部" width="320" />
@@ -94,12 +95,13 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 
 ## 设置
 
-设置位于详情面板的设置 Tab，保存在 DSH 的配置文件 `~/.dsh/settings.yaml`（`$DSH_HOME` 改变时随之变化）的 `usage-stats` 段里，换浏览器、换设备登录同一台 DSH 都用同一份偏好。按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度三组自上而下排列。
+设置位于详情面板的设置 Tab，保存在 DSH 的配置文件 `~/.dsh/settings.yaml`（`$DSH_HOME` 改变时随之变化）的 `usage-stats` 段里，换浏览器、换设备登录同一台 DSH 都用同一份偏好。按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度、模型统计重定向、会话自上而下排列。
 
 - 启用 DeepSeek 余额监控与侧边栏展示，关闭监控则停止轮询，面板与侧边栏均不展示
 - 启用 OpenCode Go 额度监控与侧边栏展示，仅控制芯片，面板内详情仍可见
 - 启用 Z.ai 额度监控与侧边栏展示，逻辑同上
 - 各额度抓取间隔均为默认 5 分钟，下限 3 分钟
+- 会话标题旁显示会话 ID（默认开启，支持悬停复制），关闭后标题右侧不再挂徽标
 
 配置文件里只写改过的字段，例如把 Go 额度抓取间隔改成 10 分钟：
 

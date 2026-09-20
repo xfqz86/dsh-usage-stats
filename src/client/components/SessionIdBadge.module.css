@@ -1,0 +1,107 @@
+/* 会话 ID 徽标（SessionIdBadge）：会话标题右侧工具区的等宽徽标与悬停复制按钮。
+   颜色一律设计 token（含浅色回退）；复制按钮平时透明浮层不占布局，hover /
+   聚焦 / 复制反馈期间浮现在徽标尾部，显隐不改变组件宽度。 */
+
+.identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.badge {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  max-width: 340px;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, #8a8a8a);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 28px;
+  white-space: nowrap;
+}
+
+.identity:hover .badge,
+.identity:focus-within .badge {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06));
+  color: var(--dsw-alias-label-secondary, #61666b);
+}
+
+/* 内层文本承担省略（外层是 flex 容器，直接放文本节点省略会失效）。 */
+.badgeText {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * 徽标 hover / 聚焦 / 复制反馈期间，文本提前淡出、到按钮区之前已完全透明，
+ * 给里面浮现的复制按钮让出干净的视觉空间（按钮浮在尾部上，不改变组件宽度）。
+ * 渐变收紧为 14px 的过渡带：过缓会让图标正下方的文字仍有浓度、看着像重影。
+ */
+.identity:hover .badgeText,
+.identity:focus-within .badgeText,
+.badge:has(.copyButtonVisible) .badgeText {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 38px), transparent calc(100% - 24px));
+  mask-image: linear-gradient(to right, #000 calc(100% - 38px), transparent calc(100% - 24px));
+}
+
+.iconButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, #8a8a8a);
+  cursor: pointer;
+}
+
+.iconButton:hover,
+.iconButton:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06));
+  color: var(--dsw-alias-label-secondary, #61666b);
+}
+
+/*
+ * 复制按钮：平时透明隐藏（绝对定位浮层，不占布局，把宽度让给会话 ID）；
+ * 移到徽标上 / 徽标内聚焦 / 复制成功反馈期间浮现在徽标里面的尾部，显隐
+ * 不改变整个组件的宽度。保持可聚焦，键盘 Tab 到此时 :focus-visible 使其现形。
+ */
+.copyButton {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.badge:hover .copyButton,
+.badge:focus-within .copyButton,
+.copyButton:focus-visible,
+.copyButtonVisible {
+  opacity: 1;
+}
+
+/* 浮在徽标底色之上，hover 加深一档以示反馈。 */
+.copyButton:hover,
+.copyButton:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover-accent, rgba(38, 49, 72, 0.14));
+  color: var(--dsw-alias-label-secondary, #61666b);
+}

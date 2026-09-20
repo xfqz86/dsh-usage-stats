@@ -64,6 +64,8 @@ dsh-usage-stats/
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
 │   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
+│   │   │   ├── SessionIdBadge.module.css ← 会话 ID 徽标（SessionIdBadge）：会话标题右侧工具区的等宽徽标与悬停复制按钮。
+│   │   │   ├── SessionIdBadge.tsx ← 会话 ID 徽标：会话标题右侧工具区的等宽 sessionId 展示与悬停复制。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用描边色填充， on 用成功绿，滑块用前景色（token 配色，深色模式随之翻转）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
 │   │   │   ├── StackedBar.module.css ← 统一堆叠柱状图（StackedBar）：合并 DateStackedBar / ModelStackedBar 及原 StackedBarCommon 的公共壳样式。
@@ -71,7 +73,7 @@ dsh-usage-stats/
 │   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
-│   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 当前只接受纯文本（`label: string | (() => string)`，0.1.5-rc.2 仍未变）， 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、 maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增—— - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div 以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space； - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
+│   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 当前只接受纯文本（`label: string | (() => string)`）， 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、 maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增—— - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div 以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space； - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、通用提示等。
 │   │   ├── views/
 │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
@@ -95,7 +97,7 @@ dsh-usage-stats/
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。
 │   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，采用 Tab 化布局。
 │   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定。
-│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情。
+│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情； 会话标题右侧工具区的 session-id 徽标，支持悬停复制。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端注册的 `usage-stats` 设置命名空间。

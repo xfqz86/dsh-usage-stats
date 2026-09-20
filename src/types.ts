@@ -205,8 +205,8 @@ export interface ModelRedirect {
 
 /**
  * 插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控各三项，
- * 加模型统计重定向规则表；字段与 `usage-stats` 设置命名空间（服务端
- * schemastery schema）一一对应。host 侧 schema 用它做泛型参数，
+ * 会话标题 session-id 徽标开关，加模型统计重定向规则表；字段与 `usage-stats`
+ * 设置命名空间（服务端 schemastery schema）一一对应。host 侧 schema 用它做泛型参数，
  * client 侧经 settingsScope 取得同一形状。
  */
 export interface UsageSettings {
@@ -228,6 +228,8 @@ export interface UsageSettings {
   showZaiInSidebar: boolean
   /** Z.ai 额度抓取间隔，单位分钟，下限 3 分钟。 */
   zaiFetchMinutes: number
+  /** 是否在会话标题右侧展示 session-id 徽标（含悬停复制），默认开启。 */
+  showSessionId: boolean
   /**
    * 模型统计重定向规则：按顺序匹配来源（同一来源只有最上面一条生效），
    * 由浏览器端在模型页归并，见 `src/client/stats.ts` 的 redirectModels。

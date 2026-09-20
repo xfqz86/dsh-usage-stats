@@ -1,13 +1,18 @@
 /**
- * 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情。
+ * 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情；
+ * 会话标题右侧工具区的 session-id 徽标，支持悬停复制。
  *
  * - 注册到 `sidebar.footer.action` 列表插槽，属主为
  *   @deepseek-ai/dsh-client-ui-sidebar，cell id 为 `dsh-usage-stats`。
+ * - 注册到 `conversation.session.header.utilities` 列表插槽（session 作用域），
+ *   entry id 为 `dsh-usage-stats-session-id`：等宽字体展示当前会话 sessionId，
+ *   悬停或聚焦时浮现复制按钮；`showSessionId` 偏好关闭时徽标不渲染。
  * - 底部角标在宽列形态显示今日 tokens、调用数与三色比例条；56px rail 态
  *   收窄为三额度迷你芯片与今日用量芯片的纵向堆叠，明细移入各自 Tooltip；
  *   点击打开模态窗详情，包含汇总、模型拆分、会话列表、每日趋势曲线和热力图。
  * - 数据来自服务端 usageStats/snapshot（ctx.remote，经网关统一鉴权）。
- * - 偏好设置（三额度抓取开关、侧边栏展示开关、抓取间隔、模型统计重定向规则表）来自
+ * - 偏好设置（三额度抓取开关、侧边栏展示开关、抓取间隔、会话徽标开关、
+ *   模型统计重定向规则表）来自
  *   服务端用户设置文档：作用域取自 ctx.settingsScope 的 `usage-stats` 命名空间（服务端在
  *   src/host/settings.ts 注册），组件经 useUsageSettings 读写，不再用
  *   localStorage；旧版本的 localStorage 偏好由 migrateLegacySettings 一次性迁移。
@@ -20,6 +25,7 @@
 
 import { createElement } from 'react';
 
+import { SessionIdBadge } from './components/SessionIdBadge.tsx';
 import { NS, zh, en } from './locales.ts';
 import { mountUsageStatsRemote } from './remote.ts';
 import { attachUsageSettings, detachUsageSettings, migrateLegacySettings } from './settings.ts';
@@ -29,6 +35,7 @@ import type { UsageSettings } from '../types.ts';
 import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-api-gateway/client';
 import type {} from '@deepseek-ai/dsh-client-locale/client';
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client';
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client';
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client';
@@ -61,4 +68,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
     locale: NS,
     order: 1,
   }, (props) => createElement(UsageStatsFooter, props)));
+
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities',
+    id: 'dsh-usage-stats-session-id',
+    locale: NS,
+    order: -10,
+  }, (props) => createElement(SessionIdBadge, props)));
 }
