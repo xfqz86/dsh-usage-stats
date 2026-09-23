@@ -4,7 +4,7 @@
  * `tile` 为磁贴浅底，`tip` 为深色 tooltip 底。
  */
 
-import { IconSparkle16, IconWarningOutline16 } from '@deepseek-ai/dsh-client-ui-primitives';
+import { IconSparkleRegular, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import css from './HintCard.module.css';
 
@@ -19,7 +19,7 @@ export function HintCard({ text, tone = 'tile', variant = 'brand' }: {
   return (
     <div className={`${css.root}${toneCls}${variantCls}`}>
       <span className={css.icon} aria-hidden="true">
-        {variant === 'error' ? <IconWarningOutline16 size={14} /> : <IconSparkle16 size={14} />}
+        {variant === 'error' ? <IconWarningOutlineRegular size={14} /> : <IconSparkleRegular size={14} />}
       </span>
       <span className={css.text}>{text}</span>
     </div>

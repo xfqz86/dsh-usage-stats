@@ -8,7 +8,7 @@
 
 harness 每个包已导出完整精确的类型（`Context`/`ClientContext`/`SessionEvent`/`TokenUsage`/`PropsRuntime`/`InjectFace`/`Modal` 等），**禁止**为 `ctx/slots/locale/session/primitives/注入服务` 手写结构、最小接口或 ambient 镜像；**必须** `import type` harness 导出，用法与 `packages/extensions/ui-cordis` 等一致。
 
-实现：`@deepseek-ai/*` 已发布至 npm（**版本以 `package.json` 为准**，`peerDependencies` 与 `devDependencies` 中的镜像同 range，不在文档里抄写版本号），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 按三段声明：`dependencies` 仅第三方运行时库（当前仅 `@deepseek-ai/schemastery`，随包安装）；`peerDependencies` 为框架单例（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/dsh-credentials`，由 dsh 安装包提供、不随包安装，`devDependencies` 内必须镜像同 range）；其余（构建/测试/纯类型）全进 `devDependencies`。服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。值导入（`tsdown` host 侧 `neverBundle` 不打包）运行时解析：`dependencies` 走随包安装的副本，`peerDependencies` 走安装包单例；Client 贡献 `src/remote/contribution.ts` 内联的 `zod`（构建期来自 dev，随浏览器 bundle 打包）。
+实现：`@deepseek-ai/*` 已发布至 npm（**版本以 `package.json` 为准**，`peerDependencies` 与 `devDependencies` 中的镜像同 range，不在文档里抄写版本号），`devDependencies` 直接安装，无 `paths` 映射；`import type` 打包剥离，运行时值（`react/primitives`）走 `tsdown external` 冻结表。`package.json` 按三段声明：`dependencies` 仅第三方运行时库（当前 `@deepseek-ai/schemastery` 与旧设置文档回收用的 `yaml`，随包安装）；`peerDependencies` 为框架单例（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/dsh-credentials`，由 dsh 安装包提供、不随包安装，`devDependencies` 内必须镜像同 range）；其余（构建/测试/纯类型）全进 `devDependencies`。服务端只引 Node 内置+本地，浏览器端只 `require` 冻结表模块。值导入（`tsdown` host 侧 `neverBundle` 不打包）运行时解析：`dependencies` 走随包安装的副本，`peerDependencies` 走安装包单例；Client 贡献 `src/remote/contribution.ts` 内联的 `zod`（构建期来自 dev，随浏览器 bundle 打包）。
 
 服务端范式（类表单服务，Loader 实例化）：
 ```ts
@@ -71,10 +71,10 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - 产物形态与 CSS 内联机制见 `docs/ARCHITECTURE.md` §6；构建命令见 §9。
 
 ## 8. 运行时与 Remote API
-- **注入**：`static inject=['sessionQuery', 'sessionPersistence']`（全必需）；`credentials` 可选不进 inject，调用处 `ctx.get` 判空，缺席时额度查询直接返回 `no-key`，不读 env 与文件；`settings` 同为可选，缺席时不注册命名空间。先挂实时监听再 `bootstrap`。
+- **注入**：`static inject=['sessionQuery', 'sessionPersistence']`（全必需）；`credentials` 可选不进 inject，调用处 `ctx.get` 判空，缺席时额度查询直接返回 `no-key`，不读 env 与文件；偏好设置靠条目自带 `static Config`，不需注入 `settings`。先挂实时监听再 `bootstrap`。
 - **接口**：`UsageStatsService`（`usageStats` 命名空间，7 个一元 `@Remote` 方法）经网关 `POST /api/usageStats/<方法>` 调用，信任与认证由网关载体统一处理，不注册 HTTP 路由、不自建围栏。协议（方法表、请求/响应、TTL、偏好字段）唯一权威是 `docs/API.md`，改签名必须同步实现体、手写贡献与该文件。
 - Host 侧 SRC 分发（装饰器标记+实时绑定）；Client 侧自挂载 `src/remote/contribution.ts` 的手写严格贡献（独立仓库跑不了 harness 生成器管线）——只改实现体不动贡献。
-- **偏好设置走 harness 用户设置体系，禁止 localStorage**：Host 注册 `usage-stats` 命名空间（`src/host/settings.ts`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `settingsScope` 绑定读写（`src/client/settings.ts`）；字段语义与旧版迁移见 `docs/API.md` §5。
+- **偏好设置走 harness 用户设置体系，禁止 localStorage**：Host 以插件条目 Config 声明 `usage-stats` schema（`src/host/settings.ts`，字段须 `.volatile()`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `configForms` 按条目 id 绑定读写（`src/client/settings.ts`）；字段语义与旧版迁移（含基座导入失败后的 settings.yaml.imported 回收）见 `docs/API.md` §5。
 
 ## 9. 验证
 

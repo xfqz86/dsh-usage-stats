@@ -41,9 +41,14 @@ const LEDGER_DIR_NAME = 'dsh-usage-stats';
 /** 账本 sqlite 文件名。 */
 const DB_FILE_NAME = 'ledger.sqlite';
 
+/** 本插件的存储目录 `$DSH_HOME/storages/dsh-usage-stats/`：账本与插件自有落盘状态都放这里。 */
+export function storageDir(): string {
+  return join(getDshHome(), 'storages', LEDGER_DIR_NAME);
+}
+
 /** 账本数据库文件绝对路径，默认位于 $DSH_HOME/storages/dsh-usage-stats/。 */
 function ledgerDatabasePath(): string {
-  return join(getDshHome(), 'storages', LEDGER_DIR_NAME, DB_FILE_NAME);
+  return join(storageDir(), DB_FILE_NAME);
 }
 
 /** 一条账本事件：一次模型调用的用量，t 为毫秒时间戳。 */

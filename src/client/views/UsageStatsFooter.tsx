@@ -17,7 +17,7 @@
  * 关闭抓取则不轮询，对应数据恒为 null，芯片自然不渲染；侧边栏开关只影响底部芯片展示，不影响模态窗内详情。
  */
 
-import { IconDataOutline16, Tooltip as BaseTooltip } from '@deepseek-ai/dsh-client-ui-primitives';
+import { IconDataOutlineRegular, Tooltip as BaseTooltip } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useRef, useState } from 'react';
 
 
@@ -758,7 +758,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
             </span>
           )}
           <span className={css.unifiedMain}>
-            <span className={css.badgeIcon}><IconDataOutline16 size={14} /></span>
+            <span className={css.badgeIcon}><IconDataOutlineRegular size={14} /></span>
             <span className={css.badgeLabel}>{t('footer.todayLabel')}</span>
             <span className={css.badgeMeta}>
               {err

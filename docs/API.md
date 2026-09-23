@@ -131,19 +131,23 @@
 一律 `usageStats/busy` 拒绝；客户端设置页两按钮置灰并给出原因、已打开的二次确认框
 随扫描开始自动关闭，不发起注定失败的请求。
 
-## 5. 偏好设置（`usage-stats` 命名空间）
+## 5. 偏好设置（`usage-stats` 插件条目）
 
-- **事实来源**：harness 用户设置文档（dsh-settings-file 落 `$DSH_HOME/settings.yaml`）的
-  `usage-stats` 段——偏好属部署而非某个浏览器，换浏览器、换设备共用同一份。文档只存
-  显式改过的字段，其余按 schema 默认值解析（见下表；schema 默认值与
-  `USAGE_SETTINGS_DEFAULTS` 同源为规则，见 `AGENTS.md` §8）。
-- **服务端**：`src/host/settings.ts` 经 `ctx.settings.register('usage-stats', …)` 注册
-  （`settings` 可选，缺席不注册）；注册失败（命名空间被占用、schema 被拒）只降级偏好
-  并打警告，统计主职责不中断，浏览器端设置页提示改动不会保存。
-- **浏览器端**：`ctx.settingsScope.bind({ namespace: 'usage-stats' })` 取作用域
-  （`settingsScope` 已登记进 `dsh.client.inject` 保证加载序），`src/client/settings.ts`
-  提供订阅/读写，组件经 `useUsageSettings` 消费；写入走路径操作、只落显式改过的字段，
-  间隔字段写前夹到下限 3。
+偏好的命名空间就是本插件的 profile 条目 id：`cordis.patch.yml` 插入的 `usage-stats`
+行，也是浏览器端取设置表单的键（两侧同源为规则，见 `AGENTS.md` §8）。
+
+- **事实来源**：该条目的 Config 在服务端 profile 配置文档里的片段——偏好属部署而非某个
+  浏览器，换浏览器、换设备共用同一份。文档只存显式改过的字段，其余按 schema 默认值解析
+  （见下表；schema 默认值与 `USAGE_SETTINGS_DEFAULTS` 同源为规则，见 `AGENTS.md` §8）。
+- **服务端**：`src/host/settings.ts` 的 `UsageSettingsSchema` 由 `UsageStatsService.Config`
+  声明；harness 设置服务（`ctx.settings`）据此把条目投影成设置表单。**每个字段必须标
+  `.volatile()`**：设置服务只把 volatile 字段投影成表单，也只有 volatile 路径接受写入。
+  条目没声明 schema（或字段不是 volatile）时该命名空间不出现，浏览器端偏好静默退化为仅
+  当前页面生效。
+- **浏览器端**：`ctx.configForms.get('usage-stats')` 取设置表单（`configForms` 由
+  `@deepseek-ai/dsh-client-ui-settings` 提供，已登记进 `dsh.client.inject` 保证加载序），
+  `src/client/settings.ts` 提供订阅/读写，组件经 `useUsageSettings` 消费；写入走路径操作、
+  只落显式改过的字段，间隔字段写前夹到下限 3。
 - **字段**（`UsageSettings` 定义在 `src/types.ts`）：
 
   | 字段 | 默认 | 语义 |
@@ -172,11 +176,31 @@
   - 自动完成候选来自原始快照（`modelCatalog`）；来源侧排除其他行已配过的组合
     （`unusedRedirectSources`：模型被用光的供应商整条不再出现，本行自己的取值保留，
     便于回改），目标侧不排除。
-- **读取路径**：作用域快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔，间隔
+- **读取路径**：表单快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔，间隔
   只收有限数并夹取，规则表按 `normalizeModelRedirects` 清洗）→ 缺字段回退默认值；
-  作用域未就绪（加载中）或部署无设置后端时同样回退默认值，设置页顶部提示当前设置
-  存放位置与是否可写。
+  表单未就绪（加载中、条目未挂载、连接非本机回环）时同样回退默认值，设置页顶部提示
+  当前设置存放位置与是否可写。
 - **旧版 localStorage 迁移**（key `dsh-usage-stats.settings`，升级后首次挂载一次性）：
-  等作用域从 loading 落定；就绪可写且文档尚无该命名空间时，把与默认值不同的字段写入
-  文档，成功后删除旧键；文档已有用户段时只删旧键（文档为准）；服务端设置缺席或只读
+  等表单从 loading 落定；就绪可写且条目尚无用户片段时，把与默认值不同的字段写入
+  文档，成功后删除旧键；条目已有用户片段时只删旧键（文档为准）；服务端设置缺席或只读
   时**保留**旧键——此刻没有可靠落点，删掉等于丢设置，下次挂载再试。
+- **旧版 `settings.yaml` 命名空间迁移**（两路，都只写与默认值不同的字段、都用
+  `normalizeUsageSettings` 归一化）：
+  1. **基座自动导入**：升级到 0.1.7 基座时把 `$DSH_HOME/settings.yaml` 的同名段导入
+     profile 条目（导入后文档改名 `settings.yaml.imported`）；插件此刻已声明 Config
+     schema，导入按 0.1.7 的条目口径落地，用户旧偏好继续生效。
+  2. **插件回收**：基座导入**改名后不重试**——若升级那一刻插件还没有 Config schema
+     （0.4.4 及更早，本就跑不起来），该段导入必然失败，此后只剩 `.imported` 副本。
+     `recoverLegacyUsageSettings` 在 Loader 落定后收尾这一次：`settings.yaml` 尚在时
+     让基座自己导（不抢写），文件已不在时按该段补丁写进 profile 并记一条 info 日志；
+     条目当前已有用户片段（`describe().user` 非空，即用户在界面上改过值）则让位，
+     不覆盖界面上改过的值。
+     **同一份旧文档只处理一次**：处理完毕就在本插件存储目录（`$DSH_HOME/storages/
+     dsh-usage-stats/`）写 `legacy-settings-recovered.json` 标记，标记在即启动时直接
+     返回——之后无论用户把偏好改回默认、清空条目 config，还是留着 `.imported` 不动，
+     旧值都不会复活。标记记的是「旧文档已有定论」，落标记的三种现场：回收成功、
+     条目已有用户片段而让位（`action: skipped-user-config`）、旧文档里没有本条目那段
+     （`action: nothing-to-restore`）——让位也落标记，否则用户清空条目时旧值会在之后
+     某次启动突然复活。其余现场都没有定论、不落标记，下次启动重看：`settings.yaml`
+     还在（基座自己会导）、`.imported` 不存在、条目不在 `describe()` 里（插件被禁用
+     或没装）、写入被设置服务拒绝（此刻写失败会记一条 warn）。

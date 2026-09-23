@@ -21,24 +21,32 @@
  *   - fork 继承前缀回归（独立 DSH_HOME）：query 与 raw 两路都只折自有事件；
  *   - 压缩调用计入回归（独立 DSH_HOME）：compaction/summary 的用量计入总量与模型
  *     拆分，缺 usage/零用量不入账，实时路径同样接纳；
- *   - 偏好设置命名空间注册与落盘（独立 DSH_HOME，挂 harness 真实文件后端
- *     @deepseek-ai/dsh-settings-file）：默认值齐备且未改动时不建文档、update 只把
- *     显式改过的字段写进 $DSH_HOME/settings.yaml 的 usage-stats 段、describe 下发的
- *     schema 可 JSON 序列化。
+ *   - 偏好设置条目接入与落盘（独立 DSH_HOME，真实 app-boot Loader + 真实
+ *     ConfigEditor/SettingsForms）：条目把 usage-stats schema 作为 Config 声明后，
+ *     describe 列出该命名空间且解析值为默认值、schema 可 JSON 序列化；浏览器端
+ *     走的 settings.mutate 路径只把显式改过的字段写进 profile 补丁文档，其余字段
+ *     继续跟随默认值，规则表整表落成 YAML 列表并原样读回；
+ *   - 旧设置文档迁移两路（flow 风格真实片段）：基座自动导入尚存的 settings.yaml；
+ *     基座导入失败后的现场（只剩 settings.yaml.imported）由插件回收，两路都只写与
+ *     默认值不同的字段、不改段里没有的字段；回收只跑一次——同一 home 再启动两次
+ *     （其间清空条目 config）都不得复活旧值；条目已有用户自己的配置时回收让位
+ *     （不覆盖用户取值）但同样落标记，此后清空条目也不复活旧值。
  * 信任与认证由网关载体统一处理，本测试只覆盖业务语义。
  *
  * 运行 `node --experimental-strip-types test/smoke.mjs`：lib 内 Remote
  * 服务为构建产物，贡献（zod）直引 src 源码。
  */
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { zstdCompressSync } from 'node:zlib'
 
+import { boot, initProfile, readProfilePatches } from '@deepseek-ai/dsh-app-boot'
+import ConfigEditor from '@deepseek-ai/dsh-config-editor'
+import SettingsForms from '@deepseek-ai/dsh-settings'
 import { Context, Service as CordisService } from '@deepseek-ai/cordis'
 import { SessionFormatUnsupportedError } from '@deepseek-ai/dsh-session-persistence'
-import { FileSettingsProvider } from '@deepseek-ai/dsh-settings-file'
 import { remoteErrorOf, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 
 import UsageStatsService from '../lib/index.js'
@@ -46,9 +54,10 @@ import { USAGE_STATS_REMOTE } from '../src/remote/contribution.ts'
 import { USAGE_SETTINGS_DEFAULTS, USAGE_SETTINGS_NAMESPACE } from '../src/utils.ts'
 
 /**
- * 偏好设置用例用 harness 真实文件后端（@deepseek-ai/dsh-settings-file）：
- * 生产里 dsh-base 就是用它把命名空间段写进 $DSH_HOME/settings.yaml，
- * 这里以临时 DSH_HOME 跑同一条链路，断言落盘内容。
+ * 偏好设置用例用基座真实链路：app-boot 起一个临时 profile（plugin 条目把
+ * UsageStatsService 当 Loader 内置插件挂载），并挂真实的 ConfigEditor 与
+ * SettingsForms——生产里 dsh-base 就是这个组合，settings 服务把条目 Config
+ * 投影成设置表单、把改动写回 profile 补丁文档。
  */
 
 // 隔离 DSH_HOME：账本 sqlite 写入临时目录，避免污染真实 ~/.dsh。
@@ -104,21 +113,11 @@ const sessionPersistence = {
 /**
  * 挂载服务：等价组合层注入 sessionQuery 等之后，凭据中心缺席覆盖回退路径。
  * 直接构造并手动触发 [Service.init]（生产环境由 Loader 完成这两步）。
- * options.settings 为真时同时挂载文件设置后端（写 options.settingsPath），
- * 覆盖偏好设置命名空间注册与落盘链路。
  */
 async function mount(query, persist, options = {}) {
   const ctx = new Context()
   ctx.provide('sessionQuery', query)
   ctx.provide('sessionPersistence', persist)
-  if (options.settings === true) {
-    const settingsFiber = ctx.plugin(FileSettingsProvider, { path: options.settingsPath, watch: false })
-    await settingsFiber
-    if (!(ctx.get('settings') instanceof FileSettingsProvider)) {
-      console.error('FAIL: 文件设置后端未挂载')
-      process.exit(1)
-    }
-  }
   let svc
   const fiber = ctx.plugin({
     // 与服务 static inject 同形；credentials 可选不进 inject，
@@ -823,86 +822,166 @@ await mounted.dispose()
   rmSync(compactHome, { recursive: true, force: true })
 }
 
-// ===== 偏好设置命名空间注册用例（独立 DSH_HOME，不触碰上面的 394 基线与其他用例）=====
-// 偏好设置不再存 localStorage，而是注册进 harness 的用户设置体系：服务端
-// registerUsageSettings 用 schemastery schema 注册 `usage-stats` 命名空间，
-// dsh-base 组合的文件后端把用户显式改过的字段写进 $DSH_HOME/settings.yaml，
-// 其余字段由 schema 默认值解析。本用例挂真实文件后端（watch 关闭），断言：
-//   - 注册后未写过的字段解析为 USAGE_SETTINGS_DEFAULTS（默认值同源 utils.ts，
-//     逐字段按 JSON 比较：modelRedirects 是数组，引用比较永远判为不同）；
-//   - update 写入的字段落进 settings.yaml 的 usage-stats 段，且段落只含这两个字段；
-//   - 模型统计重定向规则表能整表落盘为 YAML 列表并原样读回；
-//   - describe 下发的 schema 可 JSON 序列化（浏览器端 settingsScope 靠它校验收到的取值）。
-{
-  const settingsHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-settings-'))
-  const settingsPath = join(settingsHome, 'settings.yaml')
-  const previousSettingsHome = process.env.DSH_HOME
-  process.env.DSH_HOME = settingsHome
-  const settingsMounted = await mount(
-    { async listSessions() { return [] }, async readSession() { return { events: [] } } },
-    { async list() { return [] }, async open() { throw new Error('偏好设置用例不应走持久化路径') } },
-    { settings: true, settingsPath },
-  )
-  const settings = settingsMounted.ctx.get('settings')
-  // 注册是 ctx.inject 上的 effect，注入回调同步触发；未注册时 get 返回 undefined。
-  await new Promise((r) => setTimeout(r, 100))
-  const resolved = settings.get(USAGE_SETTINGS_NAMESPACE)
-  if (resolved === undefined) {
-    console.error(`FAIL: 未注册设置命名空间 ${USAGE_SETTINGS_NAMESPACE}（服务端 registerUsageSettings 未生效）`)
+// ===== 偏好设置：条目接入、落盘与旧设置文档迁移（独立 DSH_HOME，不触碰上面的 394 基线）=====
+// 偏好设置不再存 localStorage、也不再注册独立命名空间：条目自己声明 Config
+// schema（src/host/settings.ts 的 UsageSettingsSchema），harness 设置服务把它
+// 投影成设置表单，浏览器端经 ctx.configForms 按条目 id 读写，改动落到 profile
+// 补丁文档。
+// 四个用例都走真实链路（app-boot Loader + ConfigEditor + SettingsForms）。
+
+/** 旧版设置文档里的 `usage-stats` 段：从本机真实 settings.yaml.imported 裁剪而来（flow 风格、未加引号），回收必须能吃下这种写法。 */
+const LEGACY_SETTINGS_DOC = `usage-stats:
+  {
+    showZaiInSidebar: true,
+    zaiEnabled: false,
+    modelRedirects:
+      [
+        {
+            fromProvider: opencode-go-completions,
+            fromModel: ox-alpha-free,
+            toProvider: opencode-go,
+            toModel: glm-5.3-flash
+          }
+      ],
+    goEnabled: true,
+    deepseekEnabled: true
+  }
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+`
+/** 上游文档里的那条规则（整表落盘后读回断言用）。 */
+const LEGACY_REDIRECTS = [{ fromProvider: 'opencode-go-completions', fromModel: 'ox-alpha-free', toProvider: 'opencode-go', toModel: 'glm-5.3-flash' }]
+
+/**
+ * 起一个临时 profile：真实 Loader + ConfigEditor + SettingsForms，插件条目按内置插件挂载
+ * （等价 dsh-base 组合里由 bundle 补丁插入的那一行）。
+ * @param options.legacy - 'pending' 预置 $DSH_HOME/settings.yaml（基座待导入）；
+ *   'imported' 预置 $DSH_HOME/settings.yaml.imported 且不预置 settings.yaml（基座导入失败后的现场）。
+ * @param options.userPatch - 预置用户层补丁文档文本（模拟条目里已有用户自己配置的现场）。
+ * @returns ctx、目录与取值读取器。
+ */
+async function mountSettingsProfile(options = {}) {
+  // options.home 复用同一份 home（同一台机器多次启动），否则每次新建临时 home。
+  const home = options.home ?? realpathSync(mkdtempSync(join(tmpdir(), 'usage-stats-smoke-settings-')))
+  const previousHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  if (options.legacy === 'pending') writeFileSync(join(home, 'settings.yaml'), LEGACY_SETTINGS_DOC)
+  if (options.legacy === 'imported') writeFileSync(join(home, 'settings.yaml.imported'), LEGACY_SETTINGS_DOC)
+  // 临时 profile：profile 目录 + 一个 bundle（补丁插入三个条目）+ 空 cordis.yml。
+  const profileDir = join(home, 'profiles', 'test')
+  initProfile(profileDir, ['test-bundle'])
+  if (options.userPatch !== undefined) writeFileSync(join(profileDir, 'cordis.patch.yml'), options.userPatch)
+  const bundleDir = join(profileDir, 'node_modules', 'test-bundle')
+  mkdirSync(bundleDir, { recursive: true })
+  writeFileSync(join(home, 'package.json'), '{"name":"test-installation"}\n')
+  writeFileSync(join(bundleDir, 'package.json'), JSON.stringify({
+    name: 'test-bundle', version: '1.0.0', dsh: { bundle: { patch: 'cordis.patch.yml' } },
+  }))
+  // 条目 id 用 USAGE_SETTINGS_NAMESPACE：浏览器端按同一常量取表单，两侧漂移即失败。
+  writeFileSync(join(bundleDir, 'cordis.patch.yml'), JSON.stringify([{ insert: [
+    { id: 'config-editor', name: 'cordis:editor' },
+    { id: 'settings', name: 'cordis:settings' },
+    { id: USAGE_SETTINGS_NAMESPACE, name: 'cordis:usage-stats' },
+  ] }]))
+  writeFileSync(join(profileDir, 'cordis.yml'), '[]\n')
+  const profile = {
+    name: 'test', startedBundles: ['test-bundle'], dir: profileDir, patchPath: join(profileDir, 'cordis.patch.yml'),
+    installAnchor: join(home, 'package.json'), cwd: home, home,
+    overlays: [], telemetryDisabledEnv: undefined,
+  }
+  const ctx = await boot('test', join(profileDir, 'cordis.yml'), readProfilePatches('test', profile), (root) => {
+    root.provide('profileContext', profile)
+    root.provide('appReady', { onReady: (listener) => { listener(); return () => {} } })
+    // 组合层注入的两个必需服务：本用例只关心偏好设置链路，会话侧给空实现。
+    root.provide('sessionQuery', { async listSessions() { return [] }, async readSession() { return { events: [] } } })
+    root.provide('sessionPersistence', { async list() { return [] }, async open() { throw new Error('偏好设置用例不应走持久化路径') } })
+    Object.assign(root.loader.builtins, { editor: ConfigEditor, settings: SettingsForms, 'usage-stats': UsageStatsService })
+  })
+  const settings = ctx.get('settings')
+  if (settings === undefined || !(ctx.get('usageStats') instanceof UsageStatsService)) {
+    console.error('FAIL: 设置服务或 usageStats 服务未挂载（条目未按 Config 声明生效？）')
     process.exit(1)
   }
-  /** 逐字段深比较：数组字段（modelRedirects）不能用引用比较。 */
-  const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+  const dispose = async (disposeOptions = {}) => {
+    await ctx.fiber.dispose()
+    process.env.DSH_HOME = previousHome
+    if (disposeOptions.keepHome !== true) rmSync(home, { recursive: true, force: true })
+  }
+  return {
+    ctx,
+    home,
+    profileDir,
+    patchPath: join(profileDir, 'cordis.patch.yml'),
+    dispose,
+    entry: () => settings.describe({ redactSecrets: true }).find((candidate) => candidate.ns === USAGE_SETTINGS_NAMESPACE),
+    settings,
+  }
+}
+
+/** 轮询等待取值稳定：迁移都是 Loader 落定后的异步收尾，不是同步完成。 */
+async function waitUntil(check, describeFailure, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (await check()) return
+    if (Date.now() > deadline) {
+      console.error(`FAIL: ${describeFailure}`)
+      process.exit(1)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+}
+
+/** 逐字段深比较：数组字段（modelRedirects）不能用引用比较。 */
+const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+// ---- 用例一：条目接入、describe 取值、mutate 落盘 ----
+{
+  const mounted = await mountSettingsProfile()
+  const entry = mounted.entry()
+  if (entry === undefined) {
+    console.error(`FAIL: describe 未列出 ${USAGE_SETTINGS_NAMESPACE} 条目（条目必须把偏好 schema 声明成 Config）`)
+    process.exit(1)
+  }
   for (const [field, expected] of Object.entries(USAGE_SETTINGS_DEFAULTS)) {
-    if (!sameValue(resolved[field], expected)) {
-      console.error(`FAIL: 默认值不一致 ${field}=${JSON.stringify(resolved[field])}，应为 ${JSON.stringify(expected)}`)
+    if (!sameValue(entry.value[field], expected)) {
+      console.error(`FAIL: 默认值不一致 ${field}=${JSON.stringify(entry.value[field])}，应为 ${JSON.stringify(expected)}`)
       process.exit(1)
     }
   }
-  if (!Array.isArray(resolved.modelRedirects) || resolved.modelRedirects.length !== 0) {
-    console.error(`FAIL: 规则表默认值应为空数组，实际 ${JSON.stringify(resolved.modelRedirects)}`)
+  if (!Array.isArray(entry.value.modelRedirects) || entry.value.modelRedirects.length !== 0) {
+    console.error(`FAIL: 规则表默认值应为空数组，实际 ${JSON.stringify(entry.value.modelRedirects)}`)
     process.exit(1)
   }
-  // describe 下发的 schema 必须可 JSON 序列化：浏览器端 settingsScope 用它校验收到的取值。
-  const descriptor = settings.describe({ redactSecrets: true })
-    .find((candidate) => candidate.ns === USAGE_SETTINGS_NAMESPACE)
-  if (descriptor === undefined || descriptor.revision !== 0) {
-    console.error(`FAIL: describe 未列出 ${USAGE_SETTINGS_NAMESPACE} 或初始 revision 非 0：${JSON.stringify(descriptor)}`)
-    process.exit(1)
-  }
+  // describe 下发的 schema 必须可 JSON 序列化：浏览器端 ConfigForm 用它校验收到的取值。
   try {
-    JSON.parse(JSON.stringify(descriptor.schema))
+    JSON.parse(JSON.stringify(entry.schema))
   } catch (error) {
-    console.error(`FAIL: 命名空间 schema 不可 JSON 序列化，浏览器端无法校验收到的取值：${String(error)}`)
-    process.exit(1)
-  }
-  // 未改动前不写文档：默认值不落盘。
-  if (existsSync(settingsPath)) {
-    console.error(`FAIL: 未改动偏好就生成了设置文档：${readFileSync(settingsPath, 'utf8')}`)
+    console.error(`FAIL: 条目 schema 不可 JSON 序列化，浏览器端无法校验收到的取值：${String(error)}`)
     process.exit(1)
   }
 
-  // 写入两个字段：文档只出现这两个字段，解析值其余字段仍为默认。
-  await settings.update(USAGE_SETTINGS_NAMESPACE, { goFetchMinutes: 10, showZaiInSidebar: false })
-  const afterUpdate = settings.get(USAGE_SETTINGS_NAMESPACE)
-  const yaml = readFileSync(settingsPath, 'utf8')
-  console.log('settings.yaml:\n' + yaml)
-  for (const needle of [`${USAGE_SETTINGS_NAMESPACE}:`, 'goFetchMinutes: 10', 'showZaiInSidebar: false']) {
-    if (!yaml.includes(needle)) {
-      console.error(`FAIL: settings.yaml 缺少 "${needle}"：\n${yaml}`)
+  // 浏览器端走的 mutate 路径（路径写入）：只落显式改过的字段。
+  await mounted.settings.mutate(USAGE_SETTINGS_NAMESPACE, [
+    { op: 'set', path: ['goFetchMinutes'], value: 10 },
+    { op: 'set', path: ['showZaiInSidebar'], value: false },
+  ])
+  const patchDocument = readFileSync(mounted.patchPath, 'utf8')
+  for (const needle of [`id: ${USAGE_SETTINGS_NAMESPACE}`, 'goFetchMinutes: 10', 'showZaiInSidebar: false']) {
+    if (!patchDocument.includes(needle)) {
+      console.error(`FAIL: profile 补丁缺少 "${needle}"：\n${patchDocument}`)
       process.exit(1)
     }
   }
   for (const absent of ['deepseekEnabled', 'zaiFetchMinutes', 'goEnabled']) {
-    if (yaml.includes(absent)) {
-      console.error(`FAIL: settings.yaml 只应存显式改过的字段，却出现了 ${absent}：\n${yaml}`)
+    if (patchDocument.includes(absent)) {
+      console.error(`FAIL: 补丁只应存显式改过的字段，却出现了 ${absent}：\n${patchDocument}`)
       process.exit(1)
     }
   }
-  const expectedAfterUpdate = { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 10, showZaiInSidebar: false }
-  for (const [field, expected] of Object.entries(expectedAfterUpdate)) {
-    if (!sameValue(afterUpdate[field], expected)) {
-      console.error(`FAIL: 写入后解析值不一致 ${field}=${JSON.stringify(afterUpdate[field])}，应为 ${JSON.stringify(expected)}`)
+  const expectedAfterWrite = { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 10, showZaiInSidebar: false }
+  for (const [field, expected] of Object.entries(expectedAfterWrite)) {
+    if (!sameValue(mounted.entry().value[field], expected)) {
+      console.error(`FAIL: 写入后解析值不一致 ${field}=${JSON.stringify(mounted.entry().value[field])}，应为 ${JSON.stringify(expected)}`)
       process.exit(1)
     }
   }
@@ -912,27 +991,179 @@ await mounted.dispose()
     { fromProvider: 'opencode-go-vision', fromModel: 'deepseek-v4-flash', toProvider: 'opencode-go', toModel: 'deepseek-v4-flash' },
     { fromProvider: 'zai-coding-cn', fromModel: 'glm-5.3-flash', toProvider: 'opencode-go', toModel: 'glm-5.3-flash' },
   ]
-  await settings.update(USAGE_SETTINGS_NAMESPACE, { modelRedirects: redirects })
-  const afterRedirect = settings.get(USAGE_SETTINGS_NAMESPACE)
-  const redirectYaml = readFileSync(settingsPath, 'utf8')
+  await mounted.settings.mutate(USAGE_SETTINGS_NAMESPACE, [{ op: 'set', path: ['modelRedirects'], value: redirects }])
+  const redirectDocument = readFileSync(mounted.patchPath, 'utf8')
   for (const needle of ['modelRedirects:', 'fromProvider: opencode-go-vision', 'toProvider: opencode-go']) {
-    if (!redirectYaml.includes(needle)) {
-      console.error(`FAIL: settings.yaml 缺少规则表字段 "${needle}"：\n${redirectYaml}`)
+    if (!redirectDocument.includes(needle)) {
+      console.error(`FAIL: profile 补丁缺少规则表字段 "${needle}"：\n${redirectDocument}`)
       process.exit(1)
     }
   }
-  if (!sameValue(afterRedirect.modelRedirects, redirects)) {
-    console.error(`FAIL: 规则表读回不一致：${JSON.stringify(afterRedirect.modelRedirects)}，应为 ${JSON.stringify(redirects)}`)
+  if (!sameValue(mounted.entry().value.modelRedirects, redirects)) {
+    console.error(`FAIL: 规则表读回不一致：${JSON.stringify(mounted.entry().value.modelRedirects)}，应为 ${JSON.stringify(redirects)}`)
     process.exit(1)
   }
-  console.log('settings namespace:', JSON.stringify({
+  console.log('settings entry:', JSON.stringify({
     ns: USAGE_SETTINGS_NAMESPACE,
-    resolved: afterRedirect,
-    revision: settings.describe({ redactSecrets: true }).find((c) => c.ns === USAGE_SETTINGS_NAMESPACE)?.revision,
+    resolved: mounted.entry().value,
+    revision: mounted.entry().revision,
   }, null, 2))
-  await settingsMounted.dispose()
-  process.env.DSH_HOME = previousSettingsHome
-  rmSync(settingsHome, { recursive: true, force: true })
+  await mounted.dispose()
+}
+
+// ---- 用例二：升级时基座自动导入旧 settings.yaml（前向路径）----
+{
+  const mounted = await mountSettingsProfile({ legacy: 'pending' })
+  await waitUntil(
+    () => sameValue(mounted.entry()?.value.zaiEnabled, false) && sameValue(mounted.entry()?.value.modelRedirects, LEGACY_REDIRECTS),
+    '基座未把旧 settings.yaml 的 usage-stats 段导入条目（自动配置迁移失效）',
+  )
+  const patchDocument = readFileSync(mounted.patchPath, 'utf8')
+  for (const needle of ['zaiEnabled: false', 'fromModel: ox-alpha-free']) {
+    if (!patchDocument.includes(needle)) {
+      console.error(`FAIL: 基座导入未落到 profile 补丁（缺 "${needle}"）：\n${patchDocument}`)
+      process.exit(1)
+    }
+  }
+  if (existsSync(join(mounted.home, 'settings.yaml'))) {
+    console.error('FAIL: 基座导入后旧 settings.yaml 应已改名')
+    process.exit(1)
+  }
+  console.log('legacy import (base):', JSON.stringify({ zaiEnabled: mounted.entry().value.zaiEnabled, modelRedirects: mounted.entry().value.modelRedirects }))
+  await mounted.dispose()
+}
+
+// ---- 用例三：基座导入失败后的现场（只剩 settings.yaml.imported）由插件回收 ----
+{
+  const mounted = await mountSettingsProfile({ legacy: 'imported' })
+  await waitUntil(
+    () => sameValue(mounted.entry()?.value.zaiEnabled, false) && sameValue(mounted.entry()?.value.modelRedirects, LEGACY_REDIRECTS),
+    '插件未从 settings.yaml.imported 回收旧偏好（旧版升级后偏好丢失）',
+  )
+  // 回收只写显式改过的字段：等于默认值的 goEnabled/deepseekEnabled 不落盘。
+  const patchDocument = readFileSync(mounted.patchPath, 'utf8')
+  for (const needle of ['zaiEnabled: false', 'fromModel: ox-alpha-free']) {
+    if (!patchDocument.includes(needle)) {
+      console.error(`FAIL: 回收未落到 profile 补丁（缺 "${needle}"）：\n${patchDocument}`)
+      process.exit(1)
+    }
+  }
+  for (const absent of ['goEnabled', 'deepseekEnabled']) {
+    if (patchDocument.includes(absent)) {
+      console.error(`FAIL: 回收只应写与默认值不同的字段，却出现了 ${absent}：\n${patchDocument}`)
+      process.exit(1)
+    }
+  }
+  // 归一化口径：段里没有的字段保持默认。
+  const value = mounted.entry().value
+  for (const field of ['goFetchMinutes', 'showSessionId', 'zaiFetchMinutes']) {
+    if (!sameValue(value[field], USAGE_SETTINGS_DEFAULTS[field])) {
+      console.error(`FAIL: 回收不该改动段里没有的字段 ${field}=${JSON.stringify(value[field])}`)
+      process.exit(1)
+    }
+  }
+  // 回收是在插件存储目录写下的一次性标记：标记在即不再回收。
+  const marker = join(mounted.home, 'storages', 'dsh-usage-stats', 'legacy-settings-recovered.json')
+  if (!existsSync(marker)) {
+    console.error(`FAIL: 回收后未写完成标记 ${marker}`)
+    process.exit(1)
+  }
+  console.log('legacy recovery (plugin):', JSON.stringify({ zaiEnabled: value.zaiEnabled, modelRedirects: value.modelRedirects }))
+  // 同一份 home 再启动两次：第二次把条目 config 清空（模拟用户把偏好改回默认、或手改配置文档），
+  // 标记仍在，旧值不得复活；第三次再启动确认状态稳定。
+  await mounted.dispose({ keepHome: true })
+  rmSync(join(mounted.home, 'storages', 'dsh-usage-stats', 'ledger.sqlite'), { force: true })
+  const patchPath = mounted.patchPath
+  const cleared = readFileSync(patchPath, 'utf8').replace(
+    /- id: usage-stats\n(?: {2}[^\n]*\n)*/,
+    `- id: usage-stats\n  name: cordis:usage-stats\n`,
+  )
+  if (cleared.includes('zaiEnabled')) {
+    console.error(`FAIL: 用例未能清空条目 config：\n${cleared}`)
+    process.exit(1)
+  }
+  writeFileSync(patchPath, cleared)
+  for (const round of [2, 3]) {
+    const rebooted = await mountSettingsProfile({ home: mounted.home })
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    const after = rebooted.entry()
+    if (after === undefined || !sameValue(after.value.zaiEnabled, USAGE_SETTINGS_DEFAULTS.zaiEnabled)
+      || !sameValue(after.value.modelRedirects, [])) {
+      console.error(`FAIL: 第 ${round} 次启动把旧偏好又迁移了一遍（应只回收一次）：${JSON.stringify(after?.value)}`)
+      process.exit(1)
+    }
+    if (readFileSync(patchPath, 'utf8').includes('zaiEnabled')) {
+      console.error(`FAIL: 第 ${round} 次启动重新写入了 profile 补丁（应只回收一次）`)
+      process.exit(1)
+    }
+    await rebooted.dispose({ keepHome: round !== 3 })
+  }
+  console.log('legacy recovery ran exactly once（标记拦住了后续启动）')
+}
+
+// ---- 用例四：条目已有用户自己的配置——回收让位，但同样落「已处理」标记 ----
+// 现场：升级时偏好已经由用户（或更早那版插件）写进条目 config，旧文档还留在原地。
+// 回收必须不覆盖用户取值；同时要落标记，否则用户之后把条目清空时旧值会突然复活。
+{
+  const userPatch = [
+    `- id: ${USAGE_SETTINGS_NAMESPACE}`,
+    // name 必须与条目实际加载的模块一致，否则这行 config 到不了运行中的条目（基座按行匹配）。
+    '  name: cordis:usage-stats',
+    '  config:',
+    '    showSessionId: false',
+    '',
+  ].join('\n')
+  const mounted = await mountSettingsProfile({ legacy: 'imported', userPatch })
+  const marker = join(mounted.home, 'storages', 'dsh-usage-stats', 'legacy-settings-recovered.json')
+  await waitUntil(
+    () => existsSync(marker),
+    '条目已有用户配置时回收既未覆盖也未落「已处理」标记（旧文档会被反复重看）',
+  )
+  // 用户自己的取值原样保留；旧文档里的值一律不搬（用户没改过的字段保持默认）。
+  const value = mounted.entry().value
+  if (!sameValue(value.showSessionId, false)) {
+    console.error(`FAIL: 回收覆盖了用户自己的取值 showSessionId=${JSON.stringify(value.showSessionId)}`)
+    process.exit(1)
+  }
+  if (!sameValue(value.zaiEnabled, USAGE_SETTINGS_DEFAULTS.zaiEnabled) || !sameValue(value.modelRedirects, [])) {
+    console.error(`FAIL: 条目已有用户配置时不该搬旧文档的值：${JSON.stringify(value)}`)
+    process.exit(1)
+  }
+  const userPatchDocument = readFileSync(mounted.patchPath, 'utf8')
+  for (const absent of ['zaiEnabled', 'modelRedirects']) {
+    if (userPatchDocument.includes(absent)) {
+      console.error(`FAIL: 回收写进了用户已有配置的条目（出现 ${absent}）：\n${userPatchDocument}`)
+      process.exit(1)
+    }
+  }
+  const mark = JSON.parse(readFileSync(marker, 'utf8'))
+  if (mark.action !== 'skipped-user-config') {
+    console.error(`FAIL: 标记未记录让位这一处置结果：${JSON.stringify(mark)}`)
+    process.exit(1)
+  }
+  console.log('legacy recovery skipped (user config):', JSON.stringify({ action: mark.action, showSessionId: value.showSessionId }))
+  // 同一份 home 再启动：把条目 config 清空后，标记仍在，旧值不得复活。
+  await mounted.dispose({ keepHome: true })
+  rmSync(join(mounted.home, 'storages', 'dsh-usage-stats', 'ledger.sqlite'), { force: true })
+  const cleared = readFileSync(mounted.patchPath, 'utf8').replace(
+    new RegExp(`- id: ${USAGE_SETTINGS_NAMESPACE}\\n(?: {2}[^\\n]*\\n)*`),
+    `- id: ${USAGE_SETTINGS_NAMESPACE}\n  name: '@xfqz86/dsh-usage-stats'\n`,
+  )
+  writeFileSync(mounted.patchPath, cleared)
+  const rebooted = await mountSettingsProfile({ home: mounted.home })
+  await new Promise((resolve) => setTimeout(resolve, 1500))
+  const afterSkip = rebooted.entry()
+  if (afterSkip === undefined || !sameValue(afterSkip.value.zaiEnabled, USAGE_SETTINGS_DEFAULTS.zaiEnabled)
+    || !sameValue(afterSkip.value.modelRedirects, [])) {
+    console.error(`FAIL: 让位之后清空条目又复活了旧值（标记未生效）：${JSON.stringify(afterSkip?.value)}`)
+    process.exit(1)
+  }
+  if (readFileSync(mounted.patchPath, 'utf8').includes('zaiEnabled')) {
+    console.error('FAIL: 让位之后清空条目又写入了 profile 补丁（标记未生效）')
+    process.exit(1)
+  }
+  await rebooted.dispose()
+  console.log('legacy recovery skip is final（清空条目后旧值也没有复活）')
 }
 
 // 清理临时 DSH_HOME

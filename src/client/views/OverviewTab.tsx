@@ -5,9 +5,9 @@
  */
 
 import {
-  IconArchiveOutline20,
-  IconRefreshOutline16,
-  IconSparkle16,
+  IconArchiveOutlineRegular,
+  IconRefreshOutlineRegular,
+  IconSparkleRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
 import { goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
@@ -314,7 +314,7 @@ export function OverviewTab({
       {/* 左列：今日 */}
       <div className={css.tileToday}>
         <HeroTile
-          icon={<IconSparkle16 />}
+          icon={<IconSparkleRegular />}
           label={t('footer.todayLabel')}
           usage={todayUsage}
           calls={todayCalls}
@@ -324,7 +324,7 @@ export function OverviewTab({
       {/* 左列：总计 */}
       <div className={css.tileTotal}>
         <HeroTile
-          icon={<IconArchiveOutline20 size={16} />}
+          icon={<IconArchiveOutlineRegular size={16} />}
           label={t('panel.summary.totalTokens')}
           usage={all.usage}
           calls={all.calls}
@@ -353,7 +353,7 @@ export function OverviewTab({
                   title={t('deepseek.refresh')}
                   onClick={onRefreshDeepSeek}
                 >
-                  <IconRefreshOutline16 size={12} />
+                  <IconRefreshOutlineRegular size={12} />
                 </button>
               </div>
               {renderDeepSeekContent()}
@@ -378,7 +378,7 @@ export function OverviewTab({
                   title={t('go.refresh')}
                   onClick={onRefreshGo}
                 >
-                  <IconRefreshOutline16 size={12} />
+                  <IconRefreshOutlineRegular size={12} />
                 </button>
               </div>
               {renderGoContent()}
@@ -417,7 +417,7 @@ export function OverviewTab({
                   title={t('zai.refresh')}
                   onClick={onRefreshZai}
                 >
-                  <IconRefreshOutline16 size={12} />
+                  <IconRefreshOutlineRegular size={12} />
                 </button>
               </div>
               {renderZaiContent()}
