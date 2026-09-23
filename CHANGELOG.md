@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-09-23
+
 ### 修复
 
 - **新版 dsh 上插件启动报错、用量面板与设置页打不开**：新版 dsh 换了偏好设置的接入方式，旧写法在启动时直接报错；现在按新版方式接入，偏好照旧存在服务端（跟随 dsh 配置文档，换浏览器、清缓存都不丢）
@@ -138,7 +140,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.1...v0.4.2
