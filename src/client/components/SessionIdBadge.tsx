@@ -5,7 +5,7 @@
  * 时渲染空，由设置 Tab 的会话分组开关门控，默认开启。
  */
 
-import { IconCheckOutline16, IconCopyOutline16, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives';
+import { IconCheckOutlineRegular, IconCopyOutlineRegular, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useRef, useState } from 'react';
 
 
@@ -56,7 +56,7 @@ export function SessionIdBadge({ sessionId, t }: SessionIdBadgeProps) {
           title={copied ? t('sessionId.copied') : t('sessionId.copy')}
           onClick={onCopy}
         >
-          {copied ? <IconCheckOutline16 size={14} /> : <IconCopyOutline16 size={14} />}
+          {copied ? <IconCheckOutlineRegular size={14} /> : <IconCopyOutlineRegular size={14} />}
         </button>
       </span>
     </div>

@@ -18,22 +18,23 @@
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
  *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
- *   - 偏好设置：归一化与夹取、路径写入只带显式字段、作用域视图引用稳定、解绑带
- *     作用域身份（热重载不误清新作用域）、不可用或只读时不发注定被拒的写入、旧
- *     localStorage 迁移（等作用域落定、成功写文档才删旧键、不可用时保留）；服务端
- *     命名空间注册（schema 解析值等于共享默认值、注册失败只降级偏好不抛错）；
+ *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带
+ *     表单身份（热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧
+ *     localStorage 迁移（等表单落定、成功写入才删旧键、不可用时保留）；服务端
+ *     条目 schema（字段全 volatile、解析值等于共享默认值、条目 id 与浏览器端常量一致）；
  *   - stats：格式化/会话分组/时间范围/图表几何/快照截断；
  *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
  */
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { constants, zstdCompressSync } from 'node:zlib';
 
 import { ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
 import { fetchDeepSeekBalance, queryDeepSeekBalance } from '../src/host/deepseekBalance.ts';
 import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
-import { UsageSettingsSchema, registerUsageSettings } from '../src/host/settings.ts';
+import { legacySettingsPatch, UsageSettingsSchema } from '../src/host/settings.ts';
 import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
 import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
 import {
@@ -41,7 +42,6 @@ import {
   attachUsageSettings,
   clearLegacySettings,
   detachUsageSettings,
-  diffFromDefaults,
   migrateLegacySettings,
   readLegacySettings,
   settingOps,
@@ -80,6 +80,7 @@ import {
   usageTotal,
 } from '../src/client/stats.ts';
 import {
+  diffFromDefaults,
   DEEPSEEK_FETCH_DEFAULT_MINUTES,
   DEEPSEEK_FETCH_MIN_MINUTES,
   DAY_MS,
@@ -1240,7 +1241,7 @@ function fakeScope(initial) {
   };
   const listeners = new Set();
   const calls = [];
-  // 快照对象引用稳定（与真实 settingsScope 的 store 一致）：状态变更时才换新对象。
+  // 快照对象引用稳定（与真实 ConfigForm 的 store 一致）：状态变更时才换新对象。
   let snapshot = { ...state };
   const publish = () => {
     snapshot = { ...state };
@@ -1498,39 +1499,51 @@ describe('偏好设置：旧 localStorage 迁移', () => {
   });
 });
 
-// ---- 服务端偏好设置：命名空间注册与降级 ----
+// ---- 服务端偏好设置：条目 schema 与浏览器端命名空间对齐 ----
 
-describe('偏好设置：服务端命名空间注册', () => {
-  it('注册 usage-stats 命名空间与 schema，schema 解析值等于共享默认值', () => {
-    const injected = [];
-    const registered = [];
-    const ctx = {
-      inject: (deps, callback) => {
-        injected.push(deps);
-        return callback({ settings: { register: (...args) => { registered.push(args); } } });
-      },
-    };
-    registerUsageSettings(ctx);
-    assert.deepEqual(injected, [['settings']]);
-    assert.equal(registered.length, 1);
-    assert.equal(registered[0][0], USAGE_SETTINGS_NAMESPACE);
-    assert.equal(registered[0][1], UsageSettingsSchema);
-    // schema 默认值与 utils.ts 的 USAGE_SETTINGS_DEFAULTS 同源：两处漂移即失败。
-    assert.deepEqual(UsageSettingsSchema({}), USAGE_SETTINGS_DEFAULTS);
-    assert.deepEqual(UsageSettingsSchema({ showZaiInSidebar: false }), { ...USAGE_SETTINGS_DEFAULTS, showZaiInSidebar: false });
+describe('偏好设置：服务端条目 schema', () => {
+  it('字段全 volatile、默认值等于共享默认值（设置服务只投影 volatile 字段成表单）', () => {
+    const resolved = UsageSettingsSchema({});
+    // 逐字段取出引用背后的取值：全 volatile 才有表单，也只有 volatile 路径接受写入。
+    const plain = {};
+    for (const [field, value] of Object.entries(resolved)) {
+      assert.equal(typeof value.get, 'function', `${field} 必须标 .volatile()`);
+      plain[field] = value.get();
+    }
+    assert.deepEqual(plain, USAGE_SETTINGS_DEFAULTS);
+    // 字段名一一对应：schema 少一个字段则该偏好永远取默认值，多一个字段则多出一份没人读的配置。
+    assert.deepEqual(Object.keys(resolved).sort(), Object.keys(USAGE_SETTINGS_DEFAULTS).sort());
+    // 单字段覆盖只影响该字段，其余仍是默认值。
+    const overridden = UsageSettingsSchema({ showZaiInSidebar: false });
+    assert.equal(overridden.showZaiInSidebar.get(), false);
+    assert.equal(overridden.goFetchMinutes.get(), USAGE_SETTINGS_DEFAULTS.goFetchMinutes);
   });
 
-  it('注册失败只降级偏好，不向调用方抛错（统计主职责不受影响）', () => {
-    const ctx = { inject: (_deps, callback) => callback({ settings: { register: () => { throw new Error('namespace already registered'); } } }) };
-    const realWarn = console.warn;
-    const warnings = [];
-    console.warn = (...args) => { warnings.push(args); };
-    try {
-      assert.doesNotThrow(() => { registerUsageSettings(ctx); });
-    } finally {
-      console.warn = realWarn;
-    }
-    assert.equal(warnings.length, 1);
-    assert.match(String(warnings[0][0]), /偏好设置命名空间注册失败/);
+  it('旧设置文档段转补丁：归一化、丢掉等于默认值的项、忽略未知字段', () => {
+    // 段缺失或不是普通对象：没有可回收内容。
+    assert.deepEqual(legacySettingsPatch(undefined), {});
+    assert.deepEqual(legacySettingsPatch(null), {});
+    assert.deepEqual(legacySettingsPatch([]), {});
+    assert.deepEqual(legacySettingsPatch('usage-stats'), {});
+    // 与默认值相同的字段不写：旧文档把用户改过的字段按原样存着，等于默认值就等于没改。
+    assert.deepEqual(legacySettingsPatch({ goEnabled: true, deepseekEnabled: true }), {});
+    // 坏值按归一化口径处理：非布尔回退默认（丢弃），越界间隔夹到下限，未知字段忽略。
+    assert.deepEqual(
+      legacySettingsPatch({ zaiEnabled: false, showZaiInSidebar: 'yes', zaiFetchMinutes: 0, 不认识: 1 }),
+      { zaiEnabled: false, zaiFetchMinutes: ZAI_FETCH_MIN_MINUTES },
+    );
+    // 规则表整体回收（数组每次归一化都是新对象，必须按值比较）。
+    const rules = [{ fromProvider: 'a', fromModel: 'b', toProvider: 'c', toModel: 'd' }];
+    assert.deepEqual(legacySettingsPatch({ modelRedirects: rules }), { modelRedirects: rules });
+  });
+
+  it('条目 id 与浏览器端常量同源：cordis.patch.yml 的 insert id 必须能被 ctx.configForms 取到', () => {
+    // 浏览器端按 USAGE_SETTINGS_NAMESPACE 取设置表单，profile 条目 id 是唯一的对接点；
+    // 两侧漂移时偏好会静默退化为仅当前页面生效，故直接读补丁文件断言。
+    const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
+    const entry = patch.match(/^\s*- id: (\S+)/m);
+    assert.ok(entry, 'cordis.patch.yml 必须声明插件条目 id');
+    assert.equal(entry[1], USAGE_SETTINGS_NAMESPACE);
+    assert.match(patch, /^\s*name: '@xfqz86\/dsh-usage-stats'$/m);
   });
 });

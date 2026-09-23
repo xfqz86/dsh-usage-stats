@@ -95,7 +95,7 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 
 ## 设置
 
-设置位于详情面板的设置 Tab，保存在 DSH 的配置文件 `~/.dsh/settings.yaml`（`$DSH_HOME` 改变时随之变化）的 `usage-stats` 段里，换浏览器、换设备登录同一台 DSH 都用同一份偏好。按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度、模型统计重定向、会话自上而下排列。
+设置位于详情面板的设置 Tab，保存在 DSH 该 profile 的配置文件 `~/.dsh/profiles/<profile>/cordis.patch.yml`（`$DSH_HOME` 改变时随之变化）的 `usage-stats` 条目里，换浏览器、换设备登录同一台 DSH 都用同一份偏好。按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度、模型统计重定向、会话自上而下排列。
 
 - 启用 DeepSeek 余额监控与侧边栏展示，关闭监控则停止轮询，面板与侧边栏均不展示
 - 启用 OpenCode Go 额度监控与侧边栏展示，仅控制芯片，面板内详情仍可见
@@ -106,11 +106,13 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 配置文件里只写改过的字段，例如把 Go 额度抓取间隔改成 10 分钟：
 
 ```yaml
-usage-stats:
-  goFetchMinutes: 10
+- id: usage-stats
+  name: '@xfqz86/dsh-usage-stats'
+  config:
+    goFetchMinutes: 10
 ```
 
-旧版本把设置存在浏览器本地存储里，升级后首次打开会把旧设置自动写进配置文件，之后不再使用浏览器存储（服务端设置不可用时旧值会保留，不会丢）。
+旧版本把设置存在浏览器本地存储里，升级后首次打开会把旧设置自动写进配置文件，之后不再使用浏览器存储（服务端设置不可用时旧值会保留，不会丢）。更早的版本把设置写在 `~/.dsh/settings.yaml`，升级后由 DSH 基座一次性导入 profile 配置，无需手工搬运；如果升级发生在插件还没适配新基座设置接口的那段时间（本插件的 0.4.4 及更早），基座那次导入会失败且不再重试，升级到本次版本后插件会从遗留的 `~/.dsh/settings.yaml.imported` 自动把「usage-stats」段捡回来（`goEnabled`、`deepseekEnabled`、`showZaiInSidebar` 这类与默认值相同的字段不重复落盘）。这一步**只做一次**：捡回后在 `~/.dsh/storages/dsh-usage-stats/` 留下标记，之后重启不会再迁移，你后来改的设置也不会被旧值覆盖。
 
 设置 Tab 底部为账本操作（清零与重建），需二次确认；扫描历史会话期间（面板顶部显示“扫描中…”）两项置灰不可点，等扫描结束自动恢复。
 

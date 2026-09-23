@@ -1,9 +1,9 @@
 /**
  * 偏好设置的 React hook（浏览器端）。
  *
- * 取值来自服务端设置文档（经 settingsScope 的作用域，见 settings.ts），
- * 用 useSyncExternalStore 订阅作用域快照：作用域未就绪时先渲染默认值，
- * 服务端取值到达后自动刷新；写入走 updateUsageSettings 落服务端设置文档，
+ * 取值来自服务端 profile 配置文档（经设置表单，见 settings.ts），
+ * 用 useSyncExternalStore 订阅表单快照：表单未就绪时先渲染默认值，
+ * 服务端取值到达后自动刷新；写入走 updateUsageSettings 落配置文档，
  * 于是刷新页面、换浏览器、换机器都保持同一份偏好。
  *
  * 返回 [settings, update]：update 接受 Partial 局部合并并做夹取后写回。

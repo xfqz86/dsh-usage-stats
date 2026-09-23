@@ -2,9 +2,9 @@
  * 设置 Tab：偏好设置，含 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度监控各三项，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
  * 独立成文件，一个组件一个文件。
  *
- * 偏好设置持久化在服务端用户设置文档（`$DSH_HOME/settings.yaml` 的 `usage-stats` 段，
- * 经 ctx.settingsScope 的作用域读写，见 ../settings.ts 与 ../useUsageSettings.ts），
- * 换浏览器、换设备共用同一份；本页顶部按作用域状态提示设置存放位置与是否可写。
+ * 偏好设置持久化在服务端 profile 配置文档（`usage-stats` 条目，经 ctx.configForms 的
+ * 设置表单读写，见 ../settings.ts 与 ../useUsageSettings.ts），
+ * 换浏览器、换设备共用同一份；本页顶部按表单状态提示设置存放位置与是否可写。
  * 分组按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度自上而下排列：
  *   DeepSeek 余额三项：
  *     1. 启用 DeepSeek 余额监控，deepseekEnabled，关闭后不再轮询官方余额接口；
@@ -32,11 +32,11 @@
  */
 
 import {
-  IconAgentPresetOutline16,
-  IconArchiveOutline20,
-  IconChevronDownOutline14,
-  IconDataOutline16,
-  IconUserOutline16,
+  IconAgentPresetOutlineRegular,
+  IconArchiveOutlineRegular,
+  IconChevronDownOutlineRegular,
+  IconDataOutlineRegular,
+  IconUserOutlineRegular,
   RiskConfirmation,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useState } from 'react';
@@ -117,7 +117,7 @@ export function SettingsTab({
       <div className={css.prefGroup}>
         <div className={css.prefGroupHead}>
           <span className={`${css.prefGroupIcon} ${css.prefGroupIconDeepSeek}`} aria-hidden>
-            <IconDataOutline16 size={14} />
+            <IconDataOutlineRegular size={14} />
           </span>
           <span className={css.prefGroupTitle}>{t('deepseek.title')}</span>
           <span className={css.prefGroupCount}>3</span>
@@ -172,7 +172,7 @@ export function SettingsTab({
       <div className={css.prefGroup}>
         <div className={css.prefGroupHead}>
           <span className={css.prefGroupIcon} aria-hidden>
-            <IconArchiveOutline20 size={14} />
+            <IconArchiveOutlineRegular size={14} />
           </span>
           <span className={css.prefGroupTitle}>{t('go.title')}</span>
           <span className={css.prefGroupCount}>3</span>
@@ -227,7 +227,7 @@ export function SettingsTab({
       <div className={css.prefGroup}>
         <div className={css.prefGroupHead}>
           <span className={`${css.prefGroupIcon} ${css.prefGroupIconDeepSeek}`} aria-hidden>
-            <IconDataOutline16 size={14} />
+            <IconDataOutlineRegular size={14} />
           </span>
           <span className={css.prefGroupTitle}>{t('zai.title')}</span>
           <span className={css.prefGroupCount}>3</span>
@@ -282,7 +282,7 @@ export function SettingsTab({
       <div className={css.prefGroup}>
         <div className={css.prefGroupHead}>
           <span className={css.prefGroupIcon} aria-hidden>
-            <IconAgentPresetOutline16 size={14} />
+            <IconAgentPresetOutlineRegular size={14} />
           </span>
           <span className={css.prefGroupTitle}>{t('settings.modelRedirects')}</span>
           <span className={css.prefGroupCount}>{settings.modelRedirects.length}</span>
@@ -299,7 +299,7 @@ export function SettingsTab({
       <div className={css.prefGroup}>
         <div className={css.prefGroupHead}>
           <span className={css.prefGroupIcon} aria-hidden>
-            <IconUserOutline16 size={14} />
+            <IconUserOutlineRegular size={14} />
           </span>
           <span className={css.prefGroupTitle}>{t('settings.sessionGroup')}</span>
           <span className={css.prefGroupCount}>1</span>
@@ -326,7 +326,7 @@ export function SettingsTab({
           onClick={() => setLedgerOpen((v) => !v)}
         >
           <span className={shared.sectionLabel}>{t('settings.ledgerOps')}</span>
-          <IconChevronDownOutline14 className={ledgerOpen ? `${css.ledgerChevron} ${css.ledgerChevronOpen}` : css.ledgerChevron} size={14} />
+          <IconChevronDownOutlineRegular className={ledgerOpen ? `${css.ledgerChevron} ${css.ledgerChevronOpen}` : css.ledgerChevron} size={14} />
         </button>
         {ledgerOpen && (
           <div className={css.ledgerContent}>

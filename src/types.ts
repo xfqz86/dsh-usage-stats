@@ -205,9 +205,9 @@ export interface ModelRedirect {
 
 /**
  * 插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控各三项，
- * 会话标题 session-id 徽标开关，加模型统计重定向规则表；字段与 `usage-stats`
- * 设置命名空间（服务端 schemastery schema）一一对应。host 侧 schema 用它做泛型参数，
- * client 侧经 settingsScope 取得同一形状。
+ * 会话标题 session-id 徽标开关，加模型统计重定向规则表；字段与 host 侧
+ * `usage-stats` 条目的 schemastery schema（src/host/settings.ts）一一对应，
+ * client 侧经 ctx.configForms 取得同一形状的解析值。
  */
 export interface UsageSettings {
   /** 是否启用 OpenCode Go 额度监控，关闭后不再请求官方额度接口。 */

@@ -18,7 +18,7 @@
  * 同一来源配了多条时只有最上面一条生效，重复行同样给提示。
  */
 
-import { IconChevronRightOutline14, IconPlusOutline16, IconTrashOutline16 } from '@deepseek-ai/dsh-client-ui-primitives';
+import { IconChevronRightOutlineRegular, IconPlusOutlineRegular, IconTrashOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { MODEL_REDIRECT_MAX_RULES, isCompleteRedirect, normalizeModelRedirects } from '../../utils.ts';
@@ -199,7 +199,7 @@ export function ModelRedirectEditor({
                   {fromModels.map((model) => <option key={model} value={model} />)}
                 </datalist>
               </span>
-              <IconChevronRightOutline14 className={css.ruleArrow} size={14} />
+              <IconChevronRightOutlineRegular className={css.ruleArrow} size={14} />
               <span className={css.ruleSide}>
                 <span className={css.ruleTag}>{t('settings.redirectTo')}</span>
                 {renderField(index, 'to', 'provider', providerListId)}
@@ -215,7 +215,7 @@ export function ModelRedirectEditor({
                 aria-label={t('settings.redirectRemove')}
                 title={t('settings.redirectRemove')}
               >
-                <IconTrashOutline16 size={14} />
+                <IconTrashOutlineRegular size={14} />
               </button>
             </div>
             {(duplicates[index] || !isCompleteRedirect(rule)) && (
@@ -234,7 +234,7 @@ export function ModelRedirectEditor({
           onClick={add}
           disabled={draft.length >= MODEL_REDIRECT_MAX_RULES}
         >
-          <IconPlusOutline16 size={14} />
+          <IconPlusOutlineRegular size={14} />
           <span>{t('settings.modelRedirectsAdd')}</span>
         </button>
         <span className={css.ruleHint}>{t('settings.modelRedirectsMax', { max: MODEL_REDIRECT_MAX_RULES })}</span>

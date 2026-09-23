@@ -16,12 +16,12 @@
  */
 
 import {
-  IconAgentPresetOutline16,
-  IconCloseOutline16,
-  IconDataOutline16,
-  IconQueueOutline14,
-  IconRightUpOutline16,
-  IconSettingsOutline16,
+  IconAgentPresetOutlineRegular,
+  IconCloseOutlineRegular,
+  IconDataOutlineRegular,
+  IconQueueOutlineRegular,
+  IconRightUpOutlineRegular,
+  IconSettingsOutlineRegular,
   Modal,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useState, useMemo, type ComponentType } from 'react';
@@ -79,11 +79,11 @@ type TabKey = 'overview' | 'dates' | 'sessions' | 'models' | 'settings';
 
 /** Tab 定义：键 + 文案键 + 图标组件。 */
 const TABS: { key: TabKey; labelKey: UsageStatsKey; Icon: ComponentType<IconProps> }[] = [
-  { key: 'overview', labelKey: 'tab.overview', Icon: IconDataOutline16 },
-  { key: 'dates', labelKey: 'tab.dates', Icon: IconRightUpOutline16 },
-  { key: 'sessions', labelKey: 'tab.sessions', Icon: IconQueueOutline14 },
-  { key: 'models', labelKey: 'tab.models', Icon: IconAgentPresetOutline16 },
-  { key: 'settings', labelKey: 'tab.settings', Icon: IconSettingsOutline16 },
+  { key: 'overview', labelKey: 'tab.overview', Icon: IconDataOutlineRegular },
+  { key: 'dates', labelKey: 'tab.dates', Icon: IconRightUpOutlineRegular },
+  { key: 'sessions', labelKey: 'tab.sessions', Icon: IconQueueOutlineRegular },
+  { key: 'models', labelKey: 'tab.models', Icon: IconAgentPresetOutlineRegular },
+  { key: 'settings', labelKey: 'tab.settings', Icon: IconSettingsOutlineRegular },
 ];
 
 /** 根据当前激活的 Tab 返回对应的 body 额外类名，避免嵌套三元。 */
@@ -198,7 +198,7 @@ export function UsageStatsPanel({
             onClick={onClose}
             aria-label={t('panel.close')}
           >
-            <IconCloseOutline16 size={14} />
+            <IconCloseOutlineRegular size={14} />
           </button>
         </span>
       </header>

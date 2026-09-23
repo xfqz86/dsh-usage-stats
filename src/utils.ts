@@ -104,11 +104,14 @@ export function cacheTotal(b: { cacheRead?: number | null; cacheWrite?: number |
   return (b.cacheRead || 0) + (b.cacheWrite || 0);
 }
 
-// ---- 插件偏好设置：设置命名空间名、默认值、夹取与字段级归一化 ----
-// host 侧按这些常量建 schemastery schema（src/host/settings.ts），client 侧
-// 用它做取值兜底与写入夹取，两侧共用同一份数值，避免默认值分叉。
+// ---- 插件偏好设置：插件条目 id、默认值、夹取与字段级归一化 ----
+// host 侧按这些常量建 schemastery schema（src/host/settings.ts 的条目 Config），
+// client 侧用它做取值兜底与写入夹取，两侧共用同一份数值，避免默认值分叉。
 
-/** 设置命名空间名，服务端 ctx.settings 注册键，即 settings.yaml 里的一级键。 */
+/**
+ * 插件条目 id：cordis.patch.yml 插入的 Loader 条目 id，也是浏览器端
+ * ctx.configForms 取设置表单的命名空间键，两侧必须是同一个值。
+ */
 export const USAGE_SETTINGS_NAMESPACE = 'usage-stats';
 /** OpenCode Go 额度抓取间隔下限，单位分钟：官方额度接口不短于该间隔打点。 */
 export const GO_FETCH_MIN_MINUTES = 3;
@@ -125,7 +128,7 @@ export const ZAI_FETCH_DEFAULT_MINUTES = 5;
 /** 模型统计重定向规则条数上限：约束浏览器端归并成本与偏好文档体积。 */
 export const MODEL_REDIRECT_MAX_RULES = 50;
 
-/** 偏好默认值：设置命名空间未覆盖的字段、取值尚未到达浏览器时都用它。 */
+/** 偏好默认值：插件条目未覆盖的字段、取值尚未到达浏览器时都用它。 */
 export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
   goEnabled: true,
   showGoInSidebar: true,
@@ -139,6 +142,29 @@ export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
   showSessionId: true,
   modelRedirects: [],
 };
+
+/**
+ * 偏好字段比较：数组按 JSON 比——每次归一化都会新建数组，引用比较永远判为不同，
+ * 迁移时会把空规则表当作用户改动写进配置文档。
+ */
+export function settingsValueEqual(a: UsageSettings[keyof UsageSettings], b: UsageSettings[keyof UsageSettings]): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b);
+  return a === b;
+}
+
+/**
+ * 取出与默认值不同的字段：迁移只写这些字段，配置文档保持最小。
+ * 浏览器端旧 localStorage 迁移与服务端旧设置文档回收共用同一份判据。
+ */
+export function diffFromDefaults(settings: UsageSettings): Partial<UsageSettings> {
+  const patch: Partial<UsageSettings> = {};
+  for (const field of Object.keys(USAGE_SETTINGS_DEFAULTS) as (keyof UsageSettings)[]) {
+    if (!settingsValueEqual(settings[field], USAGE_SETTINGS_DEFAULTS[field])) {
+      (patch as Record<string, unknown>)[field] = settings[field];
+    }
+  }
+  return patch;
+}
 
 /** 把任意数值夹成合法抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
 export function clampGoFetchMinutes(value: number): number {
@@ -162,7 +188,7 @@ export function clampZaiFetchMinutes(value: number): number {
  * 模型统计重定向规则归一化：只收数组，元素必须是对象，四个字段取字符串并去首尾空白，
  * 非字符串字段记空串；四项全空的条目是编辑器里的空行，直接丢弃；半填的保留
  * （界面继续填，归并时按 isCompleteRedirect 跳过）；超过上限截断。
- * 归一化对象是设置命名空间的解析值，手改 settings.yaml 或旧版本残留都可能给出坏形状。
+ * 归一化对象是插件条目的解析值，手改 profile 配置文档或旧版本残留都可能给出坏形状。
  */
 export function normalizeModelRedirects(raw: unknown): ModelRedirect[] {
   if (!Array.isArray(raw)) return [];
@@ -192,8 +218,8 @@ export function isCompleteRedirect(rule: ModelRedirect): boolean {
 
 /**
  * 字段级归一化：布尔字段只收布尔，间隔字段只收有限数并夹取，其余回退默认值。
- * 归一化对象为设置命名空间的解析值——写入方（浏览器端 settingsScope）与服务端
- * schema 都保证字段齐备，但手改 settings.yaml 或旧版本残留仍可能给出坏值。
+ * 归一化对象为插件条目的解析值——写入方（浏览器端 ConfigForm）与服务端
+ * schema 都保证字段齐备，但手改 profile 配置文档或旧版本残留仍可能给出坏值。
  */
 export function normalizeUsageSettings(raw: Partial<UsageSettings> | null | undefined): UsageSettings {
   const src = raw ?? {};
