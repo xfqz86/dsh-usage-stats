@@ -42,7 +42,8 @@ dsh-usage-stats/
 │   │   ├── v0.4.2.md
 │   │   ├── v0.4.3.md
 │   │   ├── v0.4.4.md
-│   │   └── v0.4.5.md
+│   │   ├── v0.4.5.md
+│   │   └── v0.4.6.md
 │   ├── screenshot/
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png

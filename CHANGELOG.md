@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-09-24
+
 ### 修复
 
 - **新版 dsh 上插件不再被跳过**：新版 dsh 收紧了插件检查，旧声明会被直接跳过，装上也看不到用量；现在已按新版要求适配，安装后正常加载
@@ -144,7 +146,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.2...v0.4.3
