@@ -112,8 +112,6 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
     goFetchMinutes: 10
 ```
 
-旧版本把设置存在浏览器本地存储里，升级后首次打开会把旧设置自动写进配置文件，之后不再使用浏览器存储（服务端设置不可用时旧值会保留，不会丢）。更早的版本把设置写在 `~/.dsh/settings.yaml`，升级后由 DSH 基座一次性导入 profile 配置，无需手工搬运；如果升级发生在插件还没适配新基座设置接口的那段时间（本插件的 0.4.4 及更早），基座那次导入会失败且不再重试，升级到本次版本后插件会从遗留的 `~/.dsh/settings.yaml.imported` 自动把「usage-stats」段捡回来（`goEnabled`、`deepseekEnabled`、`showZaiInSidebar` 这类与默认值相同的字段不重复落盘）。这一步**只做一次**：捡回后在 `~/.dsh/storages/dsh-usage-stats/` 留下标记，之后重启不会再迁移，你后来改的设置也不会被旧值覆盖。
-
 设置 Tab 底部为账本操作（清零与重建），需二次确认；扫描历史会话期间（面板顶部显示“扫描中…”）两项置灰不可点，等扫描结束自动恢复。
 
 需展示额度时，在 DSH 凭据中心配置对应 Key：

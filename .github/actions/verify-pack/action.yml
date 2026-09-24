@@ -13,7 +13,7 @@ inputs:
   allow:
     description: Comma-separated allowlist for package.json
     required: false
-    default: "name,version,description,type,main,exports,files,engines,dsh,license,repository"
+    default: "name,version,description,type,main,exports,files,engines,dsh,license,repository,dependencies,peerDependencies"
 
 runs:
   using: node24

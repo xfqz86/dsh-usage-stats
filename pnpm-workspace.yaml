@@ -22,6 +22,8 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-session-title@0.1.7-alpha.1'
   - '@deepseek-ai/dsh-timeout@0.1.7-alpha.1'
   - '@deepseek-ai/dsh-typert-protocol@0.1.7-alpha.1'
+  - '@deepseek-ai/dsh-credentials@0.1.7-rc.1'
+  - '@deepseek-ai/dsh-typert-protocol@0.1.7-rc.1'
   - '@deepseek-ai/schemastery@3.18.3'
   - '@deepseek-ai/dsh-agent-default-model@0.1.7-alpha.1'
   - '@deepseek-ai/dsh-agent-presets@0.1.7-alpha.1'
