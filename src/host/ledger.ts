@@ -3,7 +3,8 @@
  *
  * 不依赖 harness 的 storage 家族：直接用 node:sqlite 的同步 API
  * DatabaseSync，Node ≥22 内置，运行时仅打印一条 experimental 警告。
- * 数据落在 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`：
+ * 数据落在 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`
+ * （经基座路径能力 dsh-home-paths 解析）：
  *
  *   - `events` 表：一行一条用量事件，PRIMARY KEY 为 t、session_id、seq 天然
  *     幂等，同一条事件重复写入收敛，重开账本时每行只折一次，seq=-1 的未知
@@ -23,10 +24,11 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths';
+
 import { splitModelKey, startOfDay  } from '../utils.ts';
 
 import { modelKeyOf } from './agg.ts';
-import { getDshHome } from './logs.ts';
 
 import type { MeteredEvent } from './agg.ts';
 import type { UsageStore } from './store.ts';
@@ -41,9 +43,9 @@ const LEDGER_DIR_NAME = 'dsh-usage-stats';
 /** 账本 sqlite 文件名。 */
 const DB_FILE_NAME = 'ledger.sqlite';
 
-/** 本插件的存储目录 `$DSH_HOME/storages/dsh-usage-stats/`：账本与插件自有落盘状态都放这里。 */
+/** 本插件的存储目录 `$DSH_HOME/storages/dsh-usage-stats/`：账本与插件自有落盘状态都放这里（经基座路径能力解析）。 */
 export function storageDir(): string {
-  return join(getDshHome(), 'storages', LEDGER_DIR_NAME);
+  return dshHomePath('storages', LEDGER_DIR_NAME);
 }
 
 /** 账本数据库文件绝对路径，默认位于 $DSH_HOME/storages/dsh-usage-stats/。 */

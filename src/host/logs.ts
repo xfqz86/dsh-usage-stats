@@ -3,22 +3,26 @@
  * （sessionQuery.readSession / persistence.open+read，见 scan.ts），读取失败或
  * 返回空事件时由扫描链路用本模块定位到的原始文件经 rawlog 兜底解码；
  * 本模块只负责定位每个会话目录下的最高代次日志、解析文本行。
+ *
+ * 数据主目录与会话根目录经基座路径能力解析（dsh-home-paths），不直接读环境变量。
  */
 import { readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
+
+import { dshHomePath, resolveDshHome } from '@deepseek-ai/dsh-home-paths';
 
 import { parseSessionLogName } from './rawlog.ts';
 
 import type { SessionLogCompression } from './rawlog.ts';
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session';
 
-/** 读取当前 DSH 数据主目录（每次调用重新读取环境变量，避免模块加载时环境未就绪导致路径陈旧）。 */
+/** 读取当前 DSH 数据主目录（基座路径能力：显式配置 > DSH_HOME > ~/.dsh；每次调用重新解析，避免模块加载时环境未就绪导致路径陈旧）。 */
 export function getDshHome(): string {
-  return process.env.DSH_HOME || join(process.env.HOME || '', '.dsh');
+  return resolveDshHome();
 }
-/** 动态获取会话根目录（基于 getDshHome，不固化模块级路径）。 */
+/** 动态获取会话根目录（基于基座解析，不固化模块级路径）。 */
 export function getSessionsRoot(): string {
-  return join(getDshHome(), 'sessions');
+  return dshHomePath('sessions');
 }
 
 /** 持久化的会话种子记录：会话头（SessionHeader）序列化后带

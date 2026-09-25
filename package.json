@@ -61,6 +61,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@deepseek-ai/dsh-home-paths": "0.1.7-alpha.1",
     "@deepseek-ai/schemastery": "3.18.3",
     "yaml": "^2.9.0"
   },

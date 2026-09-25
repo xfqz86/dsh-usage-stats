@@ -1,7 +1,8 @@
 /**
  * tsdown 构建配置：
  * - lib/index.js —— 服务端 Host，Node ESM。运行时只 import node 内置
- *   模块含 node:sqlite + 本地代码；DSH 服务 webServer / sessionQuery /
+ *   模块含 node:sqlite + 本地代码 + dependencies 随包安装的运行时库；
+ *   DSH 服务 webServer / sessionQuery /
  *   sessionPersistence 由 cordis 注入，从不直接 import。
  * - lib/client.js —— 浏览器端 bundle，CJS 闭包工厂，以包名 id
  *   `@xfqz86/dsh-usage-stats` 通过 window.__ModuleLoader__.load({ id, factory })
