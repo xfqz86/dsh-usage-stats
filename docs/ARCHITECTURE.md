@@ -11,8 +11,8 @@
 - **账本（Ledger，`ledger.ts`）唯一事实来源，聚合（UsageStore，`store.ts`）只读派生**：
   聚合任何时候都能从账本事件流重建，不允许反向写入。
 - 存储直接 `node:sqlite:DatabaseSync`（Node≥22 同步 API），落盘
-  `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`（`DSH_HOME` 默认 `~/.dsh`，
-  `logs.ts` 解析；测试注入 `DSH_HOME` 隔离）。同库同步读写、独立提交，即写即持久。
+  `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`（经基座路径能力解析，
+  默认 `~/.dsh`；测试注入 `DSH_HOME` 隔离）。同库同步读写、独立提交，即写即持久。
 
 ## 2. 账本九表（`ledger.ts`）
 
