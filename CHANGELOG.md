@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-09-30
+
+### 修复
+
+- **一个版本同时兼容新老 dsh**：新版 dsh 上不再报「与当前 dsh 版本不兼容」装不上，老版 dsh 照常安装（无功能变化）
+
 ### 清理
 
 - 数据目录解析改用基座公共能力，与 dsh 保持一致（无功能变化）
@@ -150,7 +156,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.7...HEAD
+[0.4.7]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.3...v0.4.4
