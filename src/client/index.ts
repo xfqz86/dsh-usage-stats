@@ -72,10 +72,13 @@ export async function apply(ctx: ClientContext): Promise<void> {
     order: 1,
   }, (props) => createElement(UsageStatsFooter, props)));
 
+  // order 取 -20 而不是与基座同值：列表插槽按 order 升序、同值保持注册顺序，
+  // 基座的「用应用打开」entry（open-in-app，order -10）先于本插件注册，同值会把
+  // 徽标挤到它右边；徽标要贴住会话标题、排在该插槽最左，必须落在 -10 之前。
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
     name: 'conversation.session.header.utilities',
     id: 'dsh-usage-stats-session-id',
     locale: NS,
-    order: -10,
+    order: -20,
   }, (props) => createElement(SessionIdBadge, props)));
 }
