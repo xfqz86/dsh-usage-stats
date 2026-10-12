@@ -10,6 +10,9 @@
  * USAGE_SETTINGS_DEFAULTS。写入走路径操作，只落显式给出的字段：标量按字段写，
  * 模型统计重定向规则表整表写入（一条规则一个对象，不做数组下标级增删，避免并发写时错位）。
  *
+ * 配置串导入走整份覆盖（replaceUsageSettings）：与默认值相等的字段 unset 回到
+ * schema 默认值，其余逐字段 set，一次 mutate 提交。
+ *
  * 旧版本把偏好存在 localStorage，本模块保留一次性迁移：表单落定为就绪、可写、
  * 用户片段尚不存在时，把与默认值不同的旧字段写进配置文档并删除旧键；服务端设置
  * 缺席或只读时保留旧键（没有可靠落点，删掉等于丢设置）。
@@ -23,6 +26,7 @@ import {
   clampZaiFetchMinutes,
   diffFromDefaults,
   normalizeUsageSettings,
+  settingsValueEqual,
   USAGE_SETTINGS_DEFAULTS,
 } from '../utils.ts';
 
@@ -129,6 +133,23 @@ function settingValueOf(field: keyof UsageSettings, value: UsageSettings[keyof U
 }
 
 /**
+ * 整份偏好覆盖的路径操作：与默认值相等的字段 unset（记录里不留该字段、继续跟随
+ * schema 默认值），不相等的字段 set（间隔沿用既有夹取，规则表整表写入）。
+ * 字段序取 USAGE_SETTINGS_DEFAULTS 的声明序，每次覆盖提交的 ops 顺序一致。
+ */
+export function replacementOps(settings: UsageSettings): SettingsPathOpView[] {
+  const ops: SettingsPathOpView[] = [];
+  for (const field of Object.keys(USAGE_SETTINGS_DEFAULTS) as (keyof UsageSettings)[]) {
+    if (settingsValueEqual(settings[field], USAGE_SETTINGS_DEFAULTS[field])) {
+      ops.push({ op: 'unset', path: [field] });
+    } else {
+      ops.push({ op: 'set', path: [field], value: settingValueOf(field, settings[field]) });
+    }
+  }
+  return ops;
+}
+
+/**
  * 等表单从 loading 落到确定状态（ready / unavailable）：页面刚打开时 describe
  * 还没回来，此时不能判断配置文档里有没有该条目，迁移必须等这一拍。
  * @param bound - 已绑定的设置表单。
@@ -212,18 +233,32 @@ export function subscribeUsageSettings(listener: () => void): () => void {
 }
 
 /**
- * 写入偏好：局部合并语义，只落显式给出的字段（未给出的字段继续跟随默认值）。
- *
- * 表单已落定为不可用（条目未挂载、连接非本机回环）或明确只读时直接返回，
- * 不发注定被拒的请求；仍在加载中则照发——服务端可能接受，表单自己会以最新
- * 一次读取兜底。写入失败不打断界面：表单会以最新一次读取恢复显示值。
+ * 公共提交：无操作或无表单时不发；表单已落定为不可用（条目未挂载、连接非本机
+ * 回环）或明确只读时直接返回，不发注定被拒的请求；仍在加载中则照发——服务端
+ * 可能接受，表单自己会以最新一次读取兜底。写入失败不打断界面：表单会以最新
+ * 一次读取恢复显示值。
  */
-export function updateUsageSettings(patch: Partial<UsageSettings>): void {
-  const ops = settingOps(patch);
+function commitOps(ops: SettingsPathOpView[]): void {
   if (ops.length === 0 || scope === undefined) return;
   const { status, writable } = scope.getSnapshot();
   if (status === 'unavailable' || (status === 'ready' && !writable)) return;
   void scope.mutate(ops).catch((error: unknown) => {
     console.warn('[usage-stats] 偏好写入失败，界面回退到服务端设置', error);
   });
+}
+
+/**
+ * 写入偏好：局部合并语义，只落显式给出的字段（未给出的字段继续跟随默认值）。
+ * 提交守卫与失败处理见 commitOps。
+ */
+export function updateUsageSettings(patch: Partial<UsageSettings>): void {
+  commitOps(settingOps(patch));
+}
+
+/**
+ * 整份覆盖偏好（配置串导入）：与默认值相等的字段回默认值，其余按给定取值写入。
+ * 覆盖范围由界面在调用前向用户确认；提交守卫与失败处理见 commitOps。
+ */
+export function replaceUsageSettings(settings: UsageSettings): void {
+  commitOps(replacementOps(settings));
 }

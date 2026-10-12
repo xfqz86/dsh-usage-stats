@@ -25,6 +25,7 @@ import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
 import { HintCard } from '../components/HintCard.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
+import { replaceUsageSettings } from '../settings.ts';
 import { avgPerCall, dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
 import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../useQuota.ts';
 import { useSnapshot } from '../useSnapshot.ts';
@@ -662,6 +663,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
         zai={zai}
         settings={settings}
         onUpdateSettings={updateSettings}
+        onReplaceSettings={replaceUsageSettings}
         onClose={() => setOpen(false)}
         onRefresh={() => { refreshSnapshot(); refreshQuota(); refreshDeepSeek(); refreshZai(); }}
         onRefreshGo={refreshQuota}

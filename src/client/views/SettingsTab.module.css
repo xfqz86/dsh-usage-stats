@@ -1,7 +1,8 @@
 /* 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、
-   抓取间隔数字输入、可折叠账本操作与底部页脚。颜色全部使用设计 token
+   抓取间隔数字输入、可折叠分区（账本操作、配置迁移）与底部页脚。颜色全部使用设计 token
    （token 名以 test/styles.mjs 对照 harness 主题校验，不得自造）。 */
-/* .section* / .goHint 等基元见 UsageStatsCommon.module.css。 */
+/* .section* / .goHint 等基元见 UsageStatsCommon.module.css；
+   折叠内的配置迁移样式见 ConfigTransfer.module.css。 */
 
 /* ---- 重建账本操作按钮 ---- */
 .refreshBtn {
@@ -189,14 +190,15 @@
   white-space: nowrap;
 }
 
-/* ---- 可折叠账本操作 ---- */
-.ledgerSection {
+/* ---- 可折叠分区：账本操作与配置迁移两块共用同一套外观，
+   折叠头为整行按钮（分区标签居左、雪佛龙居右），内容纵向堆叠。 ---- */
+.foldSection {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.ledgerHeader {
+.foldHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -207,21 +209,21 @@
   cursor: pointer;
 }
 
-.ledgerHeader:hover {
+.foldHeader:hover {
   opacity: 0.85;
 }
 
-.ledgerChevron {
+.foldChevron {
   flex: none;
   color: var(--dsw-alias-label-tertiary);
   transition: transform 0.15s ease;
 }
 
-.ledgerChevronOpen {
+.foldChevronOpen {
   transform: rotate(180deg);
 }
 
-.ledgerContent {
+.foldContent {
   display: flex;
   flex-direction: column;
   gap: 8px;

@@ -21,8 +21,10 @@
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
  *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带
  *     表单身份（热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧
- *     localStorage 迁移（等表单落定、成功写入才删旧键、不可用时保留）；服务端
- *     条目 schema（字段全 volatile、解析值等于共享默认值、条目 id 与浏览器端常量一致）；
+ *     localStorage 迁移（等表单落定、成功写入才删旧键、不可用时保留）；配置串
+ *     编解码（与独立 Base64 实现互通、容错与逐码失败语义、解码归一化、改动字段
+ *     清单）与整份替换写入（默认值字段 unset、改动字段 set 且夹取、同一套写入守卫）；
+ *     服务端条目 schema（字段全 volatile、解析值等于共享默认值、条目 id 与浏览器端常量一致）；
  *   - stats：格式化/会话分组/最近活跃文案/时间范围/图表几何/快照截断/模型明细合并；
  *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
  */
@@ -39,12 +41,21 @@ import { legacySettingsPatch, UsageSettingsSchema } from '../src/host/settings.t
 import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
 import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
 import {
+  CONFIG_TRANSFER_FORMAT,
+  CONFIG_TRANSFER_VERSION,
+  changedSettingFields,
+  decodeConfigTransfer,
+  encodeConfigTransfer,
+} from '../src/client/configTransfer.ts';
+import {
   LEGACY_STORAGE_KEY,
   attachUsageSettings,
   clearLegacySettings,
   detachUsageSettings,
   migrateLegacySettings,
   readLegacySettings,
+  replaceUsageSettings,
+  replacementOps,
   settingOps,
   subscribeUsageSettings,
   updateUsageSettings,
@@ -1388,6 +1399,11 @@ function fakeStorage(initial) {
   };
 }
 
+/** 用 Buffer 独立造配置串：容错用例的数据不经过被测编码器，避免自证。 */
+function configTextOf(payload) {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+}
+
 describe('偏好设置：归一化与写入操作', () => {
   it('命名空间名与默认值自洽，坏值逐字段回退', () => {
     assert.equal(USAGE_SETTINGS_NAMESPACE, 'usage-stats');
@@ -1442,6 +1458,173 @@ describe('偏好设置：归一化与写入操作', () => {
     // 归一化每次都新建数组：引用比较会把空表当成用户改动，故按 JSON 比较
     assert.deepEqual(diffFromDefaults(normalizeUsageSettings(null)), {});
     assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, modelRedirects: rules }), { modelRedirects: rules });
+  });
+});
+
+describe('偏好设置：配置串编解码', () => {
+  it('默认偏好往返一致，编码结果可被独立 Base64 实现解出同一份载荷', () => {
+    const at = new Date('2026-10-13T00:00:00.000Z');
+    const text = encodeConfigTransfer(USAGE_SETTINGS_DEFAULTS, at);
+    // 独立实现（Buffer）解出载荷：编码结果不能只靠被测解码器自证。
+    assert.deepEqual(JSON.parse(Buffer.from(text, 'base64').toString('utf8')), {
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      exportedAt: '2026-10-13T00:00:00.000Z',
+      settings: USAGE_SETTINGS_DEFAULTS,
+    });
+    // 标准字母表带填充：单行、长度为 4 的倍数、只含 A-Za-z0-9+/ 与末尾填充。
+    assert.match(text, /^[A-Za-z0-9+/]+={0,2}$/);
+    assert.equal(text.length % 4, 0);
+    assert.deepEqual(decodeConfigTransfer(text), {
+      ok: true,
+      settings: USAGE_SETTINGS_DEFAULTS,
+      exportedAt: '2026-10-13T00:00:00.000Z',
+    });
+  });
+
+  it('全字段改动与非 ASCII 模型名往返逐字一致', () => {
+    const rules = [{ fromProvider: '内网', fromModel: '模型甲', toProvider: '正式', toModel: '模型乙' }];
+    const next = {
+      ...USAGE_SETTINGS_DEFAULTS,
+      goEnabled: false,
+      showGoInSidebar: false,
+      goFetchMinutes: 11,
+      deepseekEnabled: false,
+      showDeepSeekInSidebar: false,
+      deepseekFetchMinutes: 12,
+      zaiEnabled: false,
+      showZaiInSidebar: false,
+      zaiFetchMinutes: 13,
+      showSessionId: false,
+      modelRedirects: rules,
+    };
+    const decoded = decodeConfigTransfer(encodeConfigTransfer(next));
+    assert.equal(decoded.ok, true);
+    assert.deepEqual(decoded.settings, next);
+    assert.equal(typeof decoded.exportedAt, 'string');
+    assert.equal(Number.isNaN(new Date(decoded.exportedAt).getTime()), false);
+    // 中文经 UTF-8 落进载荷：独立实现读出的 JSON 里模型名逐字一致。
+    const payload = JSON.parse(Buffer.from(encodeConfigTransfer(next), 'base64').toString('utf8'));
+    assert.deepEqual(payload.settings.modelRedirects, rules);
+  });
+
+  it('容错：空白/换行、URL 安全字母表与缺填充都能解', () => {
+    // 规则里带中文，编码结果同时含标准字母表的 + 与 /，URL 安全变体才有意义。
+    const payload = {
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      exportedAt: null,
+      settings: {
+        showGoInSidebar: false,
+        modelRedirects: [{ fromProvider: 'prov', fromModel: '万俎', toProvider: 'real', toModel: 'target' }],
+      },
+    };
+    const text = configTextOf(payload);
+    assert.match(text, /\+/);
+    assert.match(text, /\//);
+    const expected = { ok: true, settings: { ...USAGE_SETTINGS_DEFAULTS, ...payload.settings }, exportedAt: null };
+    assert.deepEqual(decodeConfigTransfer(text), expected);
+    // 首尾与内部空白、换行
+    assert.deepEqual(decodeConfigTransfer(` \n${text}\t `), expected);
+    assert.deepEqual(decodeConfigTransfer(text.replace(/(.{16})/g, '$1\n ')), expected);
+    // URL 安全字母表 + 去掉填充
+    const urlSafe = text.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    assert.notEqual(urlSafe, text);
+    assert.deepEqual(decodeConfigTransfer(urlSafe), expected);
+    // 缺填充可补：另取一个编码结果带填充的载荷，去掉填充仍能解。
+    const padded = configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: CONFIG_TRANSFER_VERSION, settings: { goEnabled: false } });
+    assert.match(padded, /=+$/);
+    assert.equal(decodeConfigTransfer(padded.replace(/=+$/, '')).ok, true);
+  });
+
+  it('失败语义逐码断言：空、非法字符、坏 JSON、错格式、错版本、settings 形状', () => {
+    const errorOf = (text) => {
+      const result = decodeConfigTransfer(text);
+      assert.equal(result.ok, false, `应失败：${text.slice(0, 24)}`);
+      return result.error;
+    };
+    assert.equal(errorOf(''), 'empty');
+    assert.equal(errorOf(' \n\t '), 'empty');
+    assert.equal(errorOf('not base64!!'), 'invalid-base64');
+    assert.equal(errorOf('===='), 'invalid-base64');
+    // 长度为 4n+1：补填充也解不开，归 invalid-base64
+    assert.equal(errorOf('A'), 'invalid-base64');
+    // 合法 Base64 但内容不是 JSON：与「合法 JSON 但不是对象」区分开
+    assert.equal(errorOf(Buffer.from('{oops', 'utf8').toString('base64')), 'invalid-payload');
+    // 非对象 JSON：没有 format 可读，按契约归 unknown-format
+    assert.equal(errorOf(configTextOf(123)), 'unknown-format');
+    assert.equal(errorOf(configTextOf(null)), 'unknown-format');
+    assert.equal(errorOf(configTextOf([1, 2])), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ version: 1, settings: {} })), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ format: 'other', version: 1, settings: {} })), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 2, settings: {} })), 'unsupported-version');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: '1', settings: {} })), 'unsupported-version');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1 })), 'invalid-payload');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, settings: null })), 'invalid-payload');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, settings: [] })), 'invalid-payload');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, settings: 'x' })), 'invalid-payload');
+    // 校验顺序：format 先于 version，version 先于 settings 形状
+    assert.equal(errorOf(configTextOf({ format: 'other', version: 2, settings: null })), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 2, settings: null })), 'unsupported-version');
+  });
+
+  it('解码归一化：坏字段回退默认值、未知字段忽略、越界间隔夹取', () => {
+    const text = configTextOf({
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      settings: { goEnabled: 'on', goFetchMinutes: 1, showZaiInSidebar: false, modelRedirects: '不是数组', 不认识: true },
+    });
+    const decoded = decodeConfigTransfer(text);
+    assert.equal(decoded.ok, true);
+    assert.deepEqual(decoded.settings, {
+      ...USAGE_SETTINGS_DEFAULTS,
+      goFetchMinutes: GO_FETCH_MIN_MINUTES,
+      showZaiInSidebar: false,
+    });
+    // 规则表按 normalizeModelRedirects 清洗：坏条目丢弃、半填条目保留（界面继续填）。
+    const rules = configTextOf({
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      settings: { modelRedirects: ['x', {}, { fromProvider: ' p ', fromModel: 'm' }] },
+    });
+    const parsed = decodeConfigTransfer(rules);
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.settings.modelRedirects, [{ fromProvider: 'p', fromModel: 'm', toProvider: '', toModel: '' }]);
+    // exportedAt 非字符串按 null，不参与校验。
+    const numeric = configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, exportedAt: 42, settings: {} });
+    assert.deepEqual(decodeConfigTransfer(numeric), { ok: true, settings: USAGE_SETTINGS_DEFAULTS, exportedAt: null });
+  });
+
+  it('changedSettingFields 按默认值键序给出改动字段', () => {
+    const base = normalizeUsageSettings(null);
+    assert.deepEqual(changedSettingFields(base, base), []);
+    assert.deepEqual(changedSettingFields(base, { ...base, showSessionId: false }), ['showSessionId']);
+    assert.deepEqual(
+      changedSettingFields(base, { ...base, zaiFetchMinutes: 9, goEnabled: false }),
+      ['goEnabled', 'zaiFetchMinutes'],
+    );
+    // 规则表按值比较：等值数组（逐条复制）不算改动，改过才算。
+    const rules = [{ fromProvider: 'a', fromModel: 'b', toProvider: 'c', toModel: 'd' }];
+    const withRules = { ...base, modelRedirects: rules };
+    assert.deepEqual(changedSettingFields(withRules, { ...base, modelRedirects: rules.map((rule) => ({ ...rule })) }), []);
+    assert.deepEqual(changedSettingFields(withRules, { ...base, modelRedirects: [] }), ['modelRedirects']);
+    assert.deepEqual(changedSettingFields(base, withRules), ['modelRedirects']);
+    // 键序即默认值声明序，全字段改动时与 Object.keys(USAGE_SETTINGS_DEFAULTS) 一致。
+    const all = {
+      goEnabled: false,
+      showGoInSidebar: false,
+      goFetchMinutes: 9,
+      deepseekEnabled: false,
+      showDeepSeekInSidebar: false,
+      deepseekFetchMinutes: 9,
+      zaiEnabled: false,
+      showZaiInSidebar: false,
+      zaiFetchMinutes: 9,
+      showSessionId: false,
+      modelRedirects: rules,
+    };
+    assert.deepEqual(changedSettingFields(base, all), Object.keys(USAGE_SETTINGS_DEFAULTS));
+    assert.deepEqual(changedSettingFields(all, base), Object.keys(USAGE_SETTINGS_DEFAULTS));
   });
 });
 
@@ -1528,6 +1711,86 @@ describe('偏好设置：作用域视图与写入', () => {
     await new Promise((r) => { setTimeout(r, 0); });
     assert.deepEqual(calls, []);
     assert.deepEqual(usageSettingsView().settings, USAGE_SETTINGS_DEFAULTS);
+  });
+});
+
+describe('偏好设置：整份替换写入', () => {
+  afterEach(() => { detachUsageSettings(); });
+
+  it('replacementOps：默认值字段 unset，改动字段 set 且间隔夹取', () => {
+    assert.deepEqual(
+      replacementOps(USAGE_SETTINGS_DEFAULTS),
+      Object.keys(USAGE_SETTINGS_DEFAULTS).map((field) => ({ op: 'unset', path: [field] })),
+    );
+    const rules = [{ fromProvider: 'a', fromModel: 'b', toProvider: 'c', toModel: 'd' }];
+    const next = { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 1, showSessionId: false, modelRedirects: rules };
+    assert.deepEqual(replacementOps(next), [
+      { op: 'unset', path: ['goEnabled'] },
+      { op: 'unset', path: ['showGoInSidebar'] },
+      { op: 'set', path: ['goFetchMinutes'], value: GO_FETCH_MIN_MINUTES },
+      { op: 'unset', path: ['deepseekEnabled'] },
+      { op: 'unset', path: ['showDeepSeekInSidebar'] },
+      { op: 'unset', path: ['deepseekFetchMinutes'] },
+      { op: 'unset', path: ['zaiEnabled'] },
+      { op: 'unset', path: ['showZaiInSidebar'] },
+      { op: 'unset', path: ['zaiFetchMinutes'] },
+      { op: 'set', path: ['showSessionId'], value: false },
+      { op: 'set', path: ['modelRedirects'], value: rules },
+    ]);
+  });
+
+  it('replaceUsageSettings 一次提交整份 ops，覆盖旧用户段', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }, user: { goEnabled: false } });
+    attachUsageSettings(scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, zaiFetchMinutes: 1, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.equal(calls.length, 1);
+    const ops = calls[0];
+    // 字段序稳定：与默认值声明序一致，等于默认值的字段发 unset（旧用户段随之消失）。
+    assert.deepEqual(ops.map((op) => op.path[0]), Object.keys(USAGE_SETTINGS_DEFAULTS));
+    assert.deepEqual(ops.filter((op) => op.op === 'set'), [
+      { op: 'set', path: ['zaiFetchMinutes'], value: ZAI_FETCH_MIN_MINUTES },
+      { op: 'set', path: ['showSessionId'], value: false },
+    ]);
+    assert.deepEqual(ops.filter((op) => op.op === 'unset'), [
+      { op: 'unset', path: ['goEnabled'] },
+      { op: 'unset', path: ['showGoInSidebar'] },
+      { op: 'unset', path: ['goFetchMinutes'] },
+      { op: 'unset', path: ['deepseekEnabled'] },
+      { op: 'unset', path: ['showDeepSeekInSidebar'] },
+      { op: 'unset', path: ['deepseekFetchMinutes'] },
+      { op: 'unset', path: ['zaiEnabled'] },
+      { op: 'unset', path: ['showZaiInSidebar'] },
+      { op: 'unset', path: ['modelRedirects'] },
+    ]);
+  });
+
+  it('replaceUsageSettings 守卫：不可用/只读不发写，解绑后不发，加载中照发', async () => {
+    const unavailable = fakeScope({ value: undefined, status: 'unavailable' });
+    attachUsageSettings(unavailable.scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(unavailable.calls, []);
+
+    const readOnly = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, writable: false });
+    attachUsageSettings(readOnly.scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(readOnly.calls, []);
+
+    const detached = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    attachUsageSettings(detached.scope);
+    detachUsageSettings();
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(detached.calls, []);
+
+    // 仍在加载：服务端可能接受，照发
+    const loading = fakeScope({ value: undefined, status: 'loading' });
+    attachUsageSettings(loading.scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.equal(loading.calls.length, 1);
   });
 });
 

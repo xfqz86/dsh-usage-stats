@@ -1,9 +1,9 @@
 # Remote API 与运行时协议（API.md）
 
 > 本文件是 `usageStats` 命名空间 Remote **线路协议**与**偏好设置协议**的唯一权威
-> 文档：方法表、请求/响应结构、状态语义、TTL 与缓存行为、偏好字段。类型单一事实
-> 来源在 `src/types.ts`，Client 严格编解码在 `src/remote/contribution.ts`；运行机制
-> （账本、扫描、清零墓碑）见 `docs/ARCHITECTURE.md`，规则类约束见 `AGENTS.md`。
+> 文档：方法表、请求/响应结构、状态语义、TTL 与缓存行为、偏好字段与配置串格式。
+> 类型单一事实来源在 `src/types.ts`，Client 严格编解码在 `src/remote/contribution.ts`；
+> 运行机制（账本、扫描、清零墓碑）见 `docs/ARCHITECTURE.md`，规则类约束见 `AGENTS.md`。
 
 ## 1. 通用约定
 
@@ -165,7 +165,9 @@
 - **浏览器端**：`ctx.configForms.get('usage-stats')` 取设置表单（`configForms` 由
   `@deepseek-ai/dsh-client-ui-settings` 提供，已登记进 `dsh.client.inject` 保证加载序），
   `src/client/settings.ts` 提供订阅/读写，组件经 `useUsageSettings` 消费；写入走路径操作、
-  只落显式改过的字段，间隔字段写前夹到下限 3。
+  只落显式改过的字段，间隔字段写前夹到下限 3。单字段写入一律是显式 `set`——把某项改回
+  默认值也照样落在文档里、条目不会消失；让该条目在文档里整段消失的只有配置导入的整份
+  替换（`unset`，见 §5.1）。
 - **字段**（`UsageSettings` 定义在 `src/types.ts`）：
 
   | 字段 | 默认 | 语义 |
@@ -222,3 +224,27 @@
      某次启动突然复活。其余现场都没有定论、不落标记，下次启动重看：`settings.yaml`
      还在（基座自己会导）、`.imported` 不存在、条目不在 `describe()` 里（插件被禁用
      或没装）、写入被设置服务拒绝（此刻写失败会记一条 warn）。
+
+### 5.1 配置串（导出 / 导入）
+
+- **目的与边界**：把整份偏好搬走再搬回（换机器、备份、两台机器对齐）。纯浏览器端
+  能力——**不新增 Remote 方法**、不走线路、不落账本，落点仍是同一个 profile 条目；
+  实现见 `src/client/configTransfer.ts`（编解码）与 `src/client/settings.ts`
+  （`replacementOps` / `replaceUsageSettings` 写入）。
+- **形态**：载荷 JSON `{ format: 'dsh-usage-stats', version: 1, exportedAt: <ISO 字符串>,
+  settings: <整份偏好> }` → UTF-8 → 标准 Base64（带填充）单行文本；`settings` 是
+  `normalizeUsageSettings` 归一化后的整份偏好（含等于默认值的字段），因此「导出 →
+  导入」在支持同一份 schema 的部署之间逐字段还原。`exportedAt` 只作诊断，非字符串
+  按 `null` 处理，不参与校验。
+- **解码容错**：忽略空白与换行；接受 URL 安全字母表（`-`/`_`）与缺失的填充，其余
+  字符即非法。
+- **失败语义**（错误码在浏览器端，文案本地化，不进线路）：`empty` 空串、
+  `invalid-base64` 非法字符、`invalid-payload` 非 JSON 或 `settings` 不是普通对象、
+  `unknown-format` 载荷不是普通对象（数组、数字、`null` 等）或 `format` 不是
+  `dsh-usage-stats`、`unsupported-version` `version` 不是 1。
+- **导入语义**：以配置串为准**整份覆盖**——与默认值相同的字段发 `unset`（记录里不
+  留该字段、继续跟随 schema 默认值），不同的字段发 `set`（间隔字段写入前夹到下限
+  3），一次 `mutate` 提交；写入守卫与单字段写入一致（表单不可用或只读时不发起
+  写入，界面禁用导入并说明原因；导出只读，不受影响）。覆盖后字段全部等于默认值时，
+  该条目在 profile 文档里的用户片段整段消失——用户片段只是配置覆盖层，插件的装载
+  记录在 profile 的 `package.json`（`dsh.profile.bundles` + 依赖），插件照旧加载。

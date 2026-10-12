@@ -1,0 +1,163 @@
+/* 配置迁移区 ConfigTransfer：导出与导入两个子块的标题、说明、文本域、
+   操作按钮、差异预览与内联反馈。颜色全部使用设计 token
+   （token 名以 test/styles.mjs 对照 harness 主题校验，不得自造，
+   也禁止写自定义属性兜底）。 */
+/* 分区标签与说明文字复用 UsageStatsCommon.module.css 的 .sectionLabel / .goHint；
+   折叠外观（.foldSection/.foldHeader/.foldChevron/.foldContent）在 SettingsTab.module.css。 */
+
+/* 折叠内容：与 SettingsTab.module.css 的 .foldContent 同形（纵向堆叠两块 + 8px 留白） */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 单个子块：标题 + 说明 + 操作，块内 8px、块间靠 .content 的 gap 拉开 */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 子块标题行：沿用设置页分区头的两栏形态，右侧暂无内容但保留对齐 */
+.blockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.blockTitle {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 操作行：按钮横排，数量变化时仍靠左对齐 */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 主操作按钮：与账本操作按钮同一形态（1px 描边、8px 圆角、悬浮底色） */
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.actionBtn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.actionBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 禁用态不响应悬浮：避免置灰按钮仍有按下感 */
+.actionBtn:disabled:hover {
+  background: transparent;
+}
+
+/* 文本域共用：输入框表面一律 bg-layer-2（深色下 bg-base 会画成黑带），
+   聚焦只换描边色不吃掉圆角，字色与占位与设置页输入框一致。 */
+.stringBox,
+.pasteBox {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  resize: vertical;
+}
+
+.stringBox:focus,
+.pasteBox:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.stringBox::placeholder,
+.pasteBox::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.pasteBox:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 配置串：等宽字体、长串强制折行、限高后自身滚动（等宽字体名取自主题的代码族变量）。
+   高度取 92px：默认偏好的配置串（约 450 字符、4 行左右）整串可见，不用滚动；
+   规则多的长串仍由 max-height 收住后自身滚动。 */
+.stringMono {
+  min-height: 92px;
+  max-height: 132px;
+  overflow: auto;
+  font-family: var(--ds-font-family-code);
+  word-break: break-all;
+  resize: none;
+}
+
+/* 粘贴框：比配置串高一些，容纳被粘贴串的首屏内容 */
+.pasteBox {
+  min-height: 72px;
+}
+
+/* 差异预览：描边卡把「确认导入」与上面的解析结果绑在一起，
+   底色保持透明——模态窗内的表面由 Modal 的 dialog 铺设，再叠一层会画出色块 */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.previewText {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.previewMeta {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 解析错误：与预览同层级，用错误色标明不是提示而是拒绝 */
+.errorHint {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* 内联反馈（已复制 / 导入成功）：成功色，紧跟操作行下方 */
+.feedback {
+  align-self: flex-start;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-success-primary);
+}
