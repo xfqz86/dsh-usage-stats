@@ -1,13 +1,18 @@
 /**
  * 模型 Tab：按模型/Provider 拆分表，含占比条，布局与会话 Tab 对齐。
  * 顶部为图表区，含饼图与堆叠柱，中间为靠右的时间范围筛选，位于图表与表格之间，默认1年；
- * 表格列：模型 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比。
+ * 表格列：模型 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比 | 明细。
  * 过滤逻辑基于模型的按日细分 series，与饼图/堆叠柱共用同一过滤后切片。
  * 表头可排序，与 SessionsTab 同款交互，分页 20/页、容器与会话 Tab 对齐。
  *
+ * 每行末尾的「明细」链接打开该模型的明细弹窗（ModelDetail）：按日期与按会话两个子视图，
+ * 数据按需经 usageStats/modelDetail 取，时间范围跟随本页的范围 chips；
+ * 打开的行被范围过滤掉（或模型消失）时自动关闭弹窗。
+ *
  * 传进来的 models 已按偏好里的模型统计重定向规则归并（见 UsageStatsPanel 与
  * ../stats.ts 的 redirectModels）：来源行的用量并进目标行，mergedSources 给出
- * 每个目标行并进来的来源，模型列据此显示「已归并 N」并在悬浮卡片里列出明细。
+ * 每个目标行并进来的来源，模型列据此显示「已归并 N」并在悬浮卡片里列出明细；
+ * 明细同样按「目标 + 全部来源」各查一次再合并，数字与这一行对得上。
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -19,9 +24,11 @@ import { StackedBar } from '../components/StackedBar.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { avgPerCall, fmt, fmtFull, hitRateOfDay, largestRemainderPcts, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts';
+import { avgPerCall, fmt, fmtFull, hitRateOfDay, largestRemainderPcts, modelRangeCutoff, pctOf, usageTotal, filterModelsByRange, type ModelRange } from '../stats.ts';
+import { useModelDetail } from '../useModelDetail.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
+import { ModelDetail } from './ModelDetail.tsx';
 import css from './ModelsTab.module.css';
 
 import type { LocaleFn, UsageStatsKey } from '../locales.ts';
@@ -44,7 +51,7 @@ const MODEL_RANGES: [ModelRange, UsageStatsKey][] = [
   ['all', 'modelRange.all'],
 ];
 
-/** 模型 Tab：图表 + 时间范围筛选，位于图表与表格之间且右对齐，+ 排序 + 分页，容器与会话 Tab 对齐。 */
+/** 模型 Tab：图表 + 时间范围筛选，位于图表与表格之间且右对齐，+ 排序 + 分页 + 明细弹窗，容器与会话 Tab 对齐。 */
 export function ModelsTab({
   models, mergedSources, t,
 }: {
@@ -68,6 +75,25 @@ export function ModelsTab({
   useEffect(() => {
     setPage(1);
   }, [range, setPage]);
+
+  // 明细弹窗当前打开的行键（`provider\0model`），null 表示没有打开
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  // 弹窗目标行：目标键 + 归并来源（服务端快照不归并，来源在浏览器端各查一次再合并）
+  const detail = useMemo(() => {
+    if (detailKey === null) return null;
+    const { provider, model } = splitModelKey(detailKey);
+    const sources = mergedSources?.get(detailKey) ?? [];
+    return { provider, model, sources, keys: [detailKey, ...sources] };
+  }, [detailKey, mergedSources]);
+  // 时间下界与列表同一取值来源（本地日零点），范围切换即重取；'all' 为 null
+  const since = useMemo(() => modelRangeCutoff(range), [range]);
+  const detailState = useModelDetail(detail?.keys ?? null, since);
+
+  // 打开的行被范围过滤掉或模型消失时关闭弹窗，避免明细挂在不存在的行上
+  useEffect(() => {
+    if (detailKey === null) return;
+    if (!models.some((m) => m.provider + '\u0000' + m.model === detailKey)) setDetailKey(null);
+  }, [models, detailKey]);
 
   // 占比：基于过滤后总和，非最大值，最大余数法保证 1 位小数总和 100%（stats.largestRemainderPcts，与饼图同一口径）
   // 需在排序前计算，保证 share 与过滤后顺序一一对应，再按排序键重排时 share 随行
@@ -129,7 +155,7 @@ export function ModelsTab({
               ))}
             </span>
           </div>
-          <div className={`${shared.tableWrap} ${css.tableWrap}`}>
+          <div className={`${shared.tableWrap} ${shared.firstCol} ${css.tableWrap}`}>
             <table className={shared.table}>
               <thead>
                 <tr>
@@ -142,16 +168,19 @@ export function ModelsTab({
                   <ThSortable k="calls" label={t('table.calls')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <ThSortable k="share" label={t('table.share')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                  {/* 明细入口列：不参与排序，表头留空（单元格里的链接自己说明用途） */}
+                  <th aria-label={t('models.viewDetail')} />
                 </tr>
               </thead>
               <tbody>
                 {pageModels.map(({ m, share }) => {
+                  const key = m.provider + '\u0000' + m.model;
                   const total = usageTotal(m.usage);
                   const hit = hitRateOfDay(m.usage);
                   const avg = avgPerCall(total, m.calls);
-                  const sources = mergedSources?.get(m.provider + '\u0000' + m.model) ?? [];
+                  const sources = mergedSources?.get(key) ?? [];
                   return (
-                    <tr key={m.provider + '\u0000' + m.model}>
+                    <tr key={key}>
                       <td className={shared.cellText}>
                         {m.model} <span className={shared.sub}>· {m.provider}</span>
                         {/* 归并来源：目标行显示条数与悬浮明细，未归并的行不出现该标记 */}
@@ -163,10 +192,10 @@ export function ModelsTab({
                               <div className={shared.tipPanel}>
                                 <div className={shared.tipHeader}>{t('models.mergedSourcesHint')}</div>
                                 <div className={shared.tipList}>
-                                  {sources.map((key) => {
-                                    const src = splitModelKey(key);
+                                  {sources.map((sourceKey) => {
+                                    const src = splitModelKey(sourceKey);
                                     return (
-                                      <div key={key} className={shared.tipListRow}>
+                                      <div key={sourceKey} className={shared.tipListRow}>
                                         <span className={shared.tipListKey}>{src.model}</span>
                                         <span className={shared.tipListVal}>{src.provider}</span>
                                       </div>
@@ -190,6 +219,17 @@ export function ModelsTab({
                       <td className={shared.num}>{fmtFull(m.calls)}</td>
                       <td className={shared.num}>{fmtFull(avg)}</td>
                       <td className={shared.num}>{pctOf(share)}</td>
+                      {/* 打开这一行的明细弹窗（二级弹窗，Esc 只关它这一层） */}
+                      <td className={css.detailCell}>
+                        <button
+                          type="button"
+                          className={css.detailLink}
+                          aria-label={t('models.viewDetail')}
+                          onClick={() => setDetailKey(key)}
+                        >
+                          {t('models.detailLink')}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -202,6 +242,18 @@ export function ModelsTab({
             </div>
           )}
         </>
+      )}
+      {/* 明细弹窗：叠在详情面板之上，基座 Modal 的层级栈保证 Esc 只关这一层 */}
+      {detail !== null && (
+        <ModelDetail
+          provider={detail.provider}
+          model={detail.model}
+          mergedCount={detail.sources.length}
+          range={range}
+          state={detailState}
+          onClose={() => setDetailKey(null)}
+          t={t}
+        />
       )}
     </div>
   );

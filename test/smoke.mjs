@@ -2,11 +2,13 @@
  * 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
  *
  * 以真实 cordis Context 挂载 UsageStatsService（存储不 mock：账本直接写
- * node:sqlite 文件），直接调用 7 个 @Remote 方法，验证：
+ * node:sqlite 文件），直接调用 8 个 @Remote 方法，验证：
  *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/
  *     dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
  *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠
  *     事件，初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
+ *   - 模型明细：按日（内存每日桶）与按会话（账本聚合）两路合计都对上快照模型行、
+ *     相互一致，`since` 过滤与未知键返回空明细；
  *   - 方法与手写严格贡献相容：真实出入值过 zod 信封，错误码透传不断解析；
  *     SRC 线路字段（产物方法源码参数名）与贡献 wire 名逐个对齐——生产构建压缩
  *     方法签名会让新版网关拒收全部带参请求，此处立即失败；
@@ -140,9 +142,9 @@ async function mount(query, persist, options = {}) {
       await new Promise((r) => setTimeout(r, 50))
     }
   }
-  // 7 个 @Remote 标记全部存活：网关 SRC 分发的前提。
+  // 8 个 @Remote 标记全部存活：网关 SRC 分发的前提。
   const markers = remoteMethods(svc).map((m) => m.exportName ?? m.method)
-  for (const name of ['snapshot', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota']) {
+  for (const name of ['snapshot', 'modelDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota']) {
     if (!markers.includes(name)) {
       console.error(`FAIL: 缺 @Remote 标记 ${name}`)
       process.exit(1)
@@ -278,6 +280,61 @@ if (snap2.all.calls !== snap.all.calls) {
 }
 if (snap2.foldedEvents !== EXPECTED_FOLDED) {
   console.error(`FAIL: 实时重放后 foldedEvents=${String(snap2.foldedEvents)}，应仍为 ${String(EXPECTED_FOLDED)}（去重失效）`)
+  process.exit(1)
+}
+
+// 模型明细：按日（内存每日桶）与按会话（账本聚合）两路数据源不同，合计必须同时
+// 对上快照模型行，且日合计 = 会话合计 = 明细合计——任一侧口径漂移都会在这里暴露。
+for (const m of snap.models) {
+  const detail = svc.modelDetail({ provider: m.provider, model: m.model })
+  assertEnvelope('modelDetail', detail)
+  if (detail.calls !== m.calls || detail.usage.total !== m.usage.total) {
+    console.error(`FAIL: modelDetail ${m.provider}/${m.model} 合计与快照不一致`, detail.calls, m.calls, detail.usage.total, m.usage.total)
+    process.exit(1)
+  }
+  const daySum = detail.daily.reduce((s, p) => s + (p.input || 0) + (p.output || 0) + (p.cacheRead || 0) + (p.cacheWrite || 0), 0)
+  const dayCalls = detail.daily.reduce((s, p) => s + (p.calls || 0), 0)
+  const sessionSum = detail.sessions.reduce((s, r) => s + r.usage.total, 0)
+  const sessionCalls = detail.sessions.reduce((s, r) => s + r.calls, 0)
+  if (daySum !== detail.usage.total || sessionSum !== detail.usage.total || dayCalls !== detail.calls || sessionCalls !== detail.calls) {
+    console.error(`FAIL: modelDetail ${m.provider}/${m.model} 日/会话合计与总计不一致`,
+      { daySum, sessionSum, dayCalls, sessionCalls, total: detail.usage.total, calls: detail.calls })
+    process.exit(1)
+  }
+  for (const row of detail.sessions) {
+    if (typeof row.id !== 'string' || row.id === '' || typeof row.title !== 'string' || row.calls <= 0 || row.usage.total <= 0) {
+      console.error('FAIL: modelDetail 会话行字段不全', row)
+      process.exit(1)
+    }
+  }
+}
+const firstModel = snap.models[0]
+const firstDetail = svc.modelDetail({ provider: firstModel.provider, model: firstModel.model })
+console.log('modelDetail:', JSON.stringify({
+  model: firstModel.model,
+  provider: firstModel.provider,
+  days: firstDetail.daily.length,
+  sessions: firstDetail.sessions.map((r) => ({ id: r.id, calls: r.calls, total: r.usage.total })),
+}))
+
+// since 过滤：明天零点之后没有事件 → 空明细（字段齐全、不报错）
+const futureDetail = svc.modelDetail({ provider: firstModel.provider, model: firstModel.model, since: Date.now() + 86_400_000 })
+assertEnvelope('modelDetail', futureDetail)
+if (futureDetail.calls !== 0 || futureDetail.usage.total !== 0 || futureDetail.daily.length !== 0 || futureDetail.sessions.length !== 0) {
+  console.error('FAIL: modelDetail 未来时间下界应返回空明细')
+  process.exit(1)
+}
+// since 非正数按全部历史处理（浏览器端下界恒为正，这里锁死归一语义）
+const zeroDetail = svc.modelDetail({ provider: firstModel.provider, model: firstModel.model, since: 0 })
+if (zeroDetail.calls !== firstModel.calls || zeroDetail.usage.total !== firstModel.usage.total) {
+  console.error('FAIL: modelDetail since=0 应与全部历史等价')
+  process.exit(1)
+}
+// 未知模型键：零值空明细，不抛错——重定向新建的目标行会走这条路径
+const noModel = svc.modelDetail({ provider: 'nope', model: 'nope' })
+assertEnvelope('modelDetail', noModel)
+if (noModel.calls !== 0 || noModel.daily.length !== 0 || noModel.sessions.length !== 0) {
+  console.error('FAIL: modelDetail 未知键应返回空明细')
   process.exit(1)
 }
 

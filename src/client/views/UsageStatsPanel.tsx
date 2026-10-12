@@ -203,15 +203,15 @@ export function UsageStatsPanel({
         </span>
       </header>
 
-      {/* Tab 栏：语义化 tablist，无现成 harness 组件，样式与 chip/seg 统一 */}
-      <div className={css.tabbar} role="tablist" aria-label={t('panel.title')}>
+      {/* Tab 栏：语义化 tablist，无现成 harness 组件，形态与模型明细弹窗共用（UsageStatsCommon） */}
+      <div className={shared.tabbar} role="tablist" aria-label={t('panel.title')}>
         {TABS.map(({ key, labelKey, Icon }) => (
           <button
             key={key}
             type="button"
             role="tab"
             aria-selected={active === key}
-            className={active === key ? `${css.tab} ${css.tabOn}` : css.tab}
+            className={active === key ? `${shared.tab} ${shared.tabOn}` : shared.tab}
             onClick={() => setActive(key)}
           >
             <Icon size={14} />

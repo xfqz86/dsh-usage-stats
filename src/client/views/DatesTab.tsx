@@ -88,7 +88,7 @@ export function DatesTab({
 
   return (
     <div className={`${shared.section} ${shared.tableViewRoot}`}>
-      <div className={css.charts}>
+      <div className={shared.charts}>
         <div className={shared.chartCard}>
           <StackedBar mode="date" series={series} range={range} t={t} />
         </div>
@@ -107,7 +107,7 @@ export function DatesTab({
           ))}
         </span>
       </div>
-      <div className={`${shared.tableWrap} ${css.tableWrap}`}>
+      <div className={`${shared.tableWrap} ${shared.firstCol} ${css.tableWrap}`}>
         <table className={shared.table}>
           <thead>
             <tr>

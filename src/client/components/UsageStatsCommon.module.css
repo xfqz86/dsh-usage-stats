@@ -1,5 +1,5 @@
 /* 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、
-   表格、通用提示等。颜色全部使用设计 token。 */
+   表格、Tab 栏、通用提示等。颜色全部使用设计 token。 */
 /* 每个组件各自的专属样式见对应 *.module.css，例如 OverviewTab.module.css。 */
 
 /* ---- 分区：各 Tab 通用纵向容器，含头部与内容 ---- */
@@ -161,9 +161,10 @@
   width: 100%;
 }
 
+/* 单元格横向内边距 5px：模型表有 10 列，6px 时 820 宽的面板（891 视口）会多出横向滚动条 */
 .tableWrap th,
 .tableWrap td {
-  padding: 4px 6px;
+  padding: 4px 5px;
   font-size: 12px;
   line-height: 18px;
 }
@@ -185,6 +186,24 @@
   white-space: nowrap;
 }
 
+/* ---- 表格视图一致性基元：面板三表与模型明细两表共用 ----
+   首列吃满剩余宽度、其余列按内容自适应（table-layout 为 auto）；max-width 覆盖
+   共用 .cellText 的宽度钳制。最小宽度按内容由各视图自己给（日期 110px、会话 180px），
+   故此处只写跨视图相同的两条。 */
+.firstCol th:nth-child(1),
+.firstCol td:nth-child(1) {
+  width: 100%;
+  max-width: none;
+}
+
+/* 长表头（命中率、每次调用）缩字号保持单行：双类提升特异性，压过共享模块的
+   .thBtn 字号继承，与注入顺序无关。 */
+.thSm.thSm {
+  white-space: nowrap;
+  line-height: 14px;
+  font-size: 11px;
+}
+
 /* ---- 翻页栏：固定底部居中，三 Tab 共用 ---- */
 .paginationBar {
   flex: none;
@@ -193,6 +212,63 @@
   padding: 8px 0 0;
   border-top: 1px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-2);
+}
+
+/* ---- 行内小方形图标按钮与计数徽标：会话 Tab 的展开与计数共用。
+   [aria-expanded="true"] 只对展开型按钮生效。 ---- */
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+
+.iconBtn:hover {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent);
+}
+
+.iconBtn[aria-expanded="true"] {
+  background: var(--dsw-alias-brand-primary);
+  border-color: var(--dsw-alias-brand-primary);
+  /* 品牌底色上的反色文字，token 由主题声明（浅色主题解析为近白） */
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+.countBadge {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-button-ghost-active-fill);
+  padding: 1px 5px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* ---- 折叠展开的子代理行：会话 Tab 与模型明细的按会话表共用 ----
+   子行底色比主行浅一档，首列缩进让出展开按钮的位置（16px 按钮 + 6px 间距）。 */
+.childRow td {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 96%, var(--dsw-alias-border-l1));
+}
+
+.childCell {
+  padding-left: 22px !important;
+}
+
+.indent {
+  color: var(--dsw-alias-label-tertiary);
+  margin-right: 6px;
 }
 
 /* ---- 时间范围 chips：DatesTab 与 ModelsTab 共用 ---- */
@@ -235,6 +311,75 @@
   border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 25%, transparent);
 }
 
+/* ---- Tab 栏：用量统计面板与模型明细弹窗共用同一套形态
+   （图标 + 文字、等宽铺满、选中下划线）---- */
+.tabbar {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabbar::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: 1;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 6px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  /* 未选中用 label-tertiary：caption 是说明性小字的颜色，深色下 12px 文字对比度不足。 */
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabOn {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 选中下划线：2px 圆头短条（与 dsh 设置页 tab 同一形态），避免深色下整条白边过硬。 */
+.tabOn::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--dsw-alias-label-primary);
+  content: '';
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+.tab svg {
+  flex: none;
+}
+
 .rangeBar {
   display: flex;
   justify-content: flex-end;
@@ -250,7 +395,7 @@
   display: none;
 }
 
-/* ---- 图表卡片与横向滚动容器：DatesTab 与 ModelsTab 共用 ---- */
+/* ---- 图表卡片与横向滚动容器：DatesTab、ModelsTab 与模型明细共用 ---- */
 .chartCard {
   min-width: 0;
   padding: 12px;
@@ -261,6 +406,17 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* 图表区：单列卡片堆叠，超宽时横向滚动不撑爆；下边距拉开与表格的距离。
+   flex: none —— 高度由内容决定，不参与列容器（表格视图）的压缩。 */
+.charts {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  margin-bottom: 12px;
 }
 
 /* ---- 视口 ≤ 800px 时表格紧凑化 ---- */

@@ -1,6 +1,6 @@
 /**
  * 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露
- * usageStats 命名空间的 7 个一元 Remote 方法。
+ * usageStats 命名空间的 8 个一元 Remote 方法。
  *
  * 数据流（账本为唯一事实来源、聚合为派生缓存）与原 apply 函数版一致：
  * openLedger → 先挂 session/event 实时监听 →
@@ -16,6 +16,7 @@ import { Service } from '@deepseek-ai/cordis';
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 
 import { queryDeepSeekBalance } from './deepseekBalance.ts';
+import { modelDetail } from './detail.ts';
 import { queryGoQuota } from './goquota.ts';
 import { Ledger } from './ledger.ts';
 import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregates } from './scan.ts';
@@ -30,6 +31,8 @@ import type {
   ClearResult,
   DeepSeekBalance,
   GoQuota,
+  ModelDetail,
+  ModelDetailRequest,
   QuotaRequest,
   RebuildResult,
   SealResult,
@@ -184,6 +187,23 @@ export default class UsageStatsService extends TypertRemoteService {
     const sessionId = typeof raw === 'string' && raw.length > 0 ? raw : null;
     const limit = typeof request.limit === 'number' && Number.isFinite(request.limit) ? request.limit : undefined;
     return snapshot(this.store, this.ledger, sessionId, limit !== undefined ? { limit } : undefined);
+  }
+
+  /**
+   * usageStats/modelDetail：单个模型的明细（按日序列 + 按会话明细），点某行的「明细」时按需调用。
+   * 纯读，不判 busy、不写账本；`since` 为浏览器端算好的本地日零点，非正数即全部历史。
+   * @param request - 供应商标识、模型标识与可选时间下界。
+   * @returns 明细 value（范围内合计、按日序列、按会话明细）。
+   */
+  @Remote('modelDetail')
+  modelDetail(request: ModelDetailRequest): ModelDetail {
+    const provider = typeof request.provider === 'string' ? request.provider : '';
+    const model = typeof request.model === 'string' ? request.model : '';
+    const rawSince = request.since;
+    const since = typeof rawSince === 'number' && Number.isFinite(rawSince) && rawSince > 0
+      ? Math.floor(rawSince)
+      : null;
+    return modelDetail(this.store, this.ledger, provider, model, since);
   }
 
   /**

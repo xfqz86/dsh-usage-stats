@@ -114,10 +114,11 @@ try {
   }
   const panelCss = document.styles.find((s) => s.attributes['data-plugin-css'] === 'dsh-usage-stats/UsageStatsPanel')?.textContent ?? ''
   // lightningcss 的 scoped 类名形如 `_<hash>_tabbar`，断言匹配 scoped 化后的选择器
-  assert(panelCss.includes('_tabbar'), 'UsageStatsPanel 样式应包含 scoped 的 .tabbar（Tab 栏）')
   assert(panelCss.includes('_modal'), 'UsageStatsPanel 样式应包含 scoped 的 .modal')
   const commonCss = document.styles.find((s) => s.attributes['data-plugin-css'] === 'dsh-usage-stats/UsageStatsCommon')?.textContent ?? ''
   assert(commonCss.includes('_cell'), 'UsageStatsCommon 样式应包含 scoped 的 .cell（统计磁贴基元）')
+  // Tab 栏是面板与模型明细弹窗共用的基元，落在 UsageStatsCommon
+  assert(commonCss.includes('_tabbar'), 'UsageStatsCommon 样式应包含 scoped 的 .tabbar（Tab 栏基元）')
 
   console.log('CLIENT BUNDLE OK')
   console.log('  id:', registered.id)

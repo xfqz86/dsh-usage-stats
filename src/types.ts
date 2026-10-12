@@ -127,6 +127,22 @@ export interface SessionStat {
 }
 
 /**
+ * 单个模型的明细：范围内合计 + 按日序列 + 按会话明细，
+ * 为 usageStats/modelDetail 成功时的 value；日序列与会话行元素直接复用
+ * SeriesPoint 与 SessionStat，与快照同形，浏览器端合并重定向来源时不必另建形状。
+ */
+export interface ModelDetail {
+  provider: string
+  model: string
+  calls: number
+  usage: UsageAgg
+  /** 范围内按本地日升序，只含有用量的日子；`since` 缺省（全部历史）时不作 366 天截断。 */
+  daily: SeriesPoint[]
+  /** 范围内用过该模型的会话，按总计降序；元素与快照 sessionsList 同形。 */
+  sessions: SessionStat[]
+}
+
+/**
  * usageStats/snapshot 的 value 部分快照协议，为本插件自有 API 协议，
  * 见 AGENTS §8，host snapshot() 构建与 client useSnapshot 消费共用，避免两端镜像漂移。
  * Remote 传输外层为 { ok, value } 信封，此类型对应成功时的 value。
@@ -161,6 +177,17 @@ export interface UsageSnapshot {
 export interface SnapshotRequest {
   sessionId: string | null
   limit?: number
+}
+
+/**
+ * usageStats/modelDetail 请求：按「供应商 + 模型」取单个模型的明细。
+ * `since` 是浏览器端算好的本地日零点，服务端不认「7天/1月」这类范围概念，
+ * 缺省或非正数即全部历史；模型统计重定向的多个来源由浏览器端各查一次再合并。
+ */
+export interface ModelDetailRequest {
+  provider: string
+  model: string
+  since?: number
 }
 
 /** usageStats/rebuild 结果：清空账本后全量重扫的折叠事件数。 */

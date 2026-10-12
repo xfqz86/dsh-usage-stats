@@ -7,8 +7,8 @@
 
 ## 1. 通用约定
 
-- 命名空间 `usageStats`，7 个一元（unary，一问一答，区别于流式）方法：
-  `snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
+- 命名空间 `usageStats`，8 个一元（unary，一问一答，区别于流式）方法：
+  `snapshot/modelDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
   `rebuild`/`clear`/`seal` **无请求参数**（贡献里 `parameters: []`），其余各带一个具名 request。
   调用经 `ctx.get('remote.usageStats')` 取命名空间服务后调用（本仓库由 `usageStatsRemote()` 封装）；
   线路上走客户端 Connection 的 RPC：`POST /api/usageStats/<方法>`，请求体为
@@ -20,7 +20,7 @@
   `src/remote/contribution.ts` 头注释）；只改实现体不动贡献，改签名必须同步。
 - **参数名即线路字段名**：SRC 分发下网关从服务端方法源码文本
   （`Function.prototype.toString`）读参数名，作为请求 `args` 的字段名；带参方法的参数名
-  必须与贡献里的 `wire` 逐字相同（本仓库四个带参方法均为 `request`），改名即改协议。
+  必须与贡献里的 `wire` 逐字相同（本仓库五个带参方法均为 `request`），改名即改协议。
   服务端产物因此不做压缩（见 `docs/ARCHITECTURE.md` §6），
   `test/smoke.mjs` 的「SRC 线路字段」自检逐方法对齐两侧。
 
@@ -36,6 +36,24 @@
   - `sessions` 为有量会话数、`current` 为指定会话聚合或 `null`、`all` 为全量 `Agg`、`series.all` 为全量按日 `SeriesPoint[]` 及 `series.current` 为指定会话按日；
   - `models[]` 按模型拆分，元素含 `provider`、`model`、`calls`、`usage`、`series`，`series` 为该模型按日 `SeriesPoint[]`，供浏览器端范围筛选与堆叠柱使用，旧快照可能缺省；
   - `sessionsList[]` 为会话明细，按 `lastActive` 倒序，已分页截断，每项含 `id`、`title`、`cwd`、`createdAt`、`lastActive`、`calls`、`usage`、`parentSession`、`origin`、`delegationDepth`，后三者为子代理归属，序列化为 `string|null`、`string|null`、`number`。
+
+## 2.1 usageStats/modelDetail
+
+- 目的：单个模型的明细，供模型页点开一行时在弹窗里查看「按日期 / 按会话」。**按需查询，不进快照**——
+  「模型 × 会话」交叉表若随快照下发，会让每 4 秒一次的轮询体积随「模型数 × 会话数」膨胀。
+- request `{ provider: string, model: string, since?: number }`：
+  - `provider`/`model` 为账本里的原始「供应商 + 模型」（快照 `models[]` 拆出的两列，非归并后的行）；
+  - `since` 是**浏览器端算好的本地日零点**（模型页时间范围 → `modelRangeCutoff`），服务端只做
+    `t >= since` 过滤，不认「7天/1年」这类范围概念；缺省或非正数即全部历史（事件时间恒大于 0）。
+  - 模型统计重定向的归并行由浏览器端**按来源各查一次再合并**（服务端不归并，与快照同一约定，见 §5）。
+- 响应 `value` 为 `ModelDetail`（`src/types.ts`）：`provider`、`model`、范围内合计 `calls` 与 `usage`、
+  按本地日升序的 `daily: SeriesPoint[]`（只含有用量的日子）、按总计降序的 `sessions: SessionStat[]`
+  （元素与快照 `sessionsList` 同形，含会话元数据与子代理归属）；`since` 缺省的「全部」**不做
+  366 天截断**——那是快照序列化开销的取舍，按需查询没有这个约束，且要与所点行的合计对齐。
+- 两个维度的来源：`daily` 取内存聚合的模型×日桶（`startOfDay` 分桶，本地日划分的唯一来源），
+  `sessions` 取账本 `events` 按 `provider`/`model` 过滤后 `GROUP BY session_id` 的聚合；
+  合计由会话行求和，与按日合计互为校验（`test/smoke.mjs` 断言相等）。
+- 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前账本里的数据，可能偏少。
 
 ## 3. 额度查询通用约定（goQuota / deepseekBalance / zaiQuota 共用）
 

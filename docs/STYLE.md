@@ -115,6 +115,11 @@
 - **表格**：排序分页走 `useSortTable` + `stableSort`，比较函数只留 switch 返回值；
   命中率/平均每次调用只用 `hitRateOfDay`/`avgPerCall`（`stats.ts`），不在各表各写一份；
   空值渲染优先用自带缺省的 `pctOf/fmtFull`（回 `--`），少写 `x == null ? '--' : …` 三元。
+- **同名视图**：模型明细的「按日期 / 按会话」与面板「日期 / 会话」是同一套展示——
+  图表容器、表格基元（`UsageStatsCommon.module.css` 的 `firstCol`/`thSm`/`charts`/
+  子代理行）与分组排序实现（`groupSessions`/`compareSessionGroup`）都共用，
+  改一处即两处生效，别在明细里另抄一份；唯一有意的差异是明细会话表首列不吃满剩余
+  宽度（弹窗比面板窄，吃满会把「最近活跃」挤出可视区）。
 - **额度三件套**：轮询骨架只活在 `useQuota`，服务端查询只活在
   `createQuotaQuery`/`resolveFirstKey`（`host/quota.ts`），新增额度来源时配
   端点/键名/error 占位，不抄整份文件。

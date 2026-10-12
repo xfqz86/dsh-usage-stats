@@ -21,7 +21,9 @@
 - **events**：`(t, session_id, seq, provider, model, input/output/cache_read/cache_write/reasoning)`，
   `PK(t,session_id,seq)` 天然幂等 `ON CONFLICT DO UPDATE`；`t` 缺失时当天确定性毫秒偏移。
   约束：TEXT 禁 `\0`，内存键 `provider\0model` 写时 `splitModelKey` 拆列，标题/cwd 等
-  先 `sanitizeSqlText`（`\0→\uFFFD`）。
+  先 `sanitizeSqlText`（`\0→\uFFFD`）。另有 `(provider, model, t)` 普通索引
+  `idx_events_model`，供模型明细按模型过滤后按会话聚合；索引随建表语句幂等创建，
+  只是查询加速，不是数据结构或口径变化、不递增 `user_version`。
 - **session_meta**：`(session_id PK, title, cwd, created_at, last_active, parent_session,
   origin, delegation_depth)`，初始化抄录、运行时由 `session/title` 与 `session/event`
   头补齐，内存 `metaCache` 供快照；`user_version 3→4` 增量补三列。
@@ -57,6 +59,10 @@
      重扫历史，是恢复历史的出口；
    - `usageStats/seal` 手动物化：把内存聚合物化进 `agg_*` 并将密封边界推进至今日
      零点，显著加快冷启动；批量导入与实时增量已自动密封，通常无需手动调用。
+6. **明细读取**（`detail.ts`，`usageStats/modelDetail`）：按需查询，不参与折叠与物化。
+   「按日期」取内存聚合的模型×日桶（`startOfDay` 分桶、`since` 过滤），「按会话」读
+   账本 `events` 按 `provider`/`model` 过滤后 `GROUP BY session_id`（走 `idx_events_model`），
+   会话元数据复用账本 `session_meta`；两个维度都不新增表、不改 `user_version`。
 
 ## 4. 折叠与去重（`agg.ts` / `store.ts`）
 
@@ -87,6 +93,13 @@
 - 展示口径：日期趋势柱仅堆叠输入/输出/缓存三段（柱高按三段求和，`total` 字段仍为
   全口径），缓存命中率=`cacheRead/(cacheRead+input)`；快照序列的截断行为
   （`series.current` 不截断）见 `docs/API.md` §2。
+- **模型明细口径**（`usageStats/modelDetail`，协议见 `docs/API.md` §2.1）：与快照同一
+  `startOfDay` 日划分、同一 `since` 过滤；按会话聚合与按日序列覆盖同一批事件，
+  合计由会话行求和（与按日合计相等由 `test/smoke.mjs` 断言）；`since` 缺省时覆盖
+  全部历史、不做 366 天截断，以便与所点模型行的合计对齐。展示与面板同名 Tab 同一套：
+  按日期顶部复用 `StackedBar` date 模式（补齐范围内每一天、同一三段堆叠口径），
+  表格只列有量的日子；按会话复用 `groupSessions`/`compareSessionGroup`，
+  子代理折叠与排序键都与会话 Tab 一致。
 - **不计入项（数据源边界，非本仓可补）**：
   - 会话标题生成的辅助调用——`session/title-llm-request` 只记请求，harness 取标题
     文本后丢弃响应 usage，日志里没有用量可折；

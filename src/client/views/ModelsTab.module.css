@@ -1,13 +1,19 @@
 /* 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
-   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard 等）已抽至
+   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard/firstCol 等）已抽至
    components/UsageStatsCommon.module.css，此处仅保留列宽差异与布局差异。 */
 
-/* 首列（模型）吃掉全部剩余空间、其余列按内容自适应（table-layout: auto；max-width: none 覆盖共用 cellText 的宽度钳制） */
+/* 模型列的最小宽度（「吃满剩余宽度、其余列按内容自适应」见共用基元 .firstCol） */
 .tableWrap th:nth-child(1),
 .tableWrap td:nth-child(1) {
-  width: 100%;
   min-width: 160px;
-  max-width: none;
+}
+
+/* 本表列最多（含明细共 10 列）：数值列横向内边距比共用基元再收 1px，
+   保证 820 宽的面板（891 视口）下中英文表头都不出现横向滚动条 */
+.tableWrap th,
+.tableWrap td {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 /* 可排序表头按钮样式已提取至 components/ThSortable.module.css（与 DatesTab/SessionsTab 共用） */
@@ -40,3 +46,35 @@
   white-space: nowrap;
   vertical-align: middle;
 }
+
+/* 明细入口列：表格最后一列，只放一个 link 样式的「明细」按钮 */
+.detailCell {
+  text-align: right;
+  padding-left: 2px;
+}
+
+/* link 样式按钮：用主题的 --dsw-alias-link（深浅主题都是品牌蓝）；常态只给颜色、
+   悬浮与聚焦才出下划线，避免满屏下划线盖过数值列 */
+.detailLink {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-link);
+  cursor: pointer;
+  text-underline-offset: 3px;
+}
+
+.detailLink:hover,
+.detailLink:focus-visible {
+  text-decoration: underline;
+}
+
+.detailLink:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+

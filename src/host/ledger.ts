@@ -10,7 +10,8 @@
  *     幂等，同一条事件重复写入收敛，重开账本时每行只折一次，seq=-1 的未知
  *     序事件再按毫秒时间戳区分。结构化列主键，列顺序为 t、session_id、seq。
  *     无 time 的畸形事件以"当天内确定性毫秒偏移"入账：同日重放幂等，
- *     跨日重放理论上可能重复——防御路径罕见可接受。
+ *     跨日重放理论上可能重复——防御路径罕见可接受。另有 (provider, model, t)
+ *     普通索引，供模型明细按模型过滤后按会话聚合（modelSessions）。
  *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/lastActive/parentSession/origin/delegationDepth，初始化扫描抄录、实时 session/title 事件更新。
  *   - `agg_*` 预统计表（agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint 共 7 张）：派生聚合的物化视图，见 §5 预统计；与 events 同库但各自提交，
  *     命中时直接加载即可，无需重放全量事件。
@@ -78,6 +79,18 @@ export interface SessionMeta {
   delegationDepth: number
 }
 
+/** 某模型按会话聚合的一行，模型明细的「按会话」维度读回形状。 */
+export interface ModelSessionAgg {
+  sessionId: string
+  calls: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+  lastActive: number
+}
+
 /** events 表 DDL，列名 snake_case，读回时映射回 camelCase。 */
 const EVENT_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -93,6 +106,14 @@ CREATE TABLE IF NOT EXISTS events (
   reasoning   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (t, session_id, seq)
 )`;
+
+/**
+ * events 的按模型索引：模型明细按「供应商 + 模型」过滤后再按会话聚合，
+ * 无索引即全表扫描。纯查询加速，不参与 user_version 判定（不是数据结构或
+ * 统计口径变化）；表被重建时索引随表 DROP，open() 会在版本判定后重建一次。
+ */
+const EVENTS_MODEL_INDEX_DDL = `
+CREATE INDEX IF NOT EXISTS idx_events_model ON events (provider, model, t)`;
 
 /** session_meta 表 DDL。 */
 const META_TABLE_DDL = `
@@ -234,6 +255,7 @@ interface LedgerStatements {
   getCheckpoint: ReturnType<DatabaseSync['prepare']>
   upsertCheckpoint: ReturnType<DatabaseSync['prepare']>
   allEventsSince: ReturnType<DatabaseSync['prepare']>
+  modelSessions: ReturnType<DatabaseSync['prepare']>
 }
 
 /** 新建空会话元数据，字段可增量补齐。 */
@@ -386,6 +408,8 @@ export class Ledger {
         this.db.exec(`PRAGMA user_version = ${LEDGER_VERSION}`);
       }
     }
+    // 索引在版本判定之后建：走重建分支时表刚被 DROP 连带删掉，这里正好补回。
+    this.db.exec(EVENTS_MODEL_INDEX_DDL);
     const hasEvent = this.db.prepare('SELECT 1 AS x FROM events LIMIT 1');
     const hasEventByPK = this.db.prepare('SELECT 1 AS x FROM events WHERE t = ? AND session_id = ? AND seq = ? LIMIT 1');
     const insertEvent = this.db.prepare(
@@ -524,12 +548,22 @@ export class Ledger {
     const allEventsSince = this.db.prepare(
       'SELECT t, session_id, seq, provider, model, input, output, cache_read, cache_write, reasoning FROM events WHERE t >= ?',
     );
+    // 模型明细的按会话聚合：条件走 (provider, model) 索引，结果集只与命中会话数同阶。
+    const modelSessions = this.db.prepare(
+      `SELECT session_id,
+              COUNT(*) AS calls,
+              SUM(input) AS input, SUM(output) AS output,
+              SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write,
+              SUM(reasoning) AS reasoning, MAX(t) AS last_active
+       FROM events WHERE provider = ? AND model = ? AND t >= ?
+       GROUP BY session_id`,
+    );
     this.stmts = {
       hasEvent, hasEventByPK, insertEvent, allEvents, upsertMeta, allMeta,
       hasAgg, getAggTotal, allAggDaily, allAggModel, allAggModelDaily, allAggSession, allAggSessionDaily,
       incAggTotal, incAggDaily, incAggModel, incAggModelDaily, incAggSession, incAggSessionDaily,
       insertAggTotalBulk, insertAggDailyBulk, insertAggModelBulk, insertAggModelDailyBulk, insertAggSessionBulk, insertAggSessionDailyBulk,
-      getCheckpoint, upsertCheckpoint, allEventsSince,
+      getCheckpoint, upsertCheckpoint, allEventsSince, modelSessions,
     };
     for (const row of allMeta.all() as Record<string, unknown>[]) {
       const id = String(row.session_id);
@@ -630,6 +664,29 @@ export class Ledger {
       cacheRead: Number(r.cache_read) || 0,
       cacheWrite: Number(r.cache_write) || 0,
       reasoning: Number(r.reasoning) || 0,
+    }));
+  }
+
+  /**
+   * 某模型的事件按会话聚合，模型明细的「按会话」维度用：只按 (provider, model)
+   * 过滤再分组，结果集与命中会话数同阶，与事件总量无关。
+   * @param provider - 供应商，账本列原文（写库时已做 NUL 归一）。
+   * @param model - 模型，账本列原文。
+   * @param since - 时间下界（含），本地日零点；0 表示全部（事件时间恒大于 0）。
+   * @returns 每会话一行，调用数与各 token 分量求和、最后活跃取最大事件时间。
+   */
+  modelSessions(provider: string, model: string, since: number): ModelSessionAgg[] {
+    this.assertOpen();
+    const rows = this.stmts.modelSessions.all(provider, model, since) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      sessionId: String(r.session_id),
+      calls: Number(r.calls) || 0,
+      input: Number(r.input) || 0,
+      output: Number(r.output) || 0,
+      cacheRead: Number(r.cache_read) || 0,
+      cacheWrite: Number(r.cache_write) || 0,
+      reasoning: Number(r.reasoning) || 0,
+      lastActive: Number(r.last_active) || 0,
     }));
   }
 

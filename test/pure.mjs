@@ -16,13 +16,14 @@
  *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、
  *     截断尾帧、坏帧）；
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
- *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支；
+ *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细
+ *     请求与结果）；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
  *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带
  *     表单身份（热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧
  *     localStorage 迁移（等表单落定、成功写入才删旧键、不可用时保留）；服务端
  *     条目 schema（字段全 volatile、解析值等于共享默认值、条目 id 与浏览器端常量一致）；
- *   - stats：格式化/会话分组/时间范围/图表几何/快照截断；
+ *   - stats：格式化/会话分组/最近活跃文案/时间范围/图表几何/快照截断/模型明细合并；
  *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
  */
 import { afterEach, describe, it } from 'node:test';
@@ -56,16 +57,19 @@ import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
   buildDateStack,
   buildModelStack,
+  compareSessionGroup,
   dateRangeCutoff,
   dayTotal,
   filterModelsByRange,
   fmt,
   fmtFull,
+  formatLastActive,
   fullDayLabel,
   groupSessions,
   heatGridOf,
   hitRateOfDay,
   lastActiveDayKind,
+  mergeModelDetails,
   modelCatalog,
   modelRangeCutoff,
   modelRangeToDays,
@@ -468,9 +472,9 @@ describe('fork 继承前缀：只折本会话自有事件', () => {
 });
 
 describe('remote：手写严格贡献', () => {
-  it('7 个一元方法与服务一致', () => {
+  it('8 个一元方法与服务一致', () => {
     assert.deepEqual([...METHOD_NAMES], [
-      'snapshot', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
+      'snapshot', 'modelDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
     ]);
     assert.equal(USAGE_STATS_REMOTE.package, '@xfqz86/dsh-usage-stats');
     assert.deepEqual(
@@ -500,6 +504,24 @@ describe('remote：手写严格贡献', () => {
     schema.parse({ sessionId: 's-1', limit: 500 });
     assert.throws(() => schema.parse({ sessionId: 42 }));
     assert.throws(() => schema.parse({ sessionId: null, limit: 'x' }));
+  });
+
+  it('模型明细请求与结果 schema 收发合法、拒非法', () => {
+    const detail = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'modelDetail');
+    assert.ok(detail && detail.parameters.length === 1);
+    const codec = detail.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    schema.parse({ provider: 'p', model: 'm' });
+    schema.parse({ provider: 'p', model: 'm', since: 1_700_000_000_000 });
+    assert.throws(() => schema.parse({ model: 'm' }));
+    assert.throws(() => schema.parse({ provider: 'p' }));
+    assert.throws(() => schema.parse({ provider: 'p', model: 'm', since: 'x' }));
+    // 结果缺字段整条被拒：host 必须字段齐全，不能少下发 sessions/daily
+    const result = detail.result.create();
+    assert.throws(() => result.parse({ ok: true, value: { provider: 'p', model: 'm' } }));
   });
 
   it('结果信封成功分支严格、错误分支透传', () => {
@@ -575,6 +597,19 @@ describe('stats：格式化', () => {
     assert.equal(hitRateOfDay({ input: 0, cacheRead: 0 }), null);
     assert.equal(hitRateOfDay({ input: 1, cacheRead: 3 }), 75);
   });
+
+  it('formatLastActive 今天/昨天/更早与未知', () => {
+    const t = (key) => (key === 'time.today' ? '今天' : key === 'time.yesterday' ? '昨天' : key);
+    const today = new Date();
+    today.setHours(9, 0, 0, 0);
+    const yesterday = new Date(startOfDay(Date.now()));
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(20, 5, 0, 0);
+    assert.equal(formatLastActive(today.getTime(), t), '今天 09:00');
+    assert.equal(formatLastActive(yesterday.getTime(), t), '昨天 20:05');
+    assert.equal(formatLastActive(new Date(2020, 0, 2, 3, 4).getTime(), t), '2020-01-02');
+    assert.equal(formatLastActive(0, t), '--');
+  });
 });
 
 describe('stats：会话分组', () => {
@@ -615,6 +650,31 @@ describe('stats：会话分组', () => {
       sess('b', { lastActive: 2, parentSession: 'a', origin: 'subagent', delegationDepth: 1 }),
     ]);
     assert.equal(groups.length, 2);
+  });
+});
+
+describe('stats：会话表排序比较', () => {
+  // 面板会话 Tab 与模型明细的按会话表共用同一比较实现，这里锁住「同一列同一顺序」的口径
+  const groups = groupSessions([
+    sess('a', { title: 'Alpha', lastActive: 100, calls: 4, usage: agg(40, 4) }),
+    sess('ac', { title: 'Child', lastActive: 300, calls: 6, usage: agg(60, 6), parentSession: 'a', origin: 'subagent', delegationDepth: 1 }),
+    sess('b', { title: 'Beta', lastActive: 200, calls: 5, usage: agg(10, 5) }),
+  ]);
+  const a = groups.find((g) => g.main.id === 'a');
+  const b = groups.find((g) => g.main.id === 'b');
+
+  it('数值列取折叠后的分组合计', () => {
+    assert.ok(a !== undefined && b !== undefined);
+    assert.ok(compareSessionGroup('calls', a, b) > 0); // 10 vs 5
+    assert.ok(compareSessionGroup('total', a, b) > 0); // 100 vs 10
+    assert.ok(compareSessionGroup('input', a, b) > 0); // 100 vs 10
+    assert.ok(compareSessionGroup('avg', a, b) > 0); // 每次调用 10 vs 2
+  });
+
+  it('文本列按标题、最近活跃按主会话时间', () => {
+    assert.ok(a !== undefined && b !== undefined);
+    assert.ok(compareSessionGroup('session', a, b) < 0); // Alpha < Beta
+    assert.ok(compareSessionGroup('lastActive', a, b) < 0); // 主行 100 < 200，子会话的 300 不参与主行排序
   });
 });
 
@@ -868,6 +928,53 @@ describe('模型统计重定向：归并', () => {
     assert.equal(resolveRedirectKey('p\u0000a', index), 'p\u0000c');
     assert.equal(resolveRedirectKey('p\u0000z', index), 'p\u0000z');
     assert.equal(resolveRedirectKey('p\u0000c', index), 'p\u0000c');
+  });
+});
+
+describe('模型明细：按来源合并', () => {
+  const usage = (input) => ({ input, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: input });
+  const day = (t, input, calls) => ({ t, input, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, calls });
+  const session = (id, { calls = 1, input = 0, lastActive = 0, title = '', cwd = '', createdAt = 0, parentSession = null, origin = null, delegationDepth = 0 } = {}) => ({
+    id, title, cwd, createdAt, lastActive, calls, usage: usage(input), parentSession, origin, delegationDepth,
+  });
+  const detail = (provider, model, { input = 0, calls = 0, daily = [], sessions = [] } = {}) => ({
+    provider, model, calls, usage: usage(input), daily, sessions,
+  });
+
+  it('空入参返回 null', () => {
+    assert.equal(mergeModelDetails([], { provider: 'p', model: 'm' }), null);
+  });
+
+  it('用量、日序列与会话按 id 求和，会话元数据取首个非空，入参不被改写', () => {
+    const d1 = detail('p1', 'm', {
+      input: 10,
+      calls: 2,
+      daily: [day(1000, 10, 2)],
+      sessions: [session('s1', { calls: 2, input: 10, lastActive: 5, parentSession: 'root', delegationDepth: 1 })],
+    });
+    const d2 = detail('p2', 'm', {
+      input: 5,
+      calls: 1,
+      daily: [day(1000, 5, 1), day(2000, 7, 1)],
+      sessions: [
+        session('s1', { calls: 1, input: 5, lastActive: 9, title: '会话甲', cwd: '/w', createdAt: 42, delegationDepth: 2 }),
+        session('s2', { calls: 1, input: 7, title: '会话乙' }),
+      ],
+    });
+    const merged = mergeModelDetails([d1, d2], { provider: 'p', model: 'm' });
+    assert.equal(merged.provider, 'p');
+    assert.equal(merged.model, 'm');
+    assert.equal(merged.calls, 3);
+    assert.deepEqual(merged.usage, { input: 15, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 15 });
+    assert.deepEqual(merged.daily.map((p) => [p.t, p.input, p.calls]), [[1000, 15, 3], [2000, 7, 1]]);
+    assert.deepEqual(
+      merged.sessions.map((s) => [s.id, s.calls, s.usage.total, s.lastActive, s.title, s.cwd, s.createdAt, s.parentSession, s.delegationDepth]),
+      [['s1', 3, 15, 9, '会话甲', '/w', 42, 'root', 2], ['s2', 1, 7, 0, '会话乙', '', 0, null, 0]],
+    );
+    // 合并在副本上做：归并行的明细与单模型明细同时在场时不能互相污染
+    assert.equal(d1.sessions[0].calls, 2);
+    assert.equal(d2.sessions[0].usage.total, 5);
+    assert.equal(d1.daily[0].input, 10);
   });
 });
 

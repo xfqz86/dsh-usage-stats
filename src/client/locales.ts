@@ -190,6 +190,14 @@ export const zh = {
   'settings.redirectPick': '从列表里选，或直接输入',
   'models.mergedSources': '已归并 {n}',
   'models.mergedSourcesHint': '这一行的用量包含以下来源',
+  'models.viewDetail': '查看明细',
+  'models.detailLink': '明细',
+  'models.closeDetail': '关闭明细',
+  'models.detailDates': '按日期',
+  'models.detailSessions': '按会话',
+  'models.detailEmpty': '该范围内此模型没有用量',
+  'models.detailFailed': '明细加载失败',
+  'models.retry': '重试',
 } satisfies Record<string, string>;
 
 /** 用量统计命名空间拥有的翻译键。 */
@@ -384,4 +392,12 @@ export const en = {
   'settings.redirectPick': 'Pick from the list or type a value',
   'models.mergedSources': 'Merged {n}',
   'models.mergedSourcesHint': 'This row includes usage from',
+  'models.viewDetail': 'View breakdown',
+  'models.detailLink': 'Details',
+  'models.closeDetail': 'Close breakdown',
+  'models.detailDates': 'By date',
+  'models.detailSessions': 'By session',
+  'models.detailEmpty': 'No usage for this model in the selected range',
+  'models.detailFailed': 'Failed to load breakdown',
+  'models.retry': 'Retry',
 } satisfies Record<UsageStatsKey, string>;
