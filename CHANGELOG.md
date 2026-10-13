@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-13
+
 ### 功能
 
 - **设置可以导出、导入**：设置 Tab 新增「配置迁移」折叠区，把当前偏好生成一串配置串复制走，在别的机器或 profile 里粘贴即整份还原；换机器、备份、两台机器对齐都靠它
@@ -167,7 +169,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.7...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.4...v0.4.5
