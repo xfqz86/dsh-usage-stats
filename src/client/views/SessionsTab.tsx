@@ -1,9 +1,11 @@
 /**
  * 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开，数据完整展示。
  * 独立成文件，一个组件一个文件。
- * 列替换：移除 cacheWrite / reasoning，新增 命中率 与 每次调用；
- * 列顺序：会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃；
- * 表头支持点击排序，稳定排序，分组后分页前执行。
+ * 列顺序：会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃 | 明细；
+ * 表头支持点击排序，稳定排序，分组后分页前执行；分组与排序比较在 stats.ts，
+ * 与模型明细的按会话表共用同一份（两处列、排序与折叠一致）。
+ * 行末「明细」入口只挂主会话行：打开的是该分组（含子代理）的会话明细弹窗，
+ * 集合在点击那一刻由 sessionGroupIds 冻结，子会话行同列留空。
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
@@ -11,38 +13,27 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Pagination } from '../components/Pagination.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { avgPerCall, fmt, fmtFull, fullDayLabel, hitRateOfDay, lastActiveDayKind, pctOf, shortId, usageTotal, groupSessions } from '../stats.ts';
+import { avgPerCall, compareSessionGroup, fmt, fmtFull, formatLastActive, hitRateOfDay, pctOf, shortId, usageTotal, groupSessions, sessionGroupIds, type SessionSortKey } from '../stats.ts';
+import { useSessionDetail } from '../useSessionDetail.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
+import { SessionDetail } from './SessionDetail.tsx';
 import css from './SessionsTab.module.css';
 
+import type { ModelRedirect } from '../../types.ts';
 import type { LocaleFn } from '../locales.ts';
 import type { SessionStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 const PAGE_SIZE = 20;
 
-/** 排序键：与表头一一对应。 */
-type SortKey = 'session' | 'calls' | 'input' | 'output' | 'cacheRead' | 'hitRate' | 'total' | 'avg' | 'lastActive';
-
-/** 最近活跃文案：0 表未知，自然日为今天显示「今天 HH:MM」、昨天显示「昨天 HH:MM」，更早显示完整日期。 */
-function formatLastActive(
-  lastActive: number,
-  t: PropsLocale<'dsh-usage-stats'>['t'],
-): string {
-  if (!lastActive) return '--';
-  const time = new Date(lastActive).toTimeString().slice(0, 5);
-  const kind = lastActiveDayKind(lastActive, Date.now());
-  if (kind === 'today') return `${t('time.today')} ${time}`;
-  if (kind === 'yesterday') return `${t('time.yesterday')} ${time}`;
-  return fullDayLabel(lastActive);
-}
-
 /** 会话 Tab：分页每页 20 条，子代理折叠，主会话前显示 + / −，子项不占页位，数据完整展示全分量。 */
 export function SessionsTab({
-  sessionsList, t,
+  sessionsList, rules, t,
 }: {
   sessionsList: SessionStat[]
+  /** 模型统计重定向规则，透传给会话明细弹窗的按模型子视图。 */
+  rules: readonly ModelRedirect[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   // 本地化函数单点转换：纯函数要的无命名空间形态，组件内统一用 tFn。
@@ -51,26 +42,17 @@ export function SessionsTab({
   const groups = useMemo(() => groupSessions(sessionsList), [sessionsList]);
 
   // 排序分页三件套（三表同一交互，比较函数保留领域差异；排序不增删行）
-  const { sortKey, sortDir, handleSort, page, totalPages, setPage, slice } = useSortTable<SortKey>('lastActive', groups.length, PAGE_SIZE);
+  const { sortKey, sortDir, handleSort, page, totalPages, setPage, slice } = useSortTable<SessionSortKey>('lastActive', groups.length, PAGE_SIZE);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  // 打开的明细：集合在点击那一刻冻结（之后新增的子代理不并入，重开/重试才对齐）
+  const [detail, setDetail] = useState<{ id: string; ids: string[] } | null>(null);
+  const detailState = useSessionDetail(detail?.ids ?? null);
 
-  // 排序：分组后、分页前；数值列取 agg 对应值，命中率/平均按计算值，会话按标题，lastActive 按时间
-  const sortedGroups = useMemo(() => stableSort(groups, (a, b) => {
-    const agga = a.agg;
-    const aggb = b.agg;
-    switch (sortKey) {
-      case 'session': return (a.main.title || a.main.id || '').localeCompare(b.main.title || b.main.id || '', 'zh-Hans-CN');
-      case 'calls': return (agga.calls || 0) - (aggb.calls || 0);
-      case 'input': return (agga.usage.input || 0) - (aggb.usage.input || 0);
-      case 'output': return (agga.usage.output || 0) - (aggb.usage.output || 0);
-      case 'cacheRead': return (agga.usage.cacheRead || 0) - (aggb.usage.cacheRead || 0);
-      case 'hitRate': return (hitRateOfDay(agga.usage) ?? -1) - (hitRateOfDay(aggb.usage) ?? -1);
-      case 'total': return usageTotal(agga.usage) - usageTotal(aggb.usage);
-      case 'avg': return (avgPerCall(usageTotal(agga.usage), agga.calls) ?? -1) - (avgPerCall(usageTotal(aggb.usage), aggb.calls) ?? -1);
-      case 'lastActive': return (a.main.lastActive || 0) - (b.main.lastActive || 0);
-      default: return 0;
-    }
-  }, sortDir), [groups, sortKey, sortDir]);
+  // 排序：分组后、分页前；比较函数与模型明细的按会话表共用（stats.compareSessionGroup）
+  const sortedGroups = useMemo(
+    () => stableSort(groups, (a, b) => compareSessionGroup(sortKey, a, b), sortDir),
+    [groups, sortKey, sortDir],
+  );
 
   // 清理已不存在的主会话展开状态
   useEffect(() => {
@@ -84,6 +66,12 @@ export function SessionsTab({
     }
     if (changed) setExpanded(next);
   }, [groups, expanded]);
+
+  // 消失守卫：快照里主会话没了（清零、过期）就收起明细弹窗，不让它挂在一行不存在的数字上
+  useEffect(() => {
+    if (detail === null) return;
+    if (!groups.some((g) => g.main.id === detail.id)) setDetail(null);
+  }, [groups, detail]);
 
   const pageGroups = useMemo(() => slice(sortedGroups), [slice, sortedGroups]);
 
@@ -100,9 +88,12 @@ export function SessionsTab({
     return <div className={shared.empty}>{t('state.noUsage')}</div>;
   }
 
+  // 弹窗标题取当前行（标题缺省回落短 id，与表格行同一表现）
+  const openGroup = detail === null ? undefined : groups.find((g) => g.main.id === detail.id);
+
   return (
     <div className={`${shared.section} ${shared.tableViewRoot}`}>
-      <div className={`${shared.tableWrap} ${css.tableWrap}`}>
+      <div className={`${shared.tableWrap} ${shared.firstCol} ${css.tableWrap}`}>
         <table className={shared.table}>
           <thead>
             <tr>
@@ -111,18 +102,20 @@ export function SessionsTab({
               <ThSortable k="input" label={t('table.input')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <ThSortable k="output" label={t('table.output')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <ThSortable k="total" label={t('table.total')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              {/* 长表头命中率与平均缩字号保持单行，经附加类注入 */}
-              <ThSortable k="hitRate" label={t('table.hitRate')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className={css.thSm} />
+              {/* 长表头命中率与平均缩字号保持单行，样式在共用基元 .thSm */}
+              <ThSortable k="hitRate" label={t('table.hitRate')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className={shared.thSm} />
               <ThSortable k="calls" label={t('table.calls')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className={css.thSm} />
+              <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className={shared.thSm} />
               <ThSortable k="lastActive" label={t('table.lastActive')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              {/* 明细入口列：不参与排序，表头留空（单元格里的链接自己说明用途） */}
+              <th aria-label={t('detail.view')} />
             </tr>
           </thead>
           <tbody>
             {pageGroups.map((g) => {
               const isExpanded = expanded.has(g.main.id);
               const hasChildren = g.childCount > 0;
-              const when = formatLastActive(g.main.lastActive, t);
+              const when = formatLastActive(g.main.lastActive, tFn);
               const mainTitle = g.main.title || shortId(g.main.id);
               const agg = g.agg.usage;
               const aggHit = hitRateOfDay(agg);
@@ -134,7 +127,7 @@ export function SessionsTab({
                       {hasChildren ? (
                         <button
                           type="button"
-                          className={css.expandBtn}
+                          className={shared.iconBtn}
                           aria-expanded={isExpanded}
                           aria-label={t(isExpanded ? 'sessions.collapseChildren' : 'sessions.expandChildren', { n: g.childCount } as unknown as Record<string, unknown>)}
                           onClick={() => toggle(g.main.id)}
@@ -147,7 +140,7 @@ export function SessionsTab({
                       <span>
                         {mainTitle} <span className={shared.sub}>· {shortId(g.main.id)}</span>
                       </span>
-                      {hasChildren && <span className={css.badge}>{t('sessions.childrenCount', { n: g.childCount } as unknown as Record<string, unknown>)}</span>}
+                      {hasChildren && <span className={shared.countBadge}>{t('sessions.childrenCount', { n: g.childCount } as unknown as Record<string, unknown>)}</span>}
                     </td>
                     <td className={shared.num}>{fmt(agg.cacheRead, tFn)}</td>
                     <td className={shared.num}>{fmt(agg.input, tFn)}</td>
@@ -157,16 +150,27 @@ export function SessionsTab({
                     <td className={shared.num}>{fmtFull(g.agg.calls)}</td>
                     <td className={shared.num}>{fmtFull(aggAvg)}</td>
                     <td className={shared.num}>{when}</td>
+                    {/* 打开这一行的明细弹窗，集合是折叠后的整个分组（含子代理） */}
+                    <td className={shared.detailCell}>
+                      <button
+                        type="button"
+                        className={shared.detailLink}
+                        aria-label={t('detail.view')}
+                        onClick={() => setDetail({ id: g.main.id, ids: sessionGroupIds(g) })}
+                      >
+                        {t('detail.link')}
+                      </button>
+                    </td>
                   </tr>
                   {isExpanded &&
                     g.children.map((c) => {
-                      const childWhen = formatLastActive(c.lastActive, t);
+                      const childWhen = formatLastActive(c.lastActive, tFn);
                       const childHit = hitRateOfDay(c.usage);
                       const childAvg = avgPerCall(usageTotal(c.usage), c.calls);
                       return (
-                        <tr key={c.id} className={css.childRow} title={`${c.cwd ? `${c.cwd}\n` : ''}${c.title}`}>
-                          <td className={`${shared.cellText} ${css.childCell}`}>
-                            <span className={css.indent} aria-hidden>
+                        <tr key={c.id} className={shared.childRow} title={`${c.cwd ? `${c.cwd}\n` : ''}${c.title}`}>
+                          <td className={`${shared.cellText} ${shared.childCell}`}>
+                            <span className={shared.indent} aria-hidden>
                               └
                             </span>
                             {c.title || shortId(c.id)} <span className={shared.sub}>· {shortId(c.id)}</span>
@@ -179,6 +183,8 @@ export function SessionsTab({
                           <td className={shared.num}>{fmtFull(c.calls)}</td>
                           <td className={shared.num}>{fmtFull(childAvg)}</td>
                           <td className={shared.num}>{childWhen}</td>
+                          {/* 子会话行不挂入口：明细只从主会话行打开，这里留空保持网格对齐 */}
+                          <td className={shared.detailCell} />
                         </tr>
                       );
                     })}
@@ -192,6 +198,17 @@ export function SessionsTab({
         <div className={shared.paginationBar}>
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} t={t} />
         </div>
+      )}
+      {/* 明细弹窗：叠在详情面板之上，基座 Modal 的层级栈保证 Esc 只关这一层 */}
+      {detail !== null && openGroup !== undefined && (
+        <SessionDetail
+          id={detail.id}
+          title={openGroup.main.title || shortId(openGroup.main.id)}
+          rules={rules}
+          state={detailState}
+          onClose={() => setDetail(null)}
+          t={t}
+        />
       )}
     </div>
   );

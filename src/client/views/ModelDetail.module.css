@@ -1,0 +1,30 @@
+/* 模型明细（ModelDetail 与两个子视图）：模型页每行末尾的「明细」链接打开的二级弹窗。
+   弹窗 chrome（detailModal/detailHeader/detailTitle/detailClose/detailBody/detailTableBlock/
+   detailRetry）与子标签栏、表格、图表卡片基元已在 components/UsageStatsCommon.module.css，
+   此处只保留模型明细专属的归并标记与两张子表的首列最小宽度，颜色全部走 --dsw-alias-* token。 */
+
+/* 归并来源标记：与模型行上的小标签同款观感 */
+.mergedNote {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 两张明细表的首列最小宽度，与面板同名 Tab 同值。日期表另用共用基元 .firstCol
+   吃满剩余宽度；会话表不用——弹窗比面板窄，会话列吃满会把「最近活跃」挤出可视区。 */
+.datesWrap th:nth-child(1),
+.datesWrap td:nth-child(1) {
+  min-width: 110px;
+}
+
+.sessionsWrap th:nth-child(1),
+.sessionsWrap td:nth-child(1) {
+  min-width: 180px;
+}

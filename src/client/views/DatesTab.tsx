@@ -3,8 +3,11 @@
  * 顶部为按输入、输出、缓存三段堆叠的每日柱状图并叠加缓存命中率折线，使用 StackedBar mode="date" 横向滚动；
  * 柱高仅按展示三段求和（不含缓存写入与推理），tooltip 与表格的 total 仍为全口径 dayTotal；
  * 中间为靠右的范围 chips，含 7d、14d、30d、90d、180d、365d 与全部，默认1年，位于图表与表格之间；
- * 底部为可排序分页的每日明细表格，含日期、缓存、输入、输出、总计、命中率、调用与每次调用列。
+ * 底部为可排序分页的每日明细表格，含日期、缓存、输入、输出、总计、命中率、调用、每次调用与明细列。
  * 独立成文件，一个组件一个文件。
+ *
+ * 每行末尾的「明细」链接打开当天的明细弹窗（DateDetail）：按会话 / 按模型两个子视图，
+ * 数据按需经 usageStats/dateDetail 取；打开的行被范围切换过滤掉时自动关闭弹窗。
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -14,11 +17,13 @@ import { StackedBar } from '../components/StackedBar.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { avgPerCall, buildDateStack, fmt, fmtFull, fullDayLabel, hitRateOfDay, pctOf, type DateRange } from '../stats.ts';
+import { useDateDetail } from '../useDateDetail.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
+import { DateDetail } from './DateDetail.tsx';
 import css from './DatesTab.module.css';
 
-import type { SeriesPoint } from '../../types.ts';
+import type { ModelRedirect, SeriesPoint } from '../../types.ts';
 import type { LocaleFn, UsageStatsKey } from '../locales.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
@@ -40,9 +45,11 @@ const DATE_RANGES: [DateRange, UsageStatsKey][] = [
 
 /** 日期 Tab：堆叠柱、范围切换与排序分页表格，范围切换位于图表与表格之间且右对齐，容器与会话、模型 Tab 对齐。 */
 export function DatesTab({
-  series, t,
+  series, rules, t,
 }: {
   series: SeriesPoint[]
+  /** 模型统计重定向规则，原样转给日期明细的按模型标签；服务端明细始终是原始行，归并只在浏览器端做。 */
+  rules: readonly ModelRedirect[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   // 本地化函数单点转换：纯函数要的无命名空间形态，组件内统一用 tFn。
@@ -77,6 +84,16 @@ export function DatesTab({
 
   const pageDays = useMemo(() => slice(sortedDays), [slice, sortedDays]);
 
+  // 明细弹窗当前打开的行（本地日零点），null 表示没有打开
+  const [detailDay, setDetailDay] = useState<number | null>(null);
+  const detailState = useDateDetail(detailDay);
+
+  // 范围切换后该行已不在表内时关闭弹窗，避免明细挂在不存在的行上（与模型页同一守卫）
+  useEffect(() => {
+    if (detailDay === null) return;
+    if (!stack.days.some((d) => d.t === detailDay)) setDetailDay(null);
+  }, [stack.days, detailDay]);
+
   // 完全无数据即历史为空，与过滤后无数据区分
   if (series.length === 0) {
     return <div className={shared.empty}>{t('state.noUsage')}</div>;
@@ -88,7 +105,7 @@ export function DatesTab({
 
   return (
     <div className={`${shared.section} ${shared.tableViewRoot}`}>
-      <div className={css.charts}>
+      <div className={shared.charts}>
         <div className={shared.chartCard}>
           <StackedBar mode="date" series={series} range={range} t={t} />
         </div>
@@ -107,7 +124,7 @@ export function DatesTab({
           ))}
         </span>
       </div>
-      <div className={`${shared.tableWrap} ${css.tableWrap}`}>
+      <div className={`${shared.tableWrap} ${shared.firstCol} ${css.tableWrap}`}>
         <table className={shared.table}>
           <thead>
             <tr>
@@ -119,6 +136,8 @@ export function DatesTab({
               <ThSortable k="hitRate" label={t('table.hitRate')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <ThSortable k="calls" label={t('table.calls')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              {/* 明细入口列：不参与排序，表头留空（单元格里的链接自己说明用途） */}
+              <th aria-label={t('detail.view')} />
             </tr>
           </thead>
           <tbody>
@@ -135,6 +154,17 @@ export function DatesTab({
                   <td className={shared.num}>{pctOf(hit)}</td>
                   <td className={shared.num}>{fmtFull(d.calls)}</td>
                   <td className={shared.num}>{fmtFull(avg)}</td>
+                  {/* 打开这一天的明细弹窗（二级弹窗，Esc 只关它这一层） */}
+                  <td className={shared.detailCell}>
+                    <button
+                      type="button"
+                      className={shared.detailLink}
+                      aria-label={t('detail.view')}
+                      onClick={() => setDetailDay(d.t)}
+                    >
+                      {t('detail.link')}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -145,6 +175,10 @@ export function DatesTab({
         <div className={shared.paginationBar}>
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} t={t} />
         </div>
+      )}
+      {/* 明细弹窗：叠在详情面板之上，基座 Modal 的层级栈保证 Esc 只关这一层 */}
+      {detailDay !== null && (
+        <DateDetail day={detailDay} rules={rules} state={detailState} onClose={() => setDetailDay(null)} t={t} />
       )}
     </div>
   );

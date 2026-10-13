@@ -16,13 +16,16 @@
  *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、
  *     截断尾帧、坏帧）；
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
- *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支；
+ *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与
+ *     单日明细的请求与结果）；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
  *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带
  *     表单身份（热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧
- *     localStorage 迁移（等表单落定、成功写入才删旧键、不可用时保留）；服务端
- *     条目 schema（字段全 volatile、解析值等于共享默认值、条目 id 与浏览器端常量一致）；
- *   - stats：格式化/会话分组/时间范围/图表几何/快照截断；
+ *     localStorage 迁移（等表单落定、成功写入才删旧键、不可用时保留）；配置串
+ *     编解码（与独立 Base64 实现互通、容错与逐码失败语义、解码归一化、改动字段
+ *     清单）与整份替换写入（默认值字段 unset、改动字段 set 且夹取、同一套写入守卫）；
+ *     服务端条目 schema（字段全 volatile、解析值等于共享默认值、条目 id 与浏览器端常量一致）；
+ *   - stats：格式化/会话分组/最近活跃文案/时间范围/图表几何/快照截断/模型明细合并；
  *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
  */
 import { afterEach, describe, it } from 'node:test';
@@ -38,12 +41,21 @@ import { legacySettingsPatch, UsageSettingsSchema } from '../src/host/settings.t
 import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
 import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
 import {
+  CONFIG_TRANSFER_FORMAT,
+  CONFIG_TRANSFER_VERSION,
+  changedSettingFields,
+  decodeConfigTransfer,
+  encodeConfigTransfer,
+} from '../src/client/configTransfer.ts';
+import {
   LEGACY_STORAGE_KEY,
   attachUsageSettings,
   clearLegacySettings,
   detachUsageSettings,
   migrateLegacySettings,
   readLegacySettings,
+  replaceUsageSettings,
+  replacementOps,
   settingOps,
   subscribeUsageSettings,
   updateUsageSettings,
@@ -51,21 +63,25 @@ import {
 } from '../src/client/settings.ts';
 import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
 import { createStore, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from '../src/host/store.ts';
+import { sessionDetail } from '../src/host/detail.ts';
 import { snapshot } from '../src/host/snapshot.ts';
 import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
   buildDateStack,
   buildModelStack,
+  compareSessionGroup,
   dateRangeCutoff,
   dayTotal,
   filterModelsByRange,
   fmt,
   fmtFull,
+  formatLastActive,
   fullDayLabel,
   groupSessions,
   heatGridOf,
   hitRateOfDay,
   lastActiveDayKind,
+  mergeModelDetails,
   modelCatalog,
   modelRangeCutoff,
   modelRangeToDays,
@@ -74,6 +90,7 @@ import {
   pieSlicesOf,
   redirectModels,
   resolveRedirectKey,
+  sessionGroupIds,
   shortId,
   todayOf,
   unusedRedirectSources,
@@ -468,9 +485,9 @@ describe('fork 继承前缀：只折本会话自有事件', () => {
 });
 
 describe('remote：手写严格贡献', () => {
-  it('7 个一元方法与服务一致', () => {
+  it('10 个一元方法与服务一致', () => {
     assert.deepEqual([...METHOD_NAMES], [
-      'snapshot', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
+      'snapshot', 'modelDetail', 'dateDetail', 'sessionDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
     ]);
     assert.equal(USAGE_STATS_REMOTE.package, '@xfqz86/dsh-usage-stats');
     assert.deepEqual(
@@ -500,6 +517,87 @@ describe('remote：手写严格贡献', () => {
     schema.parse({ sessionId: 's-1', limit: 500 });
     assert.throws(() => schema.parse({ sessionId: 42 }));
     assert.throws(() => schema.parse({ sessionId: null, limit: 'x' }));
+  });
+
+  it('模型明细请求与结果 schema 收发合法、拒非法', () => {
+    const detail = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'modelDetail');
+    assert.ok(detail && detail.parameters.length === 1);
+    const codec = detail.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    schema.parse({ provider: 'p', model: 'm' });
+    schema.parse({ provider: 'p', model: 'm', since: 1_700_000_000_000 });
+    assert.throws(() => schema.parse({ model: 'm' }));
+    assert.throws(() => schema.parse({ provider: 'p' }));
+    assert.throws(() => schema.parse({ provider: 'p', model: 'm', since: 'x' }));
+    // 结果缺字段整条被拒：host 必须字段齐全，不能少下发 sessions/daily
+    const result = detail.result.create();
+    assert.throws(() => result.parse({ ok: true, value: { provider: 'p', model: 'm' } }));
+  });
+
+  it('单日明细请求与结果 schema 收发合法、拒非法', () => {
+    const detail = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'dateDetail');
+    assert.ok(detail && detail.parameters.length === 1);
+    const codec = detail.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    // day 只有本地日零点一种取值，非法值应在服务端归一，线路层只认数字。
+    schema.parse({ day: 1_700_000_000_000 });
+    assert.throws(() => schema.parse({}));
+    assert.throws(() => schema.parse({ day: '2026-08-17' }));
+    // 结果缺字段整条被拒：host 必须字段齐全，不能少下发 models/sessions
+    const result = detail.result.create();
+    assert.throws(() => result.parse({ ok: true, value: { day: 0, calls: 0 } }));
+    const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+    result.parse({ ok: true, value: { day: 1_700_000_000_000, calls: 0, usage, models: [], sessions: [] } });
+    // 模型行可省 series（单日不下发按日序列），但其余字段缺一即拒
+    result.parse({
+      ok: true,
+      value: {
+        day: 1_700_000_000_000,
+        calls: 1,
+        usage,
+        models: [{ provider: 'p', model: 'm', calls: 1, usage }],
+        sessions: [],
+      },
+    });
+    assert.throws(() => result.parse({ ok: true, value: { day: 1, calls: 1, usage, models: [{ provider: 'p' }], sessions: [] } }));
+  });
+
+  it('会话明细请求与结果 schema 收发合法、拒非法', () => {
+    const detail = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'sessionDetail');
+    assert.ok(detail && detail.parameters.length === 1);
+    const codec = detail.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    // 集合语义在服务端归一（去重、非字符串丢弃、未知 id 按 0），线路层只认字符串数组。
+    schema.parse({ sessionIds: [] });
+    schema.parse({ sessionIds: ['s-1', 's-2'] });
+    assert.throws(() => schema.parse({}));
+    assert.throws(() => schema.parse({ sessionIds: 's-1' }));
+    assert.throws(() => schema.parse({ sessionIds: [1] }));
+    // 结果缺字段整条被拒：host 必须字段齐全，不能少下发 daily/models/usage
+    const result = detail.result.create();
+    assert.throws(() => result.parse({ ok: true, value: { calls: 0 } }));
+    const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+    result.parse({ ok: true, value: { calls: 0, usage, daily: [], models: [] } });
+    // 模型行可省 series（会话明细不画该模型的按日图），但其余字段缺一即拒
+    result.parse({
+      ok: true,
+      value: {
+        calls: 1,
+        usage,
+        daily: [{ t: 1_700_000_000_000, input: 1, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, calls: 1 }],
+        models: [{ provider: 'p', model: 'm', calls: 1, usage }],
+      },
+    });
+    assert.throws(() => result.parse({ ok: true, value: { calls: 1, usage, daily: [], models: [{ provider: 'p' }] } }));
   });
 
   it('结果信封成功分支严格、错误分支透传', () => {
@@ -575,6 +673,19 @@ describe('stats：格式化', () => {
     assert.equal(hitRateOfDay({ input: 0, cacheRead: 0 }), null);
     assert.equal(hitRateOfDay({ input: 1, cacheRead: 3 }), 75);
   });
+
+  it('formatLastActive 今天/昨天/更早与未知', () => {
+    const t = (key) => (key === 'time.today' ? '今天' : key === 'time.yesterday' ? '昨天' : key);
+    const today = new Date();
+    today.setHours(9, 0, 0, 0);
+    const yesterday = new Date(startOfDay(Date.now()));
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(20, 5, 0, 0);
+    assert.equal(formatLastActive(today.getTime(), t), '今天 09:00');
+    assert.equal(formatLastActive(yesterday.getTime(), t), '昨天 20:05');
+    assert.equal(formatLastActive(new Date(2020, 0, 2, 3, 4).getTime(), t), '2020-01-02');
+    assert.equal(formatLastActive(0, t), '--');
+  });
 });
 
 describe('stats：会话分组', () => {
@@ -615,6 +726,42 @@ describe('stats：会话分组', () => {
       sess('b', { lastActive: 2, parentSession: 'a', origin: 'subagent', delegationDepth: 1 }),
     ]);
     assert.equal(groups.length, 2);
+  });
+
+  it('sessionGroupIds 给出折叠集合：主会话 + 展平的全部子代理', () => {
+    const groups = groupSessions([
+      sess('m1', { lastActive: 1 }),
+      sess('c1', { lastActive: 2, parentSession: 'm1', origin: 'subagent', delegationDepth: 1 }),
+      sess('g', { lastActive: 3, parentSession: 'c1', origin: 'subagent', delegationDepth: 2 }),
+    ]);
+    assert.equal(groups.length, 1);
+    // 子按 lastActive 降序（g 在 c1 前），集合含主会话与两级子代理
+    assert.deepEqual(sessionGroupIds(groups[0]), ['m1', 'g', 'c1']);
+  });
+});
+
+describe('stats：会话表排序比较', () => {
+  // 面板会话 Tab 与模型明细的按会话表共用同一比较实现，这里锁住「同一列同一顺序」的口径
+  const groups = groupSessions([
+    sess('a', { title: 'Alpha', lastActive: 100, calls: 4, usage: agg(40, 4) }),
+    sess('ac', { title: 'Child', lastActive: 300, calls: 6, usage: agg(60, 6), parentSession: 'a', origin: 'subagent', delegationDepth: 1 }),
+    sess('b', { title: 'Beta', lastActive: 200, calls: 5, usage: agg(10, 5) }),
+  ]);
+  const a = groups.find((g) => g.main.id === 'a');
+  const b = groups.find((g) => g.main.id === 'b');
+
+  it('数值列取折叠后的分组合计', () => {
+    assert.ok(a !== undefined && b !== undefined);
+    assert.ok(compareSessionGroup('calls', a, b) > 0); // 10 vs 5
+    assert.ok(compareSessionGroup('total', a, b) > 0); // 100 vs 10
+    assert.ok(compareSessionGroup('input', a, b) > 0); // 100 vs 10
+    assert.ok(compareSessionGroup('avg', a, b) > 0); // 每次调用 10 vs 2
+  });
+
+  it('文本列按标题、最近活跃按主会话时间', () => {
+    assert.ok(a !== undefined && b !== undefined);
+    assert.ok(compareSessionGroup('session', a, b) < 0); // Alpha < Beta
+    assert.ok(compareSessionGroup('lastActive', a, b) < 0); // 主行 100 < 200，子会话的 300 不参与主行排序
   });
 });
 
@@ -871,6 +1018,53 @@ describe('模型统计重定向：归并', () => {
   });
 });
 
+describe('模型明细：按来源合并', () => {
+  const usage = (input) => ({ input, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: input });
+  const day = (t, input, calls) => ({ t, input, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, calls });
+  const session = (id, { calls = 1, input = 0, lastActive = 0, title = '', cwd = '', createdAt = 0, parentSession = null, origin = null, delegationDepth = 0 } = {}) => ({
+    id, title, cwd, createdAt, lastActive, calls, usage: usage(input), parentSession, origin, delegationDepth,
+  });
+  const detail = (provider, model, { input = 0, calls = 0, daily = [], sessions = [] } = {}) => ({
+    provider, model, calls, usage: usage(input), daily, sessions,
+  });
+
+  it('空入参返回 null', () => {
+    assert.equal(mergeModelDetails([], { provider: 'p', model: 'm' }), null);
+  });
+
+  it('用量、日序列与会话按 id 求和，会话元数据取首个非空，入参不被改写', () => {
+    const d1 = detail('p1', 'm', {
+      input: 10,
+      calls: 2,
+      daily: [day(1000, 10, 2)],
+      sessions: [session('s1', { calls: 2, input: 10, lastActive: 5, parentSession: 'root', delegationDepth: 1 })],
+    });
+    const d2 = detail('p2', 'm', {
+      input: 5,
+      calls: 1,
+      daily: [day(1000, 5, 1), day(2000, 7, 1)],
+      sessions: [
+        session('s1', { calls: 1, input: 5, lastActive: 9, title: '会话甲', cwd: '/w', createdAt: 42, delegationDepth: 2 }),
+        session('s2', { calls: 1, input: 7, title: '会话乙' }),
+      ],
+    });
+    const merged = mergeModelDetails([d1, d2], { provider: 'p', model: 'm' });
+    assert.equal(merged.provider, 'p');
+    assert.equal(merged.model, 'm');
+    assert.equal(merged.calls, 3);
+    assert.deepEqual(merged.usage, { input: 15, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 15 });
+    assert.deepEqual(merged.daily.map((p) => [p.t, p.input, p.calls]), [[1000, 15, 3], [2000, 7, 1]]);
+    assert.deepEqual(
+      merged.sessions.map((s) => [s.id, s.calls, s.usage.total, s.lastActive, s.title, s.cwd, s.createdAt, s.parentSession, s.delegationDepth]),
+      [['s1', 3, 15, 9, '会话甲', '/w', 42, 'root', 2], ['s2', 1, 7, 0, '会话乙', '', 0, null, 0]],
+    );
+    // 合并在副本上做：归并行的明细与单模型明细同时在场时不能互相污染
+    assert.equal(d1.sessions[0].calls, 2);
+    assert.equal(d2.sessions[0].usage.total, 5);
+    assert.equal(d1.daily[0].input, 10);
+  });
+});
+
 describe('模型统计重定向：候选过滤（设置页自动完成）', () => {
   const model = (provider, name) => ({ provider, model: name, calls: 0, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 }, series: [] });
 
@@ -941,6 +1135,61 @@ describe('snapshot：构建与截断', () => {
     assert.equal(snap.models[0].series.length, 366);
     assert.equal(snap.all.calls, 400);
     assert.equal(snap.models[0].calls, 400);
+  });
+});
+
+describe('会话明细：集合聚合', () => {
+  const d0 = new Date(2026, 4, 1).getTime();
+  const d1 = new Date(2026, 4, 2).getTime();
+  /** 构造聚合缓存里的一条会话：日桶与总桶。 */
+  const info = (daily, allAgg) => ({ daily: new Map(daily), allAgg, maxSeq: -1, lastActive: 0 });
+
+  it('合计按集合求和（含子会话），日序列升序并桶，模型行原始键总计降序', () => {
+    const store = createStore();
+    store.sessions.set('m', info([[d0, agg(10, 1)], [d1, agg(20, 2)]], agg(30, 3)));
+    store.sessions.set('c', info([[d1, agg(5, 1)]], agg(5, 1)));
+    // 账本桩：按集合返回原始 provider/model 行（服务端不做重定向归并）
+    const ledger = {
+      sessionModels: (ids) => [
+        ...(ids.includes('c') ? [{ provider: 'a', model: 'm1', calls: 1, input: 30, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }] : []),
+        ...(ids.includes('m') ? [{ provider: 'b', model: 'm2', calls: 1, input: 5, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }] : []),
+      ],
+    };
+    const detail = sessionDetail(store, ledger, ['c', 'm']);
+    // 合集 = 主 3 次 + 子 1 次，总计 35；日序列升序，d1 并桶后 3 次
+    assert.equal(detail.calls, 4);
+    assert.equal(detail.usage.total, 35);
+    assert.deepEqual(detail.daily.map((p) => p.t), [d0, d1]);
+    assert.equal(detail.daily[0].input, 10);
+    assert.equal(detail.daily[1].input, 25);
+    assert.equal(detail.daily[1].calls, 3);
+    // 模型行按总计降序（a/m1 的 30 > b/m2 的 5），provider/model 为原始键
+    assert.deepEqual(detail.models.map((m) => [m.provider, m.model, m.usage.total]), [['a', 'm1', 30], ['b', 'm2', 5]]);
+  });
+
+  it('未知 id 按 0 计不抛错；空集合恒字段齐全的空明细', () => {
+    const store = createStore();
+    store.sessions.set('m', info([], agg(0, 0)));
+    const onlyMissing = sessionDetail(store, { sessionModels: () => [] }, ['missing']);
+    assert.deepEqual(onlyMissing, {
+      calls: 0,
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 },
+      daily: [],
+      models: [],
+    });
+    const empty = sessionDetail(store, { sessionModels: () => [] }, []);
+    assert.deepEqual(empty, onlyMissing);
+  });
+
+  it('只认「有桶」的日子：四段全 0、仅 reasoning 的日子也保留', () => {
+    const store = createStore();
+    const onlyReasoning = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 7, total: 0, calls: 1 };
+    store.sessions.set('m', info([[d0, onlyReasoning]], { ...onlyReasoning }));
+    const detail = sessionDetail(store, { sessionModels: () => [] }, ['m']);
+    assert.equal(detail.daily.length, 1);
+    assert.equal(detail.daily[0].reasoning, 7);
+    assert.equal(detail.usage.total, 0);
+    assert.equal(detail.calls, 1);
   });
 });
 
@@ -1281,6 +1530,11 @@ function fakeStorage(initial) {
   };
 }
 
+/** 用 Buffer 独立造配置串：容错用例的数据不经过被测编码器，避免自证。 */
+function configTextOf(payload) {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+}
+
 describe('偏好设置：归一化与写入操作', () => {
   it('命名空间名与默认值自洽，坏值逐字段回退', () => {
     assert.equal(USAGE_SETTINGS_NAMESPACE, 'usage-stats');
@@ -1335,6 +1589,173 @@ describe('偏好设置：归一化与写入操作', () => {
     // 归一化每次都新建数组：引用比较会把空表当成用户改动，故按 JSON 比较
     assert.deepEqual(diffFromDefaults(normalizeUsageSettings(null)), {});
     assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, modelRedirects: rules }), { modelRedirects: rules });
+  });
+});
+
+describe('偏好设置：配置串编解码', () => {
+  it('默认偏好往返一致，编码结果可被独立 Base64 实现解出同一份载荷', () => {
+    const at = new Date('2026-10-13T00:00:00.000Z');
+    const text = encodeConfigTransfer(USAGE_SETTINGS_DEFAULTS, at);
+    // 独立实现（Buffer）解出载荷：编码结果不能只靠被测解码器自证。
+    assert.deepEqual(JSON.parse(Buffer.from(text, 'base64').toString('utf8')), {
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      exportedAt: '2026-10-13T00:00:00.000Z',
+      settings: USAGE_SETTINGS_DEFAULTS,
+    });
+    // 标准字母表带填充：单行、长度为 4 的倍数、只含 A-Za-z0-9+/ 与末尾填充。
+    assert.match(text, /^[A-Za-z0-9+/]+={0,2}$/);
+    assert.equal(text.length % 4, 0);
+    assert.deepEqual(decodeConfigTransfer(text), {
+      ok: true,
+      settings: USAGE_SETTINGS_DEFAULTS,
+      exportedAt: '2026-10-13T00:00:00.000Z',
+    });
+  });
+
+  it('全字段改动与非 ASCII 模型名往返逐字一致', () => {
+    const rules = [{ fromProvider: '内网', fromModel: '模型甲', toProvider: '正式', toModel: '模型乙' }];
+    const next = {
+      ...USAGE_SETTINGS_DEFAULTS,
+      goEnabled: false,
+      showGoInSidebar: false,
+      goFetchMinutes: 11,
+      deepseekEnabled: false,
+      showDeepSeekInSidebar: false,
+      deepseekFetchMinutes: 12,
+      zaiEnabled: false,
+      showZaiInSidebar: false,
+      zaiFetchMinutes: 13,
+      showSessionId: false,
+      modelRedirects: rules,
+    };
+    const decoded = decodeConfigTransfer(encodeConfigTransfer(next));
+    assert.equal(decoded.ok, true);
+    assert.deepEqual(decoded.settings, next);
+    assert.equal(typeof decoded.exportedAt, 'string');
+    assert.equal(Number.isNaN(new Date(decoded.exportedAt).getTime()), false);
+    // 中文经 UTF-8 落进载荷：独立实现读出的 JSON 里模型名逐字一致。
+    const payload = JSON.parse(Buffer.from(encodeConfigTransfer(next), 'base64').toString('utf8'));
+    assert.deepEqual(payload.settings.modelRedirects, rules);
+  });
+
+  it('容错：空白/换行、URL 安全字母表与缺填充都能解', () => {
+    // 规则里带中文，编码结果同时含标准字母表的 + 与 /，URL 安全变体才有意义。
+    const payload = {
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      exportedAt: null,
+      settings: {
+        showGoInSidebar: false,
+        modelRedirects: [{ fromProvider: 'prov', fromModel: '万俎', toProvider: 'real', toModel: 'target' }],
+      },
+    };
+    const text = configTextOf(payload);
+    assert.match(text, /\+/);
+    assert.match(text, /\//);
+    const expected = { ok: true, settings: { ...USAGE_SETTINGS_DEFAULTS, ...payload.settings }, exportedAt: null };
+    assert.deepEqual(decodeConfigTransfer(text), expected);
+    // 首尾与内部空白、换行
+    assert.deepEqual(decodeConfigTransfer(` \n${text}\t `), expected);
+    assert.deepEqual(decodeConfigTransfer(text.replace(/(.{16})/g, '$1\n ')), expected);
+    // URL 安全字母表 + 去掉填充
+    const urlSafe = text.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    assert.notEqual(urlSafe, text);
+    assert.deepEqual(decodeConfigTransfer(urlSafe), expected);
+    // 缺填充可补：另取一个编码结果带填充的载荷，去掉填充仍能解。
+    const padded = configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: CONFIG_TRANSFER_VERSION, settings: { goEnabled: false } });
+    assert.match(padded, /=+$/);
+    assert.equal(decodeConfigTransfer(padded.replace(/=+$/, '')).ok, true);
+  });
+
+  it('失败语义逐码断言：空、非法字符、坏 JSON、错格式、错版本、settings 形状', () => {
+    const errorOf = (text) => {
+      const result = decodeConfigTransfer(text);
+      assert.equal(result.ok, false, `应失败：${text.slice(0, 24)}`);
+      return result.error;
+    };
+    assert.equal(errorOf(''), 'empty');
+    assert.equal(errorOf(' \n\t '), 'empty');
+    assert.equal(errorOf('not base64!!'), 'invalid-base64');
+    assert.equal(errorOf('===='), 'invalid-base64');
+    // 长度为 4n+1：补填充也解不开，归 invalid-base64
+    assert.equal(errorOf('A'), 'invalid-base64');
+    // 合法 Base64 但内容不是 JSON：与「合法 JSON 但不是对象」区分开
+    assert.equal(errorOf(Buffer.from('{oops', 'utf8').toString('base64')), 'invalid-payload');
+    // 非对象 JSON：没有 format 可读，按契约归 unknown-format
+    assert.equal(errorOf(configTextOf(123)), 'unknown-format');
+    assert.equal(errorOf(configTextOf(null)), 'unknown-format');
+    assert.equal(errorOf(configTextOf([1, 2])), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ version: 1, settings: {} })), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ format: 'other', version: 1, settings: {} })), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 2, settings: {} })), 'unsupported-version');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: '1', settings: {} })), 'unsupported-version');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1 })), 'invalid-payload');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, settings: null })), 'invalid-payload');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, settings: [] })), 'invalid-payload');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, settings: 'x' })), 'invalid-payload');
+    // 校验顺序：format 先于 version，version 先于 settings 形状
+    assert.equal(errorOf(configTextOf({ format: 'other', version: 2, settings: null })), 'unknown-format');
+    assert.equal(errorOf(configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 2, settings: null })), 'unsupported-version');
+  });
+
+  it('解码归一化：坏字段回退默认值、未知字段忽略、越界间隔夹取', () => {
+    const text = configTextOf({
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      settings: { goEnabled: 'on', goFetchMinutes: 1, showZaiInSidebar: false, modelRedirects: '不是数组', 不认识: true },
+    });
+    const decoded = decodeConfigTransfer(text);
+    assert.equal(decoded.ok, true);
+    assert.deepEqual(decoded.settings, {
+      ...USAGE_SETTINGS_DEFAULTS,
+      goFetchMinutes: GO_FETCH_MIN_MINUTES,
+      showZaiInSidebar: false,
+    });
+    // 规则表按 normalizeModelRedirects 清洗：坏条目丢弃、半填条目保留（界面继续填）。
+    const rules = configTextOf({
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      settings: { modelRedirects: ['x', {}, { fromProvider: ' p ', fromModel: 'm' }] },
+    });
+    const parsed = decodeConfigTransfer(rules);
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.settings.modelRedirects, [{ fromProvider: 'p', fromModel: 'm', toProvider: '', toModel: '' }]);
+    // exportedAt 非字符串按 null，不参与校验。
+    const numeric = configTextOf({ format: CONFIG_TRANSFER_FORMAT, version: 1, exportedAt: 42, settings: {} });
+    assert.deepEqual(decodeConfigTransfer(numeric), { ok: true, settings: USAGE_SETTINGS_DEFAULTS, exportedAt: null });
+  });
+
+  it('changedSettingFields 按默认值键序给出改动字段', () => {
+    const base = normalizeUsageSettings(null);
+    assert.deepEqual(changedSettingFields(base, base), []);
+    assert.deepEqual(changedSettingFields(base, { ...base, showSessionId: false }), ['showSessionId']);
+    assert.deepEqual(
+      changedSettingFields(base, { ...base, zaiFetchMinutes: 9, goEnabled: false }),
+      ['goEnabled', 'zaiFetchMinutes'],
+    );
+    // 规则表按值比较：等值数组（逐条复制）不算改动，改过才算。
+    const rules = [{ fromProvider: 'a', fromModel: 'b', toProvider: 'c', toModel: 'd' }];
+    const withRules = { ...base, modelRedirects: rules };
+    assert.deepEqual(changedSettingFields(withRules, { ...base, modelRedirects: rules.map((rule) => ({ ...rule })) }), []);
+    assert.deepEqual(changedSettingFields(withRules, { ...base, modelRedirects: [] }), ['modelRedirects']);
+    assert.deepEqual(changedSettingFields(base, withRules), ['modelRedirects']);
+    // 键序即默认值声明序，全字段改动时与 Object.keys(USAGE_SETTINGS_DEFAULTS) 一致。
+    const all = {
+      goEnabled: false,
+      showGoInSidebar: false,
+      goFetchMinutes: 9,
+      deepseekEnabled: false,
+      showDeepSeekInSidebar: false,
+      deepseekFetchMinutes: 9,
+      zaiEnabled: false,
+      showZaiInSidebar: false,
+      zaiFetchMinutes: 9,
+      showSessionId: false,
+      modelRedirects: rules,
+    };
+    assert.deepEqual(changedSettingFields(base, all), Object.keys(USAGE_SETTINGS_DEFAULTS));
+    assert.deepEqual(changedSettingFields(all, base), Object.keys(USAGE_SETTINGS_DEFAULTS));
   });
 });
 
@@ -1421,6 +1842,86 @@ describe('偏好设置：作用域视图与写入', () => {
     await new Promise((r) => { setTimeout(r, 0); });
     assert.deepEqual(calls, []);
     assert.deepEqual(usageSettingsView().settings, USAGE_SETTINGS_DEFAULTS);
+  });
+});
+
+describe('偏好设置：整份替换写入', () => {
+  afterEach(() => { detachUsageSettings(); });
+
+  it('replacementOps：默认值字段 unset，改动字段 set 且间隔夹取', () => {
+    assert.deepEqual(
+      replacementOps(USAGE_SETTINGS_DEFAULTS),
+      Object.keys(USAGE_SETTINGS_DEFAULTS).map((field) => ({ op: 'unset', path: [field] })),
+    );
+    const rules = [{ fromProvider: 'a', fromModel: 'b', toProvider: 'c', toModel: 'd' }];
+    const next = { ...USAGE_SETTINGS_DEFAULTS, goFetchMinutes: 1, showSessionId: false, modelRedirects: rules };
+    assert.deepEqual(replacementOps(next), [
+      { op: 'unset', path: ['goEnabled'] },
+      { op: 'unset', path: ['showGoInSidebar'] },
+      { op: 'set', path: ['goFetchMinutes'], value: GO_FETCH_MIN_MINUTES },
+      { op: 'unset', path: ['deepseekEnabled'] },
+      { op: 'unset', path: ['showDeepSeekInSidebar'] },
+      { op: 'unset', path: ['deepseekFetchMinutes'] },
+      { op: 'unset', path: ['zaiEnabled'] },
+      { op: 'unset', path: ['showZaiInSidebar'] },
+      { op: 'unset', path: ['zaiFetchMinutes'] },
+      { op: 'set', path: ['showSessionId'], value: false },
+      { op: 'set', path: ['modelRedirects'], value: rules },
+    ]);
+  });
+
+  it('replaceUsageSettings 一次提交整份 ops，覆盖旧用户段', async () => {
+    const { scope, calls } = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS, goEnabled: false }, user: { goEnabled: false } });
+    attachUsageSettings(scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, zaiFetchMinutes: 1, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.equal(calls.length, 1);
+    const ops = calls[0];
+    // 字段序稳定：与默认值声明序一致，等于默认值的字段发 unset（旧用户段随之消失）。
+    assert.deepEqual(ops.map((op) => op.path[0]), Object.keys(USAGE_SETTINGS_DEFAULTS));
+    assert.deepEqual(ops.filter((op) => op.op === 'set'), [
+      { op: 'set', path: ['zaiFetchMinutes'], value: ZAI_FETCH_MIN_MINUTES },
+      { op: 'set', path: ['showSessionId'], value: false },
+    ]);
+    assert.deepEqual(ops.filter((op) => op.op === 'unset'), [
+      { op: 'unset', path: ['goEnabled'] },
+      { op: 'unset', path: ['showGoInSidebar'] },
+      { op: 'unset', path: ['goFetchMinutes'] },
+      { op: 'unset', path: ['deepseekEnabled'] },
+      { op: 'unset', path: ['showDeepSeekInSidebar'] },
+      { op: 'unset', path: ['deepseekFetchMinutes'] },
+      { op: 'unset', path: ['zaiEnabled'] },
+      { op: 'unset', path: ['showZaiInSidebar'] },
+      { op: 'unset', path: ['modelRedirects'] },
+    ]);
+  });
+
+  it('replaceUsageSettings 守卫：不可用/只读不发写，解绑后不发，加载中照发', async () => {
+    const unavailable = fakeScope({ value: undefined, status: 'unavailable' });
+    attachUsageSettings(unavailable.scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(unavailable.calls, []);
+
+    const readOnly = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS }, writable: false });
+    attachUsageSettings(readOnly.scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(readOnly.calls, []);
+
+    const detached = fakeScope({ value: { ...USAGE_SETTINGS_DEFAULTS } });
+    attachUsageSettings(detached.scope);
+    detachUsageSettings();
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.deepEqual(detached.calls, []);
+
+    // 仍在加载：服务端可能接受，照发
+    const loading = fakeScope({ value: undefined, status: 'loading' });
+    attachUsageSettings(loading.scope);
+    replaceUsageSettings({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    await new Promise((r) => { setTimeout(r, 0); });
+    assert.equal(loading.calls.length, 1);
   });
 });
 

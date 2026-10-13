@@ -1,14 +1,14 @@
 # Remote API 与运行时协议（API.md）
 
 > 本文件是 `usageStats` 命名空间 Remote **线路协议**与**偏好设置协议**的唯一权威
-> 文档：方法表、请求/响应结构、状态语义、TTL 与缓存行为、偏好字段。类型单一事实
-> 来源在 `src/types.ts`，Client 严格编解码在 `src/remote/contribution.ts`；运行机制
-> （账本、扫描、清零墓碑）见 `docs/ARCHITECTURE.md`，规则类约束见 `AGENTS.md`。
+> 文档：方法表、请求/响应结构、状态语义、TTL 与缓存行为、偏好字段与配置串格式。
+> 类型单一事实来源在 `src/types.ts`，Client 严格编解码在 `src/remote/contribution.ts`；
+> 运行机制（账本、扫描、清零墓碑）见 `docs/ARCHITECTURE.md`，规则类约束见 `AGENTS.md`。
 
 ## 1. 通用约定
 
-- 命名空间 `usageStats`，7 个一元（unary，一问一答，区别于流式）方法：
-  `snapshot/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
+- 命名空间 `usageStats`，10 个一元（unary，一问一答，区别于流式）方法：
+  `snapshot/modelDetail/dateDetail/sessionDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
   `rebuild`/`clear`/`seal` **无请求参数**（贡献里 `parameters: []`），其余各带一个具名 request。
   调用经 `ctx.get('remote.usageStats')` 取命名空间服务后调用（本仓库由 `usageStatsRemote()` 封装）；
   线路上走客户端 Connection 的 RPC：`POST /api/usageStats/<方法>`，请求体为
@@ -20,7 +20,7 @@
   `src/remote/contribution.ts` 头注释）；只改实现体不动贡献，改签名必须同步。
 - **参数名即线路字段名**：SRC 分发下网关从服务端方法源码文本
   （`Function.prototype.toString`）读参数名，作为请求 `args` 的字段名；带参方法的参数名
-  必须与贡献里的 `wire` 逐字相同（本仓库四个带参方法均为 `request`），改名即改协议。
+  必须与贡献里的 `wire` 逐字相同（本仓库七个带参方法均为 `request`），改名即改协议。
   服务端产物因此不做压缩（见 `docs/ARCHITECTURE.md` §6），
   `test/smoke.mjs` 的「SRC 线路字段」自检逐方法对齐两侧。
 
@@ -36,6 +36,71 @@
   - `sessions` 为有量会话数、`current` 为指定会话聚合或 `null`、`all` 为全量 `Agg`、`series.all` 为全量按日 `SeriesPoint[]` 及 `series.current` 为指定会话按日；
   - `models[]` 按模型拆分，元素含 `provider`、`model`、`calls`、`usage`、`series`，`series` 为该模型按日 `SeriesPoint[]`，供浏览器端范围筛选与堆叠柱使用，旧快照可能缺省；
   - `sessionsList[]` 为会话明细，按 `lastActive` 倒序，已分页截断，每项含 `id`、`title`、`cwd`、`createdAt`、`lastActive`、`calls`、`usage`、`parentSession`、`origin`、`delegationDepth`，后三者为子代理归属，序列化为 `string|null`、`string|null`、`number`。
+
+## 2.1 usageStats/modelDetail
+
+- 目的：单个模型的明细，供模型页点开一行时在弹窗里查看「按日期 / 按会话」。**按需查询，不进快照**——
+  「模型 × 会话」交叉表若随快照下发，会让每 4 秒一次的轮询体积随「模型数 × 会话数」膨胀。
+- request `{ provider: string, model: string, since?: number }`：
+  - `provider`/`model` 为账本里的原始「供应商 + 模型」（快照 `models[]` 拆出的两列，非归并后的行）；
+  - `since` 是**浏览器端算好的本地日零点**（模型页时间范围 → `modelRangeCutoff`），服务端只做
+    `t >= since` 过滤，不认「7天/1年」这类范围概念；缺省或非正数即全部历史（事件时间恒大于 0）。
+  - 模型统计重定向的归并行由浏览器端**按来源各查一次再合并**（服务端不归并，与快照同一约定，见 §5）。
+- 响应 `value` 为 `ModelDetail`（`src/types.ts`）：`provider`、`model`、范围内合计 `calls` 与 `usage`、
+  按本地日升序的 `daily: SeriesPoint[]`（只含有用量的日子）、按总计降序的 `sessions: SessionStat[]`
+  （元素与快照 `sessionsList` 同形，含会话元数据与子代理归属）；`since` 缺省的「全部」**不做
+  366 天截断**——那是快照序列化开销的取舍，按需查询没有这个约束，且要与所点行的合计对齐。
+- 两个维度的来源：`daily` 取内存聚合的模型×日桶（`startOfDay` 分桶，本地日划分的唯一来源），
+  `sessions` 取账本 `events` 按 `provider`/`model` 过滤后 `GROUP BY session_id` 的聚合；
+  合计由会话行求和，与按日合计互为校验（`test/smoke.mjs` 断言相等）。
+- 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前账本里的数据，可能偏少。
+
+## 2.2 usageStats/dateDetail
+
+- 目的：某一个本地日的明细，供日期页点开一行时在弹窗里查看这一天分别花在哪些会话、哪些模型上。
+  **按需查询，不进快照**——「日 × 会话」交叉数据若随快照下发，会让每 4 秒一次的轮询体积
+  随「有量天数 × 会话数」膨胀。
+- request `{ day: number }`：`day` 是**浏览器端日期表行里的本地日零点**
+  （快照 `series.all` 的 `SeriesPoint.t` 原样传来），服务端按同一套 `startOfDay`
+  （`src/utils.ts`）归一——有限且大于 0 的取值向下取整后归一，其余一律返回空明细
+  （`day` 为 `0`、合计为零、两个维度为空数组），**不抛错**。
+- 响应 `value` 为 `DateDetail`（`src/types.ts`）：归一后的 `day`、当天合计 `calls` 与 `usage`、
+  当天有量的模型 `models: ModelStat[]`（与快照 `models[]` 同形，单日不重复下发 `series`）、
+  当天有量的会话 `sessions: SessionStat[]`（与快照 `sessionsList` 同形，含会话元数据与
+  子代理归属）。两个维度都按总计降序：模型同值按「供应商 + 模型」升序、会话同值按 `id` 升序。
+- 数据来源：两个维度都取内存聚合的当日桶——模型维度 `modelDaily`（键 `provider\0model`）、
+  会话维度各会话的 `daily`，桶键就是 `startOfDay` 的本地日零点，因此**不读账本 events**
+  （单日按会话再走一遍 SQL 聚合没有收益，见 `src/host/detail.ts` 头注释）；
+  合计由当天模型行求和，与会话行合计互为校验（`test/smoke.mjs` 断言三者一致）。
+- 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前聚合里的数据，可能偏少。
+
+## 2.3 usageStats/sessionDetail
+
+- 目的：一条会话的明细，供会话页点主会话行的「明细」时在弹窗里查看该行折叠分组
+  （主会话 + 展平的全部子代理）「按日期 / 按模型」。**按需查询，不进快照**——
+  「会话 × 模型」交叉数据若随快照下发，会让每 4 秒一次的轮询体积随「会话数 × 模型数」膨胀。
+- request `{ sessionIds: string[] }`：**集合由客户端界定**——会话页把所点行的分组 id 集合
+  （`groupSessions` 展平后的 `main.id` + `children[].id`，由 `stats.sessionGroupIds` 单点构造，
+  点击那一刻取一次并随弹窗冻结）随请求传入，服务端只聚合给定集合，
+  **不按 `session_meta` 自走子树**。理由：行数字 = 对该分组 id 集合在聚合缓存里逐会话求和，
+  服务端自走子树会与行数字不同源——快照 `sessionsList` 有 `limit` 截断（可能截掉个别子会话）、
+  `session_meta` 里有父会话完全没有用量的子代理（客户端按「孤儿回落顶层」把它当顶层行，
+  服务端按 meta 建树会挂到一个根本没有行的父下），多级展平与防环也要复刻；
+  集合因此是截断与孤儿场景下保证不变量成立的唯一方案。
+  - 服务端归一：只收非空字符串、精确去重；非数组视为空集合、其余元素丢弃，**一律不抛错**；
+    不设条数上限、不截断（截断会静默破坏合计不变量）。
+  - id 是不透明键：不做 trim、不做 NUL 清洗、不区分大小写，必须与快照/账本原文逐字一致。
+- 响应 `value` 为 `SessionDetail`（`src/types.ts`）：集合合计 `calls` 与 `usage`、
+  按本地日升序的 `daily: SeriesPoint[]`（只含有量的日子，桶键为 `startOfDay` 零点，
+  全历史不截断）、按总计降序的 `models: ModelStat[]`（`provider`/`model` 为账本原始键，
+  **不做重定向归并**——归并归浏览器端，见 §5；行省略 `series`，同值按「供应商 + 模型」升序）。
+  空集合 / 全未知 id 恒返回字段齐全的空明细（`calls: 0`、六字段零值 `usage`、两个空数组），不抛错。
+- 核心不变量（同一数据代次内逐位精确、无舍入）：`calls` 与 `usage` 等于所点行折叠后的合计，
+  并同时等于 `Σdaily` 与 `Σmodels`；明细打开期间新增的用量不并入本次响应（重开或重试对齐，
+  时间在走不是口径漂移）。
+- 数据来源：合计与 `daily` 取聚合缓存里各会话的总桶与日桶（与会话行数字同一条路径），
+  `models` 读账本 `events` 按集合 `GROUP BY provider, model`（走 `idx_events_session`）。
+- 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前数据，可能偏少。
 
 ## 3. 额度查询通用约定（goQuota / deepseekBalance / zaiQuota 共用）
 
@@ -147,7 +212,9 @@
 - **浏览器端**：`ctx.configForms.get('usage-stats')` 取设置表单（`configForms` 由
   `@deepseek-ai/dsh-client-ui-settings` 提供，已登记进 `dsh.client.inject` 保证加载序），
   `src/client/settings.ts` 提供订阅/读写，组件经 `useUsageSettings` 消费；写入走路径操作、
-  只落显式改过的字段，间隔字段写前夹到下限 3。
+  只落显式改过的字段，间隔字段写前夹到下限 3。单字段写入一律是显式 `set`——把某项改回
+  默认值也照样落在文档里、条目不会消失；让该条目在文档里整段消失的只有配置导入的整份
+  替换（`unset`，见 §5.1）。
 - **字段**（`UsageSettings` 定义在 `src/types.ts`）：
 
   | 字段 | 默认 | 语义 |
@@ -161,7 +228,8 @@
   三组独立联动：关闭 `*Enabled` 时对应「侧边栏展示」与「抓取间隔」一并置灰。偏好不落
   账本（账本只记用量），额度轮询间隔取自偏好。
 - **模型统计重定向**（浏览器端归并，服务端快照保持原始行）：
-  - 归并只在「模型」页消费（`src/client/stats.ts` 的 `redirectModels`）；服务端不归并，
+  - 归并在浏览器端消费：模型页、日期明细的「按模型」与会话明细的「按模型」三处共用
+    `src/client/stats.ts` 的 `redirectModels`；服务端（快照与各明细）一律不归并，
     设置页才能拿原始「供应商 + 模型」当规则候选。
   - 匹配按 `provider + model` 精确比较（trim 后，区分大小写）；同一来源配多条时只有
     列表最上面一条生效；四项没填齐的规则不生效（界面保留待填）。
@@ -204,3 +272,27 @@
      某次启动突然复活。其余现场都没有定论、不落标记，下次启动重看：`settings.yaml`
      还在（基座自己会导）、`.imported` 不存在、条目不在 `describe()` 里（插件被禁用
      或没装）、写入被设置服务拒绝（此刻写失败会记一条 warn）。
+
+### 5.1 配置串（导出 / 导入）
+
+- **目的与边界**：把整份偏好搬走再搬回（换机器、备份、两台机器对齐）。纯浏览器端
+  能力——**不新增 Remote 方法**、不走线路、不落账本，落点仍是同一个 profile 条目；
+  实现见 `src/client/configTransfer.ts`（编解码）与 `src/client/settings.ts`
+  （`replacementOps` / `replaceUsageSettings` 写入）。
+- **形态**：载荷 JSON `{ format: 'dsh-usage-stats', version: 1, exportedAt: <ISO 字符串>,
+  settings: <整份偏好> }` → UTF-8 → 标准 Base64（带填充）单行文本；`settings` 是
+  `normalizeUsageSettings` 归一化后的整份偏好（含等于默认值的字段），因此「导出 →
+  导入」在支持同一份 schema 的部署之间逐字段还原。`exportedAt` 只作诊断，非字符串
+  按 `null` 处理，不参与校验。
+- **解码容错**：忽略空白与换行；接受 URL 安全字母表（`-`/`_`）与缺失的填充，其余
+  字符即非法。
+- **失败语义**（错误码在浏览器端，文案本地化，不进线路）：`empty` 空串、
+  `invalid-base64` 非法字符、`invalid-payload` 非 JSON 或 `settings` 不是普通对象、
+  `unknown-format` 载荷不是普通对象（数组、数字、`null` 等）或 `format` 不是
+  `dsh-usage-stats`、`unsupported-version` `version` 不是 1。
+- **导入语义**：以配置串为准**整份覆盖**——与默认值相同的字段发 `unset`（记录里不
+  留该字段、继续跟随 schema 默认值），不同的字段发 `set`（间隔字段写入前夹到下限
+  3），一次 `mutate` 提交；写入守卫与单字段写入一致（表单不可用或只读时不发起
+  写入，界面禁用导入并说明原因；导出只读，不受影响）。覆盖后字段全部等于默认值时，
+  该条目在 profile 文档里的用户片段整段消失——用户片段只是配置覆盖层，插件的装载
+  记录在 profile 的 `package.json`（`dsh.profile.bundles` + 依赖），插件照旧加载。

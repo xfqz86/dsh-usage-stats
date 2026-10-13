@@ -2,11 +2,19 @@
  * 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
  *
  * 以真实 cordis Context 挂载 UsageStatsService（存储不 mock：账本直接写
- * node:sqlite 文件），直接调用 7 个 @Remote 方法，验证：
+ * node:sqlite 文件），直接调用 10 个 @Remote 方法，验证：
  *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/
  *     dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
  *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠
  *     事件，初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
+ *   - 模型明细：按日（内存每日桶）与按会话（账本聚合）两路合计都对上快照模型行、
+ *     相互一致，`since` 过滤与未知键返回空明细；
+ *   - 单日明细：取快照里真实有量的一天，用量与快照该日系列点相等，并与当天
+ *     模型行求和、会话行求和三者一致；同日不同时刻归一到同一本地日，非法 day
+ *     与未来日期返回空明细；
+ *   - 会话明细：集合由客户端传（所点行的折叠分组），合计与快照会话行（含子会话）
+ *     逐位一致，两个维度与合计互相自洽；未知 id / 空集合返回空明细，乱序与重复
+ *     等价；独立用例断言含子代理的主会话明细严格大于主会话自身、并等于分组行数字；
  *   - 方法与手写严格贡献相容：真实出入值过 zod 信封，错误码透传不断解析；
  *     SRC 线路字段（产物方法源码参数名）与贡献 wire 名逐个对齐——生产构建压缩
  *     方法签名会让新版网关拒收全部带参请求，此处立即失败；
@@ -51,6 +59,7 @@ import { remoteErrorOf, remoteMethods } from '@deepseek-ai/dsh-typert-protocol'
 
 import UsageStatsService from '../lib/index.js'
 import { USAGE_STATS_REMOTE } from '../src/remote/contribution.ts'
+import { groupSessions, sessionGroupIds } from '../src/client/stats.ts'
 import { USAGE_SETTINGS_DEFAULTS, USAGE_SETTINGS_NAMESPACE } from '../src/utils.ts'
 
 /**
@@ -140,9 +149,9 @@ async function mount(query, persist, options = {}) {
       await new Promise((r) => setTimeout(r, 50))
     }
   }
-  // 7 个 @Remote 标记全部存活：网关 SRC 分发的前提。
+  // 10 个 @Remote 标记全部存活：网关 SRC 分发的前提。
   const markers = remoteMethods(svc).map((m) => m.exportName ?? m.method)
-  for (const name of ['snapshot', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota']) {
+  for (const name of ['snapshot', 'modelDetail', 'dateDetail', 'sessionDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota']) {
     if (!markers.includes(name)) {
       console.error(`FAIL: 缺 @Remote 标记 ${name}`)
       process.exit(1)
@@ -280,6 +289,270 @@ if (snap2.foldedEvents !== EXPECTED_FOLDED) {
   console.error(`FAIL: 实时重放后 foldedEvents=${String(snap2.foldedEvents)}，应仍为 ${String(EXPECTED_FOLDED)}（去重失效）`)
   process.exit(1)
 }
+
+// 模型明细：按日（内存每日桶）与按会话（账本聚合）两路数据源不同，合计必须同时
+// 对上快照模型行，且日合计 = 会话合计 = 明细合计——任一侧口径漂移都会在这里暴露。
+for (const m of snap.models) {
+  const detail = svc.modelDetail({ provider: m.provider, model: m.model })
+  assertEnvelope('modelDetail', detail)
+  if (detail.calls !== m.calls || detail.usage.total !== m.usage.total) {
+    console.error(`FAIL: modelDetail ${m.provider}/${m.model} 合计与快照不一致`, detail.calls, m.calls, detail.usage.total, m.usage.total)
+    process.exit(1)
+  }
+  const daySum = detail.daily.reduce((s, p) => s + (p.input || 0) + (p.output || 0) + (p.cacheRead || 0) + (p.cacheWrite || 0), 0)
+  const dayCalls = detail.daily.reduce((s, p) => s + (p.calls || 0), 0)
+  const sessionSum = detail.sessions.reduce((s, r) => s + r.usage.total, 0)
+  const sessionCalls = detail.sessions.reduce((s, r) => s + r.calls, 0)
+  if (daySum !== detail.usage.total || sessionSum !== detail.usage.total || dayCalls !== detail.calls || sessionCalls !== detail.calls) {
+    console.error(`FAIL: modelDetail ${m.provider}/${m.model} 日/会话合计与总计不一致`,
+      { daySum, sessionSum, dayCalls, sessionCalls, total: detail.usage.total, calls: detail.calls })
+    process.exit(1)
+  }
+  for (const row of detail.sessions) {
+    if (typeof row.id !== 'string' || row.id === '' || typeof row.title !== 'string' || row.calls <= 0 || row.usage.total <= 0) {
+      console.error('FAIL: modelDetail 会话行字段不全', row)
+      process.exit(1)
+    }
+  }
+}
+const firstModel = snap.models[0]
+const firstDetail = svc.modelDetail({ provider: firstModel.provider, model: firstModel.model })
+console.log('modelDetail:', JSON.stringify({
+  model: firstModel.model,
+  provider: firstModel.provider,
+  days: firstDetail.daily.length,
+  sessions: firstDetail.sessions.map((r) => ({ id: r.id, calls: r.calls, total: r.usage.total })),
+}))
+
+// since 过滤：明天零点之后没有事件 → 空明细（字段齐全、不报错）
+const futureDetail = svc.modelDetail({ provider: firstModel.provider, model: firstModel.model, since: Date.now() + 86_400_000 })
+assertEnvelope('modelDetail', futureDetail)
+if (futureDetail.calls !== 0 || futureDetail.usage.total !== 0 || futureDetail.daily.length !== 0 || futureDetail.sessions.length !== 0) {
+  console.error('FAIL: modelDetail 未来时间下界应返回空明细')
+  process.exit(1)
+}
+// since 非正数按全部历史处理（浏览器端下界恒为正，这里锁死归一语义）
+const zeroDetail = svc.modelDetail({ provider: firstModel.provider, model: firstModel.model, since: 0 })
+if (zeroDetail.calls !== firstModel.calls || zeroDetail.usage.total !== firstModel.usage.total) {
+  console.error('FAIL: modelDetail since=0 应与全部历史等价')
+  process.exit(1)
+}
+// 未知模型键：零值空明细，不抛错——重定向新建的目标行会走这条路径
+const noModel = svc.modelDetail({ provider: 'nope', model: 'nope' })
+assertEnvelope('modelDetail', noModel)
+if (noModel.calls !== 0 || noModel.daily.length !== 0 || noModel.sessions.length !== 0) {
+  console.error('FAIL: modelDetail 未知键应返回空明细')
+  process.exit(1)
+}
+
+// 单日明细：取快照里有量的一天，两路数据源（当天模型行 / 当天会话行）与快照该日
+// 系列点必须三者相等——模型维度来自 store.modelDaily、会话维度来自各会话日桶，
+// 任一折叠路径分叉都会在这里暴露。
+const daysWithUsage = snap.series.all.filter((p) => p.calls > 0)
+if (daysWithUsage.length === 0) {
+  console.error('FAIL: 快照没有任何有量日期，无法验证 dateDetail')
+  process.exit(1)
+}
+const busyDay = daysWithUsage[daysWithUsage.length - 1]
+const dayDetail = svc.dateDetail({ day: busyDay.t })
+assertEnvelope('dateDetail', dayDetail)
+const dayTotal = busyDay.input + busyDay.output + busyDay.cacheRead + busyDay.cacheWrite
+const dayModelSum = dayDetail.models.reduce((s, m) => s + m.usage.total, 0)
+const dayModelCalls = dayDetail.models.reduce((s, m) => s + m.calls, 0)
+const daySessionSum = dayDetail.sessions.reduce((s, r) => s + r.usage.total, 0)
+const daySessionCalls = dayDetail.sessions.reduce((s, r) => s + r.calls, 0)
+if (dayDetail.day !== busyDay.t || dayDetail.calls !== busyDay.calls || dayDetail.usage.total !== dayTotal
+  || dayDetail.usage.reasoning !== busyDay.reasoning) {
+  console.error('FAIL: dateDetail 合计与快照该日系列点不一致', {
+    day: dayDetail.day, expectedDay: busyDay.t,
+    calls: dayDetail.calls, expectedCalls: busyDay.calls,
+    total: dayDetail.usage.total, expectedTotal: dayTotal,
+  })
+  process.exit(1)
+}
+if (dayModelSum !== dayDetail.usage.total || dayModelCalls !== dayDetail.calls) {
+  console.error('FAIL: dateDetail 当天模型行合计与总计不一致', { dayModelSum, dayModelCalls, detail: dayDetail.usage.total })
+  process.exit(1)
+}
+if (daySessionSum !== dayDetail.usage.total || daySessionCalls !== dayDetail.calls) {
+  console.error('FAIL: dateDetail 当天会话行合计与总计不一致', { daySessionSum, daySessionCalls, detail: dayDetail.usage.total })
+  process.exit(1)
+}
+// 两个维度都只含有量的行：空桶不进结果，字段齐全（会话行与快照 sessionsList 同形）。
+for (const row of dayDetail.models) {
+  if (typeof row.provider !== 'string' || typeof row.model !== 'string' || row.calls <= 0 || row.usage.total <= 0) {
+    console.error('FAIL: dateDetail 模型行字段不全', row)
+    process.exit(1)
+  }
+}
+for (const row of dayDetail.sessions) {
+  if (typeof row.id !== 'string' || row.id === '' || typeof row.title !== 'string' || row.calls <= 0 || row.usage.total <= 0
+    || typeof row.delegationDepth !== 'number') {
+    console.error('FAIL: dateDetail 会话行字段不全', row)
+    process.exit(1)
+  }
+}
+// 默认排序：两个维度都按总计降序（浏览器端仍会按当前排序列重排，这里锁死基线）
+for (let i = 1; i < dayDetail.models.length; i += 1) {
+  if (dayDetail.models[i - 1].usage.total < dayDetail.models[i].usage.total) {
+    console.error('FAIL: dateDetail 模型行未按总计降序', dayDetail.models.map((m) => m.usage.total))
+    process.exit(1)
+  }
+}
+for (let i = 1; i < dayDetail.sessions.length; i += 1) {
+  if (dayDetail.sessions[i - 1].usage.total < dayDetail.sessions[i].usage.total) {
+    console.error('FAIL: dateDetail 会话行未按总计降序', dayDetail.sessions.map((r) => r.usage.total))
+    process.exit(1)
+  }
+}
+console.log('dateDetail:', JSON.stringify({
+  day: dayDetail.day,
+  calls: dayDetail.calls,
+  total: dayDetail.usage.total,
+  models: dayDetail.models.map((m) => ({ provider: m.provider, model: m.model, calls: m.calls, total: m.usage.total })),
+  sessions: dayDetail.sessions.map((r) => ({ id: r.id, calls: r.calls, total: r.usage.total })),
+}))
+
+// day 归一：同一天的不同时刻落回同一本地日零点，明细一致
+const midday = svc.dateDetail({ day: busyDay.t + 43_200_000 })
+assertEnvelope('dateDetail', midday)
+if (midday.day !== busyDay.t || midday.calls !== dayDetail.calls || midday.usage.total !== dayDetail.usage.total) {
+  console.error('FAIL: dateDetail 同日不同时刻未归一到本地日零点', { midday: midday.day, day: busyDay.t })
+  process.exit(1)
+}
+// 非法 day（非有限、非正数）一律空明细且字段齐全，不抛错
+for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+  const empty = svc.dateDetail({ day: bad })
+  assertEnvelope('dateDetail', empty)
+  if (empty.day !== 0 || empty.calls !== 0 || empty.usage.total !== 0
+    || empty.models.length !== 0 || empty.sessions.length !== 0) {
+    console.error('FAIL: dateDetail 非法 day 应返回空明细', bad, empty)
+    process.exit(1)
+  }
+}
+// 未知日期（明天，尚无用量）：同样空明细，不抛错
+const unknownDay = svc.dateDetail({ day: Date.now() + 86_400_000 })
+assertEnvelope('dateDetail', unknownDay)
+if (unknownDay.calls !== 0 || unknownDay.usage.total !== 0
+  || unknownDay.models.length !== 0 || unknownDay.sessions.length !== 0) {
+  console.error('FAIL: dateDetail 未知日期应返回空明细', unknownDay)
+  process.exit(1)
+}
+
+// 会话明细：集合由客户端界定（所点行的折叠分组，stats.sessionGroupIds 是唯一构造点），
+// 合计必须与快照会话行逐位一致；两个维度与合计互相自洽；空集合 / 未知 id 返回空明细不抛错。
+// 主场景的两个会话都没有子代理，含子会话的情形在文件末尾的独立用例里断言。
+const sdBefore = svc.snapshot({ sessionId: null })
+const mainGroups = groupSessions(snap.sessionsList)
+const allSessionIds = mainGroups.flatMap((g) => sessionGroupIds(g))
+const allSessionsDetail = svc.sessionDetail({ sessionIds: allSessionIds })
+assertEnvelope('sessionDetail', allSessionsDetail)
+if (allSessionsDetail.calls !== snap.all.calls || allSessionsDetail.usage.total !== snap.all.usage.total) {
+  console.error('FAIL: sessionDetail 全集合计与快照全量不一致',
+    { calls: allSessionsDetail.calls, allCalls: snap.all.calls, total: allSessionsDetail.usage.total, allTotal: snap.all.usage.total })
+  process.exit(1)
+}
+// 每个会话单独查一次，六项用量与调用数都等于快照该会话行（与行数字同源）
+for (const row of snap.sessionsList) {
+  const detail = svc.sessionDetail({ sessionIds: [row.id] })
+  assertEnvelope('sessionDetail', detail)
+  const same = detail.calls === row.calls
+    && detail.usage.input === row.usage.input && detail.usage.output === row.usage.output
+    && detail.usage.cacheRead === row.usage.cacheRead && detail.usage.cacheWrite === row.usage.cacheWrite
+    && detail.usage.reasoning === row.usage.reasoning && detail.usage.total === row.usage.total
+  if (!same) {
+    console.error('FAIL: sessionDetail 单会话合计与快照会话行不一致', row.id, detail, row)
+    process.exit(1)
+  }
+  const singleCalls = detail.daily.reduce((s, p) => s + p.calls, 0)
+  const singleTotal = detail.daily.reduce((s, p) => s + p.input + p.output + p.cacheRead + p.cacheWrite, 0)
+  if (singleCalls !== detail.calls || singleTotal !== detail.usage.total) {
+    console.error('FAIL: sessionDetail 单会话日序列合计与总计不一致', row.id, { singleCalls, singleTotal, detail })
+    process.exit(1)
+  }
+}
+// daily 本地日升序、只含有量的日子且与快照该日序列点相等（全集 = 全部有量会话）
+for (let i = 0; i < allSessionsDetail.daily.length; i += 1) {
+  const p = allSessionsDetail.daily[i]
+  if (i > 0 && allSessionsDetail.daily[i - 1].t >= p.t) {
+    console.error('FAIL: sessionDetail 日序列未按升序', allSessionsDetail.daily.map((x) => x.t))
+    process.exit(1)
+  }
+  const point = snap.series.all.find((x) => x.t === p.t)
+  const sum = p.input + p.output + p.cacheRead + p.cacheWrite
+  if (!point || p.calls !== point.calls || sum !== point.input + point.output + point.cacheRead + point.cacheWrite) {
+    console.error('FAIL: sessionDetail 日点与快照该日系列点不一致', p, point)
+    process.exit(1)
+  }
+}
+// 与单日明细交叉：集合内每天的会话行合计 = 会话明细该日点（两个方法各查一次内存日桶）
+for (const p of allSessionsDetail.daily) {
+  const day = svc.dateDetail({ day: p.t })
+  const sum = day.sessions.reduce((s, r) => s + r.usage.total, 0)
+  const calls = day.sessions.reduce((s, r) => s + r.calls, 0)
+  const expectTotal = p.input + p.output + p.cacheRead + p.cacheWrite
+  if (sum !== expectTotal || calls !== p.calls) {
+    console.error('FAIL: sessionDetail 与 dateDetail 同日合计不一致', { day: p.t, sum, expectTotal, calls, expectCalls: p.calls })
+    process.exit(1)
+  }
+}
+// 维度互校：Σdaily = Σmodels = 合计（六字段逐位）
+const sdDailySum = allSessionsDetail.daily.reduce((s, p) => s + p.input + p.output + p.cacheRead + p.cacheWrite, 0)
+const sdDailyCalls = allSessionsDetail.daily.reduce((s, p) => s + p.calls, 0)
+const sdModelSum = allSessionsDetail.models.reduce((s, m) => s + m.usage.total, 0)
+const sdModelCalls = allSessionsDetail.models.reduce((s, m) => s + m.calls, 0)
+if (sdDailySum !== allSessionsDetail.usage.total || sdDailyCalls !== allSessionsDetail.calls
+  || sdModelSum !== allSessionsDetail.usage.total || sdModelCalls !== allSessionsDetail.calls) {
+  console.error('FAIL: sessionDetail 两个维度与合计不一致',
+    { sdDailySum, sdDailyCalls, sdModelSum, sdModelCalls, total: allSessionsDetail.usage.total, calls: allSessionsDetail.calls })
+  process.exit(1)
+}
+// 模型行为账本原始键、总计降序；且都在快照模型集合里（服务端不归并）
+for (let i = 0; i < allSessionsDetail.models.length; i += 1) {
+  const m = allSessionsDetail.models[i]
+  if (i > 0 && allSessionsDetail.models[i - 1].usage.total < m.usage.total) {
+    console.error('FAIL: sessionDetail 模型行未按总计降序', allSessionsDetail.models.map((x) => x.usage.total))
+    process.exit(1)
+  }
+  if (m.calls <= 0 || typeof m.provider !== 'string' || typeof m.model !== 'string' || 'series' in m) {
+    console.error('FAIL: sessionDetail 模型行字段不全', m)
+    process.exit(1)
+  }
+  if (!snap.models.some((x) => x.provider === m.provider && x.model === m.model)) {
+    console.error('FAIL: sessionDetail 模型行不是账本原始键', m)
+    process.exit(1)
+  }
+}
+// 去重与乱序：集合语义，逐字段等价
+const sdDedup = svc.sessionDetail({ sessionIds: [...allSessionIds, allSessionIds[0]] })
+const sdReordered = svc.sessionDetail({ sessionIds: [...allSessionIds].reverse() })
+if (JSON.stringify(sdDedup) !== JSON.stringify(allSessionsDetail) || JSON.stringify(sdReordered) !== JSON.stringify(allSessionsDetail)) {
+  console.error('FAIL: sessionDetail 重复或乱序集合与规范集合不等价')
+  process.exit(1)
+}
+// 空集合 / 未知 id / 非数组：恒字段齐全的空明细，不抛错
+for (const ids of [[], ['session-00000000-0000-4000-8000-000000000000'], undefined]) {
+  const empty = svc.sessionDetail({ sessionIds: ids })
+  assertEnvelope('sessionDetail', empty)
+  if (empty.calls !== 0 || empty.usage.total !== 0 || empty.usage.input !== 0
+    || empty.daily.length !== 0 || empty.models.length !== 0) {
+    console.error('FAIL: sessionDetail 空集合 / 未知 id 应返回空明细', ids, empty)
+    process.exit(1)
+  }
+}
+// 纯读：调用前后快照计数与全量不变（不写账本、不判 busy）
+const sdAfter = svc.snapshot({ sessionId: null })
+if (sdAfter.foldedEvents !== sdBefore.foldedEvents || sdAfter.all.calls !== sdBefore.all.calls) {
+  console.error('FAIL: sessionDetail 不是纯读', { before: sdBefore.foldedEvents, after: sdAfter.foldedEvents })
+  process.exit(1)
+}
+console.log('sessionDetail:', JSON.stringify({
+  sessions: allSessionIds.length,
+  calls: allSessionsDetail.calls,
+  total: allSessionsDetail.usage.total,
+  days: allSessionsDetail.daily.length,
+  models: allSessionsDetail.models.map((m) => ({ provider: m.provider, model: m.model, calls: m.calls, total: m.usage.total })),
+}))
 
 // rebuild 并发：第二路以 usageStats/busy 拒绝，码与归属透传
 const rebuilding = svc.rebuild()
@@ -720,6 +993,170 @@ await mounted.dispose()
   await forkMounted.dispose()
   process.env.DSH_HOME = previousForkHome
   rmSync(forkHome, { recursive: true, force: true })
+}
+
+// ===== 会话明细：集合界定与子会话计入（独立 DSH_HOME，不触碰上面的 394 基线与其他用例）=====
+// 会话页「明细」的集合是客户端传的折叠分组（主会话 + groupSessions 展平的全部子代理），
+// 服务端不自走 session_meta 子树。断言：明细合计 = 所点行折叠后的合计（含子会话）且严格
+// 大于主会话自身；无子会话（含父不在列表的孤儿回落顶层）时等于自身；两个维度与合计互校。
+{
+  const sdHome = mkdtempSync(join(tmpdir(), 'usage-stats-smoke-sessiondetail-'))
+  const SD_MAIN = 'session-0a1b2c3d-4e5f-4a6b-8c7d-1e2f3a4b5c6d'
+  const SD_CHILD = 'session-1b2c3d4e-5f6a-4b7c-9d8e-2f3a4b5c6d7e'
+  const SD_GRAND = 'session-2c3d4e5f-6a7b-4c8d-9e0f-3a4b5c6d7e8f'
+  const SD_ORPHAN = 'session-3d4e5f6a-7b8c-4d9e-8f01-4b5c6d7e8f90'
+  // 孤儿的父：只出现在 parentSession 里，不在会话清单内 → 客户端按「孤儿回落顶层」成行
+  const SD_LOST_PARENT = 'session-4e5f6a7b-8c9d-4e0f-9a12-5c6d7e8f9012'
+  const SD_CWD = '/Users/example/session-detail'
+  const SD_DAY0 = new Date(2026, 3, 10).getTime()
+  const SD_DAY1 = new Date(2026, 3, 11).getTime()
+
+  const sdEvent = (seq, time, input, provider, model) => ({
+    type: 'assistant/message',
+    seq,
+    time,
+    data: { usage: { inputTokens: input, outputTokens: 10 }, message: { source: { provider, model } } },
+  })
+  const sdHeader = (id, parent, depth) => ({
+    type: 'session',
+    version: 2,
+    id,
+    createdAt: SD_DAY0,
+    cwd: SD_CWD,
+    ...(parent ? { parentSession: parent, origin: 'subagent', delegationDepth: depth } : {}),
+  })
+  // 主会话 170（day0 110 + day1 60）｜子代理 30｜孙代理 40｜孤儿 50；模型两个 zz/alpha、zz/beta
+  const sdEvents = {
+    [SD_MAIN]: [sdHeader(SD_MAIN), sdEvent(0, SD_DAY0 + 1000, 100, 'zz', 'alpha'), sdEvent(1, SD_DAY1 + 1000, 50, 'zz', 'beta')],
+    [SD_CHILD]: [sdHeader(SD_CHILD, SD_MAIN, 1), sdEvent(0, SD_DAY1 + 2000, 20, 'zz', 'beta')],
+    [SD_GRAND]: [sdHeader(SD_GRAND, SD_CHILD, 2), sdEvent(0, SD_DAY0 + 3000, 30, 'zz', 'alpha')],
+    [SD_ORPHAN]: [sdHeader(SD_ORPHAN, SD_LOST_PARENT, 1), sdEvent(0, SD_DAY1 + 4000, 40, 'aa', 'gamma')],
+  }
+  const sdHeaderOf = (id, parent, depth) => ({
+    id, createdAt: SD_DAY0, cwd: SD_CWD,
+    ...(parent ? { parentSession: parent, origin: 'subagent', delegationDepth: depth } : {}),
+  })
+  const sdQuery = {
+    async listSessions() {
+      return [
+        { header: sdHeaderOf(SD_MAIN) },
+        { header: sdHeaderOf(SD_CHILD, SD_MAIN, 1) },
+        { header: sdHeaderOf(SD_GRAND, SD_CHILD, 2) },
+        { header: sdHeaderOf(SD_ORPHAN, SD_LOST_PARENT, 1) },
+      ]
+    },
+    async readSession(id) { return { events: sdEvents[id] ?? [], inheritedEventCount: 0 } },
+  }
+  const sdPersist = {
+    async list() { return Object.keys(sdEvents).map((id) => ({ header: { id }, revision: 0 })) },
+    async open(id) {
+      return {
+        async read() { return { events: sdEvents[id] ?? [] } },
+        async close() {},
+      }
+    },
+  }
+
+  const previousSdHome = process.env.DSH_HOME
+  process.env.DSH_HOME = sdHome
+  const sdMounted = await mount(sdQuery, sdPersist)
+  const svcSd = sdMounted.svc
+  const snapSd = await (async () => {
+    const deadline = Date.now() + 10_000
+    for (;;) {
+      const s = svcSd.snapshot({ sessionId: null })
+      assertEnvelope('snapshot', s)
+      if (s.foldedEvents >= 5) return s
+      if (Date.now() > deadline) throw new Error('等待会话明细用例折叠超时')
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  })()
+  const sameUsage = (a, b) => a.calls === b.calls
+    && a.usage.input === b.usage.input && a.usage.output === b.usage.output
+    && a.usage.cacheRead === b.usage.cacheRead && a.usage.cacheWrite === b.usage.cacheWrite
+    && a.usage.reasoning === b.usage.reasoning && a.usage.total === b.usage.total
+
+  // 分组：主会话折叠两个子代理（孙代展平）；孤儿回落顶层自成一组
+  const sdGroups = groupSessions(snapSd.sessionsList)
+  const sdMainGroup = sdGroups.find((g) => g.main.id === SD_MAIN)
+  const sdOrphanGroup = sdGroups.find((g) => g.main.id === SD_ORPHAN)
+  if (sdGroups.length !== 2 || !sdMainGroup || sdMainGroup.childCount !== 2 || !sdOrphanGroup || sdOrphanGroup.childCount !== 0) {
+    console.error('FAIL: 会话明细用例分组不正确', sdGroups.map((g) => ({ main: g.main.id, children: g.children.map((c) => c.id) })))
+    process.exit(1)
+  }
+  const sdGroupDetail = svcSd.sessionDetail({ sessionIds: sessionGroupIds(sdMainGroup) })
+  assertEnvelope('sessionDetail', sdGroupDetail)
+  // 核心不变量：明细合计 = 所点行折叠后的合计（含子会话），逐位相等
+  if (!sameUsage(sdGroupDetail, sdMainGroup.agg) || sdGroupDetail.calls !== 4 || sdGroupDetail.usage.total !== 240) {
+    console.error('FAIL: sessionDetail 合计与折叠行数字不一致', { detail: sdGroupDetail, agg: sdMainGroup.agg })
+    process.exit(1)
+  }
+  // 子会话确实计入：严格大于主会话自身，差值恰为两个子代理之和（30 + 40）
+  const sdMainOnly = svcSd.sessionDetail({ sessionIds: [SD_MAIN] })
+  assertEnvelope('sessionDetail', sdMainOnly)
+  if (!(sdMainOnly.calls === 2 && sdMainOnly.usage.total === 170)
+    || sdGroupDetail.calls !== sdMainOnly.calls + 2 || sdGroupDetail.usage.total !== sdMainOnly.usage.total + 70) {
+    console.error('FAIL: sessionDetail 子会话未计入（或与主会话自身合计相同）', { group: sdGroupDetail, main: sdMainOnly })
+    process.exit(1)
+  }
+  // 无子会话时等于自身
+  const sdOrphanDetail = svcSd.sessionDetail({ sessionIds: sessionGroupIds(sdOrphanGroup) })
+  assertEnvelope('sessionDetail', sdOrphanDetail)
+  if (!sameUsage(sdOrphanDetail, sdOrphanGroup.agg) || sdOrphanDetail.usage.total !== 50) {
+    console.error('FAIL: sessionDetail 无子会话时应等于自身合计', { detail: sdOrphanDetail, agg: sdOrphanGroup.agg })
+    process.exit(1)
+  }
+  // 按日期：两天升序，day0 150 / day1 90，合计与 total 相等
+  const sdDaySum = sdGroupDetail.daily.reduce((s, p) => s + p.input + p.output + p.cacheRead + p.cacheWrite, 0)
+  const sdDayCalls = sdGroupDetail.daily.reduce((s, p) => s + p.calls, 0)
+  if (sdGroupDetail.daily.length !== 2 || sdGroupDetail.daily[0].t !== SD_DAY0 || sdGroupDetail.daily[1].t !== SD_DAY1
+    || sdGroupDetail.daily[0].input + sdGroupDetail.daily[0].output !== 150
+    || sdGroupDetail.daily[1].input + sdGroupDetail.daily[1].output !== 90
+    || sdDaySum !== sdGroupDetail.usage.total || sdDayCalls !== sdGroupDetail.calls) {
+    console.error('FAIL: sessionDetail 日序列不正确', sdGroupDetail.daily)
+    process.exit(1)
+  }
+  // 按模型：zz/alpha 150、zz/beta 90，总计降序，合计与 total 相等
+  const sdModelSum = sdGroupDetail.models.reduce((s, m) => s + m.usage.total, 0)
+  const sdModelCalls = sdGroupDetail.models.reduce((s, m) => s + m.calls, 0)
+  if (sdGroupDetail.models.length !== 2
+    || sdGroupDetail.models[0].provider !== 'zz' || sdGroupDetail.models[0].model !== 'alpha' || sdGroupDetail.models[0].usage.total !== 150
+    || sdGroupDetail.models[1].provider !== 'zz' || sdGroupDetail.models[1].model !== 'beta' || sdGroupDetail.models[1].usage.total !== 90
+    || sdModelSum !== sdGroupDetail.usage.total || sdModelCalls !== sdGroupDetail.calls) {
+    console.error('FAIL: sessionDetail 模型行不正确', sdGroupDetail.models)
+    process.exit(1)
+  }
+  // 与单日明细交叉：day1 集合内会话行合计 = 明细 day1 点（子代理也算在内）
+  const sdDay1 = svcSd.dateDetail({ day: SD_DAY1 })
+  const sdGroupIdSet = new Set(sessionGroupIds(sdMainGroup))
+  const sdDay1Rows = sdDay1.sessions.filter((r) => sdGroupIdSet.has(r.id))
+  const sdDay1Sum = sdDay1Rows.reduce((s, r) => s + r.usage.total, 0)
+  const sdDay1Calls = sdDay1Rows.reduce((s, r) => s + r.calls, 0)
+  if (sdDay1Sum !== 90 || sdDay1Calls !== 2) {
+    console.error('FAIL: sessionDetail 与 dateDetail 交叉不一致', { sdDay1Sum, sdDay1Calls, rows: sdDay1Rows.map((r) => r.id) })
+    process.exit(1)
+  }
+  // 集合语义：重复与乱序不影响结果
+  const sdReordered = svcSd.sessionDetail({ sessionIds: [SD_GRAND, SD_CHILD, SD_MAIN, SD_MAIN] })
+  if (JSON.stringify(sdReordered) !== JSON.stringify(sdGroupDetail)) {
+    console.error('FAIL: sessionDetail 重复或乱序集合与规范集合不等价')
+    process.exit(1)
+  }
+  // 纯读：调用前后折叠计数不变
+  const snapSdAfter = svcSd.snapshot({ sessionId: null })
+  if (snapSdAfter.foldedEvents !== snapSd.foldedEvents || snapSdAfter.all.calls !== snapSd.all.calls) {
+    console.error('FAIL: sessionDetail 不是纯读', { before: snapSd.foldedEvents, after: snapSdAfter.foldedEvents })
+    process.exit(1)
+  }
+  console.log('sessionDetail 含子会话:', JSON.stringify({
+    groupIds: sessionGroupIds(sdMainGroup),
+    group: { calls: sdGroupDetail.calls, total: sdGroupDetail.usage.total },
+    mainOnly: { calls: sdMainOnly.calls, total: sdMainOnly.usage.total },
+    daily: sdGroupDetail.daily.map((p) => ({ t: p.t, calls: p.calls, total: p.input + p.output + p.cacheRead + p.cacheWrite })),
+  }))
+  await sdMounted.dispose()
+  process.env.DSH_HOME = previousSdHome
+  rmSync(sdHome, { recursive: true, force: true })
 }
 
 // ===== 压缩调用计入用例（独立 DSH_HOME，不触碰上面的 394 基线与其他用例）=====

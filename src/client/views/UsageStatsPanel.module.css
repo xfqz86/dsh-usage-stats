@@ -6,13 +6,15 @@
 
 /* 模态卡片尺寸覆盖，叠加于 primitives Modal 的 dialog。
    1024x768 适配：四边各留 16px 边距，对应 calc(100vw-32px) / calc(100vh-32px)，
-   最大 960x640，兼顾 92vw/92vh 约束，美观清晰；圆角 20px、阴影 lv2。 */
+   最大 960x640，兼顾 92vw/92vh 约束，美观清晰；圆角 20px、阴影 lv2。
+   gap 必须显式归零：基座 dialog 自带 20px flex gap，会插在头部 / Tab 栏 / 内容区之间。 */
 .modal {
   width: min(960px, calc(100vw - 32px));
   height: min(640px, calc(100vh - 32px));
   max-width: 92vw;
   max-height: 92vh;
   padding: 0;
+  gap: 0;
   display: flex;
   flex-direction: column;
   border-radius: 20px;
@@ -88,73 +90,7 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* ---- Tab 栏，role 为 tablist 的语义化导航 ---- */
-.tabbar {
-  flex: none;
-  display: flex;
-  align-items: stretch;
-  gap: 2px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-2);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.tabbar::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  flex: 1;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 8px 6px;
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  /* 未选中用 label-tertiary：caption 是说明性小字的颜色，深色下 12px 文字对比度不足。 */
-  color: var(--dsw-alias-label-tertiary);
-  cursor: pointer;
-  transition: color 0.15s ease;
-  white-space: nowrap;
-}
-
-.tab:hover {
-  color: var(--dsw-alias-label-primary);
-}
-
-.tabOn {
-  color: var(--dsw-alias-label-primary);
-}
-
-/* 选中下划线：2px 圆头短条（与 dsh 设置页 tab 同一形态），避免深色下整条白边过硬。 */
-.tabOn::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--dsw-alias-label-primary);
-  content: '';
-}
-
-.tab:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
-  outline-offset: -2px;
-  border-radius: 6px;
-}
-
-.tab svg {
-  flex: none;
-}
+/* ---- Tab 栏（tabbar/tab/tabOn）与模型明细弹窗共用的基元见 UsageStatsCommon ---- */
 
 .body {
   flex: 1;

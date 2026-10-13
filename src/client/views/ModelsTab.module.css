@@ -1,13 +1,20 @@
 /* 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
-   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard 等）已抽至
-   components/UsageStatsCommon.module.css，此处仅保留列宽差异与布局差异。 */
+   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard/firstCol/
+   detailCell/detailLink/mergedChip 等）已抽至 components/UsageStatsCommon.module.css，
+   此处仅保留列宽差异与布局差异。 */
 
-/* 首列（模型）吃掉全部剩余空间、其余列按内容自适应（table-layout: auto；max-width: none 覆盖共用 cellText 的宽度钳制） */
+/* 模型列的最小宽度（「吃满剩余宽度、其余列按内容自适应」见共用基元 .firstCol） */
 .tableWrap th:nth-child(1),
 .tableWrap td:nth-child(1) {
-  width: 100%;
   min-width: 160px;
-  max-width: none;
+}
+
+/* 本表列最多（含明细共 10 列）：数值列横向内边距比共用基元再收 1px，
+   保证 820 宽的面板（891 视口）下中英文表头都不出现横向滚动条 */
+.tableWrap th,
+.tableWrap td {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 /* 可排序表头按钮样式已提取至 components/ThSortable.module.css（与 DatesTab/SessionsTab 共用） */
@@ -28,15 +35,3 @@
   }
 }
 
-/* 归并来源标记：跟在「模型 · 供应商」之后的低调小标签，悬浮出明细 */
-.mergedChip {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent);
-  font-size: 11px;
-  line-height: 16px;
-  white-space: nowrap;
-  vertical-align: middle;
-}

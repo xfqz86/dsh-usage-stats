@@ -7,7 +7,7 @@
  *   - DatesTab，日期，含每日趋势曲线与范围切换
  *   - SessionsTab，会话，按会话展示表格
  *   - ModelsTab，模型，按模型拆分表格（按偏好里的重定向规则归并后展示）
- *   - SettingsTab，设置，含偏好设置，涉及 Go、DeepSeek 与 Z.ai、模型统计重定向、可折叠的账本操作与页脚
+ *   - SettingsTab，设置，含偏好设置，涉及 Go、DeepSeek 与 Z.ai、模型统计重定向、可折叠的配置迁移与账本操作、页脚
  *
  * 数据与底部按钮共用 usageStats/snapshot、usageStats/go-quota、
  * usageStats/deepseek-balance 与 usageStats/zai-quota 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
@@ -62,6 +62,8 @@ export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-stats'> {
   settings: UsageSettings
   /** 局部更新偏好设置。 */
   onUpdateSettings: (patch: Partial<UsageSettings>) => void
+  /** 整份写入偏好设置，仅设置页的配置迁移区从配置串导入时使用。 */
+  onReplaceSettings: (next: UsageSettings) => void
   /** 关闭模态窗，通过关闭按钮、遮罩点击或 Escape 触发。 */
   onClose: () => void
   /** 立即重新拉取快照、Go 额度、DeepSeek 余额与 Z.ai 额度，对应设置页“手动刷新”按钮。 */
@@ -104,6 +106,7 @@ export function UsageStatsPanel({
   zai,
   settings,
   onUpdateSettings,
+  onReplaceSettings,
   onClose,
   onRefresh,
   onRefreshGo,
@@ -116,7 +119,7 @@ export function UsageStatsPanel({
   const value = data;
 
   // 模型统计重定向：按偏好里的规则归并模型行（设置页拿原始行当候选，故这里才算），
-  // 只有模型页消费归并结果——会话/日期/概览/底栏都不读 models。
+  // 模型页消费归并结果，日期明细的按模型标签拿规则自己算当天的行（服务端明细始终是原始行）。
   const redirect = useMemo(
     () => redirectModels(value?.models ?? [], settings.modelRedirects),
     [value?.models, settings.modelRedirects],
@@ -148,9 +151,9 @@ export function UsageStatsPanel({
             zaiEnabled={settings.zaiEnabled}
           />
         )}
-        {active === 'dates' && <DatesTab series={value.series.all} t={t} />}
+        {active === 'dates' && <DatesTab series={value.series.all} rules={settings.modelRedirects} t={t} />}
         {active === 'sessions' && (
-          <SessionsTab sessionsList={value.sessionsList} t={t} />
+          <SessionsTab sessionsList={value.sessionsList} rules={settings.modelRedirects} t={t} />
         )}
         {active === 'models' && (
           <ModelsTab models={redirect.models} mergedSources={redirect.mergedSources} t={t} />
@@ -160,6 +163,7 @@ export function UsageStatsPanel({
             onRefresh={onRefresh}
             settings={settings}
             onUpdateSettings={onUpdateSettings}
+            onReplaceSettings={onReplaceSettings}
             t={t}
             value={value}
           />
@@ -203,15 +207,15 @@ export function UsageStatsPanel({
         </span>
       </header>
 
-      {/* Tab 栏：语义化 tablist，无现成 harness 组件，样式与 chip/seg 统一 */}
-      <div className={css.tabbar} role="tablist" aria-label={t('panel.title')}>
+      {/* Tab 栏：语义化 tablist，无现成 harness 组件，形态与模型明细弹窗共用（UsageStatsCommon） */}
+      <div className={shared.tabbar} role="tablist" aria-label={t('panel.title')}>
         {TABS.map(({ key, labelKey, Icon }) => (
           <button
             key={key}
             type="button"
             role="tab"
             aria-selected={active === key}
-            className={active === key ? `${css.tab} ${css.tabOn}` : css.tab}
+            className={active === key ? `${shared.tab} ${shared.tabOn}` : shared.tab}
             onClick={() => setActive(key)}
           >
             <Icon size={14} />

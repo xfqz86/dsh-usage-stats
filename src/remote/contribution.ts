@@ -20,11 +20,17 @@ import { z } from 'zod';
 
 import type {
   ClearResult,
+  DateDetail,
+  DateDetailRequest,
   DeepSeekBalance,
   GoQuota,
+  ModelDetail,
+  ModelDetailRequest,
   QuotaRequest,
   RebuildResult,
   SealResult,
+  SessionDetail,
+  SessionDetailRequest,
   SnapshotRequest,
   UsageSnapshot,
   ZaiQuota,
@@ -75,6 +81,33 @@ const sessionStatSchema = z.object({
   parentSession: z.string().nullable(),
   origin: z.string().nullable(),
   delegationDepth: z.number(),
+});
+
+/** 模型明细：范围内合计 + 按日序列 + 按会话明细，元素与快照同形。 */
+const modelDetailSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  calls: z.number(),
+  usage: usageAggSchema,
+  daily: z.array(seriesPointSchema),
+  sessions: z.array(sessionStatSchema),
+});
+
+/** 单日明细：当天合计 + 当天模型行 + 当天会话行；模型行不下发 series（单日行再带按日序列没有意义）。 */
+const dateDetailSchema = z.object({
+  day: z.number(),
+  calls: z.number(),
+  usage: usageAggSchema,
+  models: z.array(modelStatSchema),
+  sessions: z.array(sessionStatSchema),
+});
+
+/** 会话明细：集合合计 + 按本地日 + 按模型；模型行省略 series（明细不画该模型的按日图）。 */
+const sessionDetailSchema = z.object({
+  calls: z.number(),
+  usage: usageAggSchema,
+  daily: z.array(seriesPointSchema),
+  models: z.array(modelStatSchema),
 });
 
 const usageSnapshotSchema = z.object({
@@ -150,6 +183,21 @@ const snapshotRequestSchema = z.object({
   limit: z.number().optional(),
 });
 
+const modelDetailRequestSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  since: z.number().optional(),
+});
+
+const dateDetailRequestSchema = z.object({
+  day: z.number(),
+});
+
+/** 会话集合：顺序无关、重复无效，线路层只收字符串数组（服务端仍防御非数组/非字符串）。 */
+const sessionDetailRequestSchema = z.object({
+  sessionIds: z.array(z.string()),
+});
+
 const quotaRequestSchema = z.object({
   intervalMinutes: z.number().optional(),
   force: z.boolean().optional(),
@@ -205,7 +253,7 @@ function requestParam(typeSymbol: string, schema: z.ZodTypeAny): {
   return { name: 'request', wire: 'request', source: 'json', codec: strictCodec(typeSymbol, schema) };
 }
 
-/** 可挂载的严格贡献：7 个一元方法，无 lookup、无取消。 */
+/** 可挂载的严格贡献：10 个一元方法，无 lookup、无取消。 */
 export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
   package: PACKAGE,
   descriptors: [
@@ -217,6 +265,33 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       invocation: { kind: 'direct' },
       parameters: [requestParam(`${PACKAGE}/types#SnapshotRequest`, snapshotRequestSchema)],
       result: strictCodec(`${PACKAGE}/types#UsageSnapshot`, envelope(usageSnapshotSchema)),
+    },
+    {
+      id: `${PACKAGE}#${NAMESPACE}/modelDetail`,
+      service: NAMESPACE,
+      namespace: NAMESPACE,
+      method: 'modelDetail',
+      invocation: { kind: 'direct' },
+      parameters: [requestParam(`${PACKAGE}/types#ModelDetailRequest`, modelDetailRequestSchema)],
+      result: strictCodec(`${PACKAGE}/types#ModelDetail`, envelope(modelDetailSchema)),
+    },
+    {
+      id: `${PACKAGE}#${NAMESPACE}/dateDetail`,
+      service: NAMESPACE,
+      namespace: NAMESPACE,
+      method: 'dateDetail',
+      invocation: { kind: 'direct' },
+      parameters: [requestParam(`${PACKAGE}/types#DateDetailRequest`, dateDetailRequestSchema)],
+      result: strictCodec(`${PACKAGE}/types#DateDetail`, envelope(dateDetailSchema)),
+    },
+    {
+      id: `${PACKAGE}#${NAMESPACE}/sessionDetail`,
+      service: NAMESPACE,
+      namespace: NAMESPACE,
+      method: 'sessionDetail',
+      invocation: { kind: 'direct' },
+      parameters: [requestParam(`${PACKAGE}/types#SessionDetailRequest`, sessionDetailRequestSchema)],
+      result: strictCodec(`${PACKAGE}/types#SessionDetail`, envelope(sessionDetailSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/rebuild`,
@@ -278,6 +353,9 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
 /** 方法名表：测试断言贡献与服务一致的单一来源。 */
 export const METHOD_NAMES = [
   'snapshot',
+  'modelDetail',
+  'dateDetail',
+  'sessionDetail',
   'rebuild',
   'clear',
   'seal',
@@ -290,6 +368,9 @@ export const METHOD_NAMES = [
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$75736167655374617473 {
     snapshot: (request: SnapshotRequest) => Promise<RemoteResult<UsageSnapshot>>
+    modelDetail: (request: ModelDetailRequest) => Promise<RemoteResult<ModelDetail>>
+    dateDetail: (request: DateDetailRequest) => Promise<RemoteResult<DateDetail>>
+    sessionDetail: (request: SessionDetailRequest) => Promise<RemoteResult<SessionDetail>>
     rebuild: () => Promise<RemoteResult<RebuildResult>>
     clear: () => Promise<RemoteResult<ClearResult>>
     seal: () => Promise<RemoteResult<SealResult>>
@@ -299,6 +380,9 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
   interface TypertRemoteMap {
     'usageStats/snapshot': (request: SnapshotRequest) => Promise<RemoteResult<UsageSnapshot>>
+    'usageStats/modelDetail': (request: ModelDetailRequest) => Promise<RemoteResult<ModelDetail>>
+    'usageStats/dateDetail': (request: DateDetailRequest) => Promise<RemoteResult<DateDetail>>
+    'usageStats/sessionDetail': (request: SessionDetailRequest) => Promise<RemoteResult<SessionDetail>>
     'usageStats/rebuild': () => Promise<RemoteResult<RebuildResult>>
     'usageStats/clear': () => Promise<RemoteResult<ClearResult>>
     'usageStats/seal': () => Promise<RemoteResult<SealResult>>
@@ -314,11 +398,17 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 /** 静态类型 re-export：Client 以 import type 引入本模块即激活命名空间合并。 */
 export type {
   ClearResult,
+  DateDetail,
+  DateDetailRequest,
   DeepSeekBalance,
   GoQuota,
+  ModelDetail,
+  ModelDetailRequest,
   QuotaRequest,
   RebuildResult,
   SealResult,
+  SessionDetail,
+  SessionDetailRequest,
   SnapshotRequest,
   UsageSnapshot,
   ZaiQuota,

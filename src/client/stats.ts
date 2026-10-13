@@ -9,7 +9,7 @@
 import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, isCompleteRedirect, splitModelKey, startOfDay } from '../utils.ts';
 
 import type { LocaleFn } from './locales.ts';
-import type { ModelRedirect, ModelStat, SeriesPoint, SessionStat, UsageAgg } from '../types.ts';
+import type { ModelDetail, ModelRedirect, ModelStat, SeriesPoint, SessionStat, UsageAgg } from '../types.ts';
 
 /** 判断是否为英文环境：支持传入 locale 字符串或翻译函数 t。 */
 function isEnglishLocale(localeOrT?: string | LocaleFn): boolean {
@@ -189,6 +189,43 @@ export function groupSessions(list: SessionStat[]): SessionGroup[] {
   return groups;
 }
 
+/** 会话表排序键：面板会话 Tab 与模型明细的按会话表共用，同一列在两处同一比较。 */
+export type SessionSortKey = 'session' | 'cacheRead' | 'input' | 'output' | 'total' | 'hitRate' | 'calls' | 'avg' | 'lastActive';
+
+/**
+ * 一个分组的折叠会话 id 集合：主会话 + 展平到它下面的全部子代理。
+ * 会话明细请求的唯一构造点——明细必须与所点行同源（同一分组），
+ * 在点击那一刻取一次并随弹窗冻结，之后不随快照轮询重算（见 `docs/API.md` §2.3）。
+ */
+export function sessionGroupIds(group: SessionGroup): string[] {
+  return [group.main.id, ...group.children.map((child) => child.id)];
+}
+
+/**
+ * 会话分组排序比较：两处会话表共用，保证同一排序键给出同一顺序。
+ * 文本列按标题（缺标题回落 id）比较，数值列一律取折叠后的分组合计（子代理计入主会话）。
+ * @param key - 排序键，与表头一一对应。
+ * @param a - 左侧分组。
+ * @param b - 右侧分组。
+ * @returns 比较结果，方向由调用方经 stableSort 应用。
+ */
+export function compareSessionGroup(key: SessionSortKey, a: SessionGroup, b: SessionGroup): number {
+  const agga = a.agg;
+  const aggb = b.agg;
+  switch (key) {
+    case 'session': return (a.main.title || a.main.id || '').localeCompare(b.main.title || b.main.id || '', 'zh-Hans-CN');
+    case 'calls': return (agga.calls || 0) - (aggb.calls || 0);
+    case 'input': return (agga.usage.input || 0) - (aggb.usage.input || 0);
+    case 'output': return (agga.usage.output || 0) - (aggb.usage.output || 0);
+    case 'cacheRead': return (agga.usage.cacheRead || 0) - (aggb.usage.cacheRead || 0);
+    case 'hitRate': return (hitRateOfDay(agga.usage) ?? -1) - (hitRateOfDay(aggb.usage) ?? -1);
+    case 'total': return usageTotal(agga.usage) - usageTotal(aggb.usage);
+    case 'avg': return (avgPerCall(usageTotal(agga.usage), agga.calls) ?? -1) - (avgPerCall(usageTotal(aggb.usage), aggb.calls) ?? -1);
+    case 'lastActive': return (a.main.lastActive || 0) - (b.main.lastActive || 0);
+    default: return 0;
+  }
+}
+
 /** 本地日划分，utils.ts 单一事实来源。 */
 export { startOfDay } from '../utils.ts';
 export const dayLabel = (t: number): string => { const d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate(); };
@@ -287,6 +324,19 @@ export function heatGridOf(series: SeriesPoint[], weeks = 26): HeatGrid {
     else c.lvl = 4;
   }
   return { cols: weeks, cells, months };
+}
+
+/**
+ * 最近活跃文案：0 表未知；自然日为今天显示「今天 HH:MM」、昨天显示「昨天 HH:MM」，
+ * 更早显示完整日期。会话 Tab 与模型明细的会话表共用一份（STYLE §11）。
+ */
+export function formatLastActive(lastActive: number, t: LocaleFn): string {
+  if (!lastActive) return '--';
+  const time = new Date(lastActive).toTimeString().slice(0, 5);
+  const kind = lastActiveDayKind(lastActive, Date.now());
+  if (kind === 'today') return `${t('time.today')} ${time}`;
+  if (kind === 'yesterday') return `${t('time.yesterday')} ${time}`;
+  return fullDayLabel(lastActive);
 }
 
 /** 模型汇总时间范围：全部、1年、半年、3个月、1个月、14天、7天，默认 1 年。 */
@@ -462,6 +512,74 @@ export function redirectModels(models: ModelStat[], rules: readonly ModelRedirec
   }
   out.sort((a, b) => usageTotal(b.usage) - usageTotal(a.usage));
   return { models: out, mergedSources };
+}
+
+/**
+ * 合并同一模型行的多份明细：模型统计重定向把若干来源并进一行，明细按来源各查一次，
+ * 这里求和还原成一行——用量各字段与调用数相加，日序列按本地日相加，会话行按 id 相加
+ * （最后活跃取最大，标题 / cwd / 创建时间与子代理归属取首个非空，层级取最大）。
+ * 入参为空返回 null，调用方据此显示空态。
+ */
+export function mergeModelDetails(
+  details: readonly ModelDetail[],
+  target: { provider: string; model: string },
+): ModelDetail | null {
+  if (details.length === 0) return null;
+  const usage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+  let calls = 0;
+  const days = new Map<number, SeriesPoint>();
+  const sessions = new Map<string, SessionStat>();
+  for (const detail of details) {
+    usage.input += detail.usage.input || 0;
+    usage.output += detail.usage.output || 0;
+    usage.cacheRead += detail.usage.cacheRead || 0;
+    usage.cacheWrite += detail.usage.cacheWrite || 0;
+    usage.reasoning += detail.usage.reasoning || 0;
+    usage.total += detail.usage.total || 0;
+    calls += detail.calls || 0;
+    for (const pt of detail.daily) {
+      const day = days.get(pt.t);
+      if (day === undefined) {
+        days.set(pt.t, { ...pt });
+        continue;
+      }
+      day.input += pt.input || 0;
+      day.output += pt.output || 0;
+      day.cacheRead += pt.cacheRead || 0;
+      day.cacheWrite += pt.cacheWrite || 0;
+      day.reasoning += pt.reasoning || 0;
+      day.calls += pt.calls || 0;
+    }
+    for (const row of detail.sessions) {
+      const merged = sessions.get(row.id);
+      if (merged === undefined) {
+        sessions.set(row.id, { ...row, usage: { ...row.usage } });
+        continue;
+      }
+      merged.calls += row.calls || 0;
+      merged.usage.input += row.usage.input || 0;
+      merged.usage.output += row.usage.output || 0;
+      merged.usage.cacheRead += row.usage.cacheRead || 0;
+      merged.usage.cacheWrite += row.usage.cacheWrite || 0;
+      merged.usage.reasoning += row.usage.reasoning || 0;
+      merged.usage.total += row.usage.total || 0;
+      if ((row.lastActive || 0) > (merged.lastActive || 0)) merged.lastActive = row.lastActive;
+      if (!merged.title && row.title) merged.title = row.title;
+      if (!merged.cwd && row.cwd) merged.cwd = row.cwd;
+      if (!merged.createdAt && row.createdAt) merged.createdAt = row.createdAt;
+      if (merged.parentSession === null && row.parentSession !== null) merged.parentSession = row.parentSession;
+      if (merged.origin === null && row.origin !== null) merged.origin = row.origin;
+      if ((row.delegationDepth || 0) > (merged.delegationDepth || 0)) merged.delegationDepth = row.delegationDepth;
+    }
+  }
+  return {
+    provider: target.provider,
+    model: target.model,
+    calls,
+    usage,
+    daily: [...days.values()].sort((a, b) => a.t - b.t),
+    sessions: [...sessions.values()].sort((a, b) => (b.usage.total - a.usage.total) || a.id.localeCompare(b.id)),
+  };
 }
 
 /**

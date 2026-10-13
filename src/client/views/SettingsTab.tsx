@@ -1,5 +1,5 @@
 /**
- * 设置 Tab：偏好设置，含 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度监控各三项，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
+ * 设置 Tab：偏好设置，含 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度监控各三项，配置迁移折叠内含导出与导入配置串，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
  * 独立成文件，一个组件一个文件。
  *
  * 偏好设置持久化在服务端 profile 配置文档（`usage-stats` 条目，经 ctx.configForms 的
@@ -24,6 +24,9 @@
  *     10. 会话标题旁展示会话 ID，showSessionId，默认开启；关闭后标题右侧
  *     工具区不再挂 session-id 徽标（`conversation.session.header.utilities`
  *     的 `dsh-usage-stats-session-id` entry 渲染空）。
+ * 两个折叠区共用 CSS Modules 的 fold* 外观，自上而下为配置迁移、账本操作——前者只读写
+ * 偏好设置文档，后者动的才是用量数据，危险度高的排下面。
+ * 配置迁移折叠：标题为 t('settings.configTransfer')，默认折叠，导出与导入见 ConfigTransfer；
  * 账本操作折叠：标题为 t('settings.ledgerOps')，内含清零与重建两项危险操作；
  * 快照 scanning 为真（首启扫描或重建扫描进行中）时两项同时置灰并给出原因，
  * 扫描期间不允许清零/重建——两者会与扫描交错写同一账本与聚合，服务端也以
@@ -51,6 +54,7 @@ import { useConfirmOp, type ConfirmOpState } from '../useConfirmOp.ts';
 import { useIntervalText } from '../useIntervalText.ts';
 import { useUsageSettingsView } from '../useUsageSettings.ts';
 
+import { ConfigTransfer } from './ConfigTransfer.tsx';
 import { ModelRedirectEditor } from './ModelRedirectEditor.tsx';
 import css from './SettingsTab.module.css';
 
@@ -61,12 +65,14 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 /** 设置 Tab：偏好设置 + 账本操作折叠 + 底部页脚。 */
 export function SettingsTab({
-  onRefresh, settings, onUpdateSettings, t, value,
+  onRefresh, settings, onUpdateSettings, onReplaceSettings, t, value,
 }: {
   /** 重建/清零完成后立即重新拉取快照。 */
   onRefresh: () => void
   settings: UsageSettings
   onUpdateSettings: (patch: Partial<UsageSettings>) => void
+  /** 整份写入偏好设置，仅配置迁移区从配置串导入时使用。 */
+  onReplaceSettings: (next: UsageSettings) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
   /** 快照，用于底部页脚的事件数与更新时间。 */
   value: UsageSnapshot | null
@@ -80,6 +86,8 @@ export function SettingsTab({
   const clear = useConfirmOp(() => postLedgerApi('clear', onRefresh), ledgerLocked);
   // 账本操作折叠
   const [ledgerOpen, setLedgerOpen] = useState(false);
+  // 配置迁移折叠：与账本操作同为危险/低频操作，默认收起
+  const [configOpen, setConfigOpen] = useState(false);
   // 三额度抓取间隔同一写法：本地文本态 + 失焦提交，逻辑收拢于 useIntervalText。
   const goInterval = useIntervalText(settings.goFetchMinutes, clampGoFetchMinutes, (m) => onUpdateSettings({ goFetchMinutes: m }));
   const deepseekInterval = useIntervalText(settings.deepseekFetchMinutes, clampDeepSeekFetchMinutes, (m) => onUpdateSettings({ deepseekFetchMinutes: m }));
@@ -317,19 +325,40 @@ export function SettingsTab({
         </label>
       </div>
 
-      {/* 账本操作折叠 */}
-      <div className={css.ledgerSection}>
+      {/* 配置迁移折叠：标题为 t('settings.configTransfer')，默认折叠，导出与导入见 ConfigTransfer */}
+      <div className={css.foldSection}>
         <button
           type="button"
-          className={css.ledgerHeader}
+          className={css.foldHeader}
+          aria-expanded={configOpen}
+          onClick={() => setConfigOpen((v) => !v)}
+        >
+          <span className={shared.sectionLabel}>{t('settings.configTransfer')}</span>
+          <IconChevronDownOutlineRegular className={configOpen ? `${css.foldChevron} ${css.foldChevronOpen}` : css.foldChevron} size={14} />
+        </button>
+        {configOpen && (
+          <ConfigTransfer
+            settings={settings}
+            onReplace={onReplaceSettings}
+            writable={writable}
+            t={t}
+          />
+        )}
+      </div>
+
+      {/* 账本操作折叠 */}
+      <div className={css.foldSection}>
+        <button
+          type="button"
+          className={css.foldHeader}
           aria-expanded={ledgerOpen}
           onClick={() => setLedgerOpen((v) => !v)}
         >
           <span className={shared.sectionLabel}>{t('settings.ledgerOps')}</span>
-          <IconChevronDownOutlineRegular className={ledgerOpen ? `${css.ledgerChevron} ${css.ledgerChevronOpen}` : css.ledgerChevron} size={14} />
+          <IconChevronDownOutlineRegular className={ledgerOpen ? `${css.foldChevron} ${css.foldChevronOpen}` : css.foldChevron} size={14} />
         </button>
         {ledgerOpen && (
-          <div className={css.ledgerContent}>
+          <div className={css.foldContent}>
             {/* 清零账本 */}
             <div className={shared.sectionHead}>
               <span className={shared.sectionLabel}>{t('settings.clear')}</span>

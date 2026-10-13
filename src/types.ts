@@ -127,6 +127,69 @@ export interface SessionStat {
 }
 
 /**
+ * 单个模型的明细：范围内合计 + 按日序列 + 按会话明细，
+ * 为 usageStats/modelDetail 成功时的 value；日序列与会话行元素直接复用
+ * SeriesPoint 与 SessionStat，与快照同形，浏览器端合并重定向来源时不必另建形状。
+ */
+export interface ModelDetail {
+  provider: string
+  model: string
+  calls: number
+  usage: UsageAgg
+  /** 范围内按本地日升序，只含有用量的日子；`since` 缺省（全部历史）时不作 366 天截断。 */
+  daily: SeriesPoint[]
+  /** 范围内用过该模型的会话，按总计降序；元素与快照 sessionsList 同形。 */
+  sessions: SessionStat[]
+}
+
+/**
+ * usageStats/dateDetail 请求：某一个本地日的明细。
+ * `day` 是浏览器端日期表行里的本地日零点（`SeriesPoint.t` 原样传来），
+ * 服务端按同一套 `startOfDay` 归一；非有限或不大于 0 的取值返回空明细。
+ */
+export interface DateDetailRequest {
+  day: number
+}
+
+/**
+ * 单日明细：某一天的合计 + 按模型 + 按会话，为 usageStats/dateDetail 成功时的 value。
+ * 两个维度都只含当天有量的行；模型行与快照 `models[]` 同形（单日不重复下发 `series`），
+ * 会话行与快照 `sessionsList` 同形，浏览器端据此复用同一套分组、排序与表格实现。
+ */
+export interface DateDetail {
+  /** 归一后的本地日零点，与请求同值；非法请求为 0。 */
+  day: number
+  calls: number
+  usage: UsageAgg
+  /** 当天有量的模型，按总计降序。 */
+  models: ModelStat[]
+  /** 当天有量的会话，按总计降序。 */
+  sessions: SessionStat[]
+}
+
+/**
+ * usageStats/sessionDetail 请求：按会话集合取一条会话明细。
+ * 集合由客户端界定——会话页所点行的折叠分组（主会话 + `groupSessions` 展平的全部子代理），
+ * 与服务端各自按父子关系重建子树相比，只有这样才能与「行数字」同源（见 docs/API.md §2.3）。
+ */
+export interface SessionDetailRequest {
+  /** 该行折叠集合的会话 id（主会话 + 展平的全部子代理）；顺序无关、重复无效、未知 id 按 0 计。 */
+  sessionIds: string[]
+}
+
+/**
+ * 会话明细：集合合计 + 按本地日 + 按模型，为 usageStats/sessionDetail 成功时的 value。
+ * 子会话与主会话一视同仁，合计按集合求和；`daily` 只含有量的日子且升序，
+ * `models` 为账本原始「供应商 + 模型」行（重定向归并归浏览器端）、省略 `series`。
+ */
+export interface SessionDetail {
+  calls: number
+  usage: UsageAgg
+  daily: SeriesPoint[]
+  models: ModelStat[]
+}
+
+/**
  * usageStats/snapshot 的 value 部分快照协议，为本插件自有 API 协议，
  * 见 AGENTS §8，host snapshot() 构建与 client useSnapshot 消费共用，避免两端镜像漂移。
  * Remote 传输外层为 { ok, value } 信封，此类型对应成功时的 value。
@@ -161,6 +224,17 @@ export interface UsageSnapshot {
 export interface SnapshotRequest {
   sessionId: string | null
   limit?: number
+}
+
+/**
+ * usageStats/modelDetail 请求：按「供应商 + 模型」取单个模型的明细。
+ * `since` 是浏览器端算好的本地日零点，服务端不认「7天/1月」这类范围概念，
+ * 缺省或非正数即全部历史；模型统计重定向的多个来源由浏览器端各查一次再合并。
+ */
+export interface ModelDetailRequest {
+  provider: string
+  model: string
+  since?: number
 }
 
 /** usageStats/rebuild 结果：清空账本后全量重扫的折叠事件数。 */
