@@ -143,6 +143,31 @@ export interface ModelDetail {
 }
 
 /**
+ * usageStats/dateDetail 请求：某一个本地日的明细。
+ * `day` 是浏览器端日期表行里的本地日零点（`SeriesPoint.t` 原样传来），
+ * 服务端按同一套 `startOfDay` 归一；非有限或不大于 0 的取值返回空明细。
+ */
+export interface DateDetailRequest {
+  day: number
+}
+
+/**
+ * 单日明细：某一天的合计 + 按模型 + 按会话，为 usageStats/dateDetail 成功时的 value。
+ * 两个维度都只含当天有量的行；模型行与快照 `models[]` 同形（单日不重复下发 `series`），
+ * 会话行与快照 `sessionsList` 同形，浏览器端据此复用同一套分组、排序与表格实现。
+ */
+export interface DateDetail {
+  /** 归一后的本地日零点，与请求同值；非法请求为 0。 */
+  day: number
+  calls: number
+  usage: UsageAgg
+  /** 当天有量的模型，按总计降序。 */
+  models: ModelStat[]
+  /** 当天有量的会话，按总计降序。 */
+  sessions: SessionStat[]
+}
+
+/**
  * usageStats/snapshot 的 value 部分快照协议，为本插件自有 API 协议，
  * 见 AGENTS §8，host snapshot() 构建与 client useSnapshot 消费共用，避免两端镜像漂移。
  * Remote 传输外层为 { ok, value } 信封，此类型对应成功时的 value。

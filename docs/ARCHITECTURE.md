@@ -59,10 +59,13 @@
      重扫历史，是恢复历史的出口；
    - `usageStats/seal` 手动物化：把内存聚合物化进 `agg_*` 并将密封边界推进至今日
      零点，显著加快冷启动；批量导入与实时增量已自动密封，通常无需手动调用。
-6. **明细读取**（`detail.ts`，`usageStats/modelDetail`）：按需查询，不参与折叠与物化。
-   「按日期」取内存聚合的模型×日桶（`startOfDay` 分桶、`since` 过滤），「按会话」读
-   账本 `events` 按 `provider`/`model` 过滤后 `GROUP BY session_id`（走 `idx_events_model`），
-   会话元数据复用账本 `session_meta`；两个维度都不新增表、不改 `user_version`。
+6. **明细读取**（`detail.ts`，按需查询，不参与折叠与物化）：
+   - `usageStats/modelDetail`：「按日期」取内存聚合的模型×日桶（`startOfDay` 分桶、
+     `since` 过滤），「按会话」读账本 `events` 按 `provider`/`model` 过滤后
+     `GROUP BY session_id`（走 `idx_events_model`），会话元数据复用账本 `session_meta`；
+   - `usageStats/dateDetail`：两个维度都取内存聚合的当日桶（模型×日与会话×日），
+     不读账本 events——单日两边都是既有桶的一次查表，再走一遍 SQL 聚合没有收益；
+   - 两者都不新增表、不改 `user_version`。
 
 ## 4. 折叠与去重（`agg.ts` / `store.ts`）
 
@@ -100,6 +103,12 @@
   按日期顶部复用 `StackedBar` date 模式（补齐范围内每一天、同一三段堆叠口径），
   表格只列有量的日子；按会话复用 `groupSessions`/`compareSessionGroup`，
   子代理折叠与排序键都与会话 Tab 一致。
+- **单日明细口径**（`usageStats/dateDetail`，协议见 `docs/API.md` §2.2）：某一本地日的
+  合计 + 按模型 + 按会话，三个数字互为校验——合计由当天模型行求和，当天会话行求和与之
+  相等、且等于当天日桶（`test/smoke.mjs` 断言三者一致）；两个维度都只含当天有量的行，
+  桶键就是 `startOfDay` 的本地日零点，与浏览器端日期行同源。展示与面板同名 Tab 同一套：
+  按会话复用 `groupSessions`/`compareSessionGroup`（子代理折叠与排序键与会话 Tab 一致），
+  按模型复用模型页的占比口径（`largestRemainderPcts`）。
 - **不计入项（数据源边界，非本仓可补）**：
   - 会话标题生成的辅助调用——`session/title-llm-request` 只记请求，harness 取标题
     文本后丢弃响应 usage，日志里没有用量可折；

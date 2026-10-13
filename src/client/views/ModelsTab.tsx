@@ -169,7 +169,7 @@ export function ModelsTab({
                   <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   <ThSortable k="share" label={t('table.share')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                   {/* 明细入口列：不参与排序，表头留空（单元格里的链接自己说明用途） */}
-                  <th aria-label={t('models.viewDetail')} />
+                  <th aria-label={t('detail.view')} />
                 </tr>
               </thead>
               <tbody>
@@ -205,7 +205,7 @@ export function ModelsTab({
                               </div>
                             )}
                           >
-                            <span className={`${shared.sub} ${css.mergedChip}`}>
+                            <span className={`${shared.sub} ${shared.mergedChip}`}>
                               {t('models.mergedSources', { n: sources.length })}
                             </span>
                           </Tooltip>
@@ -220,14 +220,14 @@ export function ModelsTab({
                       <td className={shared.num}>{fmtFull(avg)}</td>
                       <td className={shared.num}>{pctOf(share)}</td>
                       {/* 打开这一行的明细弹窗（二级弹窗，Esc 只关它这一层） */}
-                      <td className={css.detailCell}>
+                      <td className={shared.detailCell}>
                         <button
                           type="button"
-                          className={css.detailLink}
-                          aria-label={t('models.viewDetail')}
+                          className={shared.detailLink}
+                          aria-label={t('detail.view')}
                           onClick={() => setDetailKey(key)}
                         >
-                          {t('models.detailLink')}
+                          {t('detail.link')}
                         </button>
                       </td>
                     </tr>

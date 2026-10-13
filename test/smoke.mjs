@@ -2,13 +2,16 @@
  * 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
  *
  * 以真实 cordis Context 挂载 UsageStatsService（存储不 mock：账本直接写
- * node:sqlite 文件），直接调用 8 个 @Remote 方法，验证：
+ * node:sqlite 文件），直接调用 9 个 @Remote 方法，验证：
  *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/
  *     dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
  *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠
  *     事件，初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
  *   - 模型明细：按日（内存每日桶）与按会话（账本聚合）两路合计都对上快照模型行、
  *     相互一致，`since` 过滤与未知键返回空明细；
+ *   - 单日明细：取快照里真实有量的一天，用量与快照该日系列点相等，并与当天
+ *     模型行求和、会话行求和三者一致；同日不同时刻归一到同一本地日，非法 day
+ *     与未来日期返回空明细；
  *   - 方法与手写严格贡献相容：真实出入值过 zod 信封，错误码透传不断解析；
  *     SRC 线路字段（产物方法源码参数名）与贡献 wire 名逐个对齐——生产构建压缩
  *     方法签名会让新版网关拒收全部带参请求，此处立即失败；
@@ -142,9 +145,9 @@ async function mount(query, persist, options = {}) {
       await new Promise((r) => setTimeout(r, 50))
     }
   }
-  // 8 个 @Remote 标记全部存活：网关 SRC 分发的前提。
+  // 9 个 @Remote 标记全部存活：网关 SRC 分发的前提。
   const markers = remoteMethods(svc).map((m) => m.exportName ?? m.method)
-  for (const name of ['snapshot', 'modelDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota']) {
+  for (const name of ['snapshot', 'modelDetail', 'dateDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota']) {
     if (!markers.includes(name)) {
       console.error(`FAIL: 缺 @Remote 标记 ${name}`)
       process.exit(1)
@@ -335,6 +338,100 @@ const noModel = svc.modelDetail({ provider: 'nope', model: 'nope' })
 assertEnvelope('modelDetail', noModel)
 if (noModel.calls !== 0 || noModel.daily.length !== 0 || noModel.sessions.length !== 0) {
   console.error('FAIL: modelDetail 未知键应返回空明细')
+  process.exit(1)
+}
+
+// 单日明细：取快照里有量的一天，两路数据源（当天模型行 / 当天会话行）与快照该日
+// 系列点必须三者相等——模型维度来自 store.modelDaily、会话维度来自各会话日桶，
+// 任一折叠路径分叉都会在这里暴露。
+const daysWithUsage = snap.series.all.filter((p) => p.calls > 0)
+if (daysWithUsage.length === 0) {
+  console.error('FAIL: 快照没有任何有量日期，无法验证 dateDetail')
+  process.exit(1)
+}
+const busyDay = daysWithUsage[daysWithUsage.length - 1]
+const dayDetail = svc.dateDetail({ day: busyDay.t })
+assertEnvelope('dateDetail', dayDetail)
+const dayTotal = busyDay.input + busyDay.output + busyDay.cacheRead + busyDay.cacheWrite
+const dayModelSum = dayDetail.models.reduce((s, m) => s + m.usage.total, 0)
+const dayModelCalls = dayDetail.models.reduce((s, m) => s + m.calls, 0)
+const daySessionSum = dayDetail.sessions.reduce((s, r) => s + r.usage.total, 0)
+const daySessionCalls = dayDetail.sessions.reduce((s, r) => s + r.calls, 0)
+if (dayDetail.day !== busyDay.t || dayDetail.calls !== busyDay.calls || dayDetail.usage.total !== dayTotal
+  || dayDetail.usage.reasoning !== busyDay.reasoning) {
+  console.error('FAIL: dateDetail 合计与快照该日系列点不一致', {
+    day: dayDetail.day, expectedDay: busyDay.t,
+    calls: dayDetail.calls, expectedCalls: busyDay.calls,
+    total: dayDetail.usage.total, expectedTotal: dayTotal,
+  })
+  process.exit(1)
+}
+if (dayModelSum !== dayDetail.usage.total || dayModelCalls !== dayDetail.calls) {
+  console.error('FAIL: dateDetail 当天模型行合计与总计不一致', { dayModelSum, dayModelCalls, detail: dayDetail.usage.total })
+  process.exit(1)
+}
+if (daySessionSum !== dayDetail.usage.total || daySessionCalls !== dayDetail.calls) {
+  console.error('FAIL: dateDetail 当天会话行合计与总计不一致', { daySessionSum, daySessionCalls, detail: dayDetail.usage.total })
+  process.exit(1)
+}
+// 两个维度都只含有量的行：空桶不进结果，字段齐全（会话行与快照 sessionsList 同形）。
+for (const row of dayDetail.models) {
+  if (typeof row.provider !== 'string' || typeof row.model !== 'string' || row.calls <= 0 || row.usage.total <= 0) {
+    console.error('FAIL: dateDetail 模型行字段不全', row)
+    process.exit(1)
+  }
+}
+for (const row of dayDetail.sessions) {
+  if (typeof row.id !== 'string' || row.id === '' || typeof row.title !== 'string' || row.calls <= 0 || row.usage.total <= 0
+    || typeof row.delegationDepth !== 'number') {
+    console.error('FAIL: dateDetail 会话行字段不全', row)
+    process.exit(1)
+  }
+}
+// 默认排序：两个维度都按总计降序（浏览器端仍会按当前排序列重排，这里锁死基线）
+for (let i = 1; i < dayDetail.models.length; i += 1) {
+  if (dayDetail.models[i - 1].usage.total < dayDetail.models[i].usage.total) {
+    console.error('FAIL: dateDetail 模型行未按总计降序', dayDetail.models.map((m) => m.usage.total))
+    process.exit(1)
+  }
+}
+for (let i = 1; i < dayDetail.sessions.length; i += 1) {
+  if (dayDetail.sessions[i - 1].usage.total < dayDetail.sessions[i].usage.total) {
+    console.error('FAIL: dateDetail 会话行未按总计降序', dayDetail.sessions.map((r) => r.usage.total))
+    process.exit(1)
+  }
+}
+console.log('dateDetail:', JSON.stringify({
+  day: dayDetail.day,
+  calls: dayDetail.calls,
+  total: dayDetail.usage.total,
+  models: dayDetail.models.map((m) => ({ provider: m.provider, model: m.model, calls: m.calls, total: m.usage.total })),
+  sessions: dayDetail.sessions.map((r) => ({ id: r.id, calls: r.calls, total: r.usage.total })),
+}))
+
+// day 归一：同一天的不同时刻落回同一本地日零点，明细一致
+const midday = svc.dateDetail({ day: busyDay.t + 43_200_000 })
+assertEnvelope('dateDetail', midday)
+if (midday.day !== busyDay.t || midday.calls !== dayDetail.calls || midday.usage.total !== dayDetail.usage.total) {
+  console.error('FAIL: dateDetail 同日不同时刻未归一到本地日零点', { midday: midday.day, day: busyDay.t })
+  process.exit(1)
+}
+// 非法 day（非有限、非正数）一律空明细且字段齐全，不抛错
+for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+  const empty = svc.dateDetail({ day: bad })
+  assertEnvelope('dateDetail', empty)
+  if (empty.day !== 0 || empty.calls !== 0 || empty.usage.total !== 0
+    || empty.models.length !== 0 || empty.sessions.length !== 0) {
+    console.error('FAIL: dateDetail 非法 day 应返回空明细', bad, empty)
+    process.exit(1)
+  }
+}
+// 未知日期（明天，尚无用量）：同样空明细，不抛错
+const unknownDay = svc.dateDetail({ day: Date.now() + 86_400_000 })
+assertEnvelope('dateDetail', unknownDay)
+if (unknownDay.calls !== 0 || unknownDay.usage.total !== 0
+  || unknownDay.models.length !== 0 || unknownDay.sessions.length !== 0) {
+  console.error('FAIL: dateDetail 未知日期应返回空明细', unknownDay)
   process.exit(1)
 }
 

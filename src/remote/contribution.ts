@@ -20,6 +20,8 @@ import { z } from 'zod';
 
 import type {
   ClearResult,
+  DateDetail,
+  DateDetailRequest,
   DeepSeekBalance,
   GoQuota,
   ModelDetail,
@@ -86,6 +88,15 @@ const modelDetailSchema = z.object({
   calls: z.number(),
   usage: usageAggSchema,
   daily: z.array(seriesPointSchema),
+  sessions: z.array(sessionStatSchema),
+});
+
+/** 单日明细：当天合计 + 当天模型行 + 当天会话行；模型行不下发 series（单日行再带按日序列没有意义）。 */
+const dateDetailSchema = z.object({
+  day: z.number(),
+  calls: z.number(),
+  usage: usageAggSchema,
+  models: z.array(modelStatSchema),
   sessions: z.array(sessionStatSchema),
 });
 
@@ -168,6 +179,10 @@ const modelDetailRequestSchema = z.object({
   since: z.number().optional(),
 });
 
+const dateDetailRequestSchema = z.object({
+  day: z.number(),
+});
+
 const quotaRequestSchema = z.object({
   intervalMinutes: z.number().optional(),
   force: z.boolean().optional(),
@@ -223,7 +238,7 @@ function requestParam(typeSymbol: string, schema: z.ZodTypeAny): {
   return { name: 'request', wire: 'request', source: 'json', codec: strictCodec(typeSymbol, schema) };
 }
 
-/** 可挂载的严格贡献：8 个一元方法，无 lookup、无取消。 */
+/** 可挂载的严格贡献：9 个一元方法，无 lookup、无取消。 */
 export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
   package: PACKAGE,
   descriptors: [
@@ -244,6 +259,15 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       invocation: { kind: 'direct' },
       parameters: [requestParam(`${PACKAGE}/types#ModelDetailRequest`, modelDetailRequestSchema)],
       result: strictCodec(`${PACKAGE}/types#ModelDetail`, envelope(modelDetailSchema)),
+    },
+    {
+      id: `${PACKAGE}#${NAMESPACE}/dateDetail`,
+      service: NAMESPACE,
+      namespace: NAMESPACE,
+      method: 'dateDetail',
+      invocation: { kind: 'direct' },
+      parameters: [requestParam(`${PACKAGE}/types#DateDetailRequest`, dateDetailRequestSchema)],
+      result: strictCodec(`${PACKAGE}/types#DateDetail`, envelope(dateDetailSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/rebuild`,
@@ -306,6 +330,7 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
 export const METHOD_NAMES = [
   'snapshot',
   'modelDetail',
+  'dateDetail',
   'rebuild',
   'clear',
   'seal',
@@ -319,6 +344,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$75736167655374617473 {
     snapshot: (request: SnapshotRequest) => Promise<RemoteResult<UsageSnapshot>>
     modelDetail: (request: ModelDetailRequest) => Promise<RemoteResult<ModelDetail>>
+    dateDetail: (request: DateDetailRequest) => Promise<RemoteResult<DateDetail>>
     rebuild: () => Promise<RemoteResult<RebuildResult>>
     clear: () => Promise<RemoteResult<ClearResult>>
     seal: () => Promise<RemoteResult<SealResult>>
@@ -329,6 +355,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteMap {
     'usageStats/snapshot': (request: SnapshotRequest) => Promise<RemoteResult<UsageSnapshot>>
     'usageStats/modelDetail': (request: ModelDetailRequest) => Promise<RemoteResult<ModelDetail>>
+    'usageStats/dateDetail': (request: DateDetailRequest) => Promise<RemoteResult<DateDetail>>
     'usageStats/rebuild': () => Promise<RemoteResult<RebuildResult>>
     'usageStats/clear': () => Promise<RemoteResult<ClearResult>>
     'usageStats/seal': () => Promise<RemoteResult<SealResult>>
@@ -344,6 +371,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 /** 静态类型 re-export：Client 以 import type 引入本模块即激活命名空间合并。 */
 export type {
   ClearResult,
+  DateDetail,
+  DateDetailRequest,
   DeepSeekBalance,
   GoQuota,
   ModelDetail,

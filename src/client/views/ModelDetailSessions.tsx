@@ -72,7 +72,7 @@ export function ModelDetailSessions({
   };
 
   return (
-    <div className={css.tableBlock}>
+    <div className={shared.detailTableBlock}>
       {/* 首列不用共用基元 .firstCol：弹窗比面板窄 100px，会话列吃满会把「最近活跃」
           挤出可视区（面板 960 宽放得下，这里放不下）——保留共用 .cellText 的宽度上限，
           九列一屏看全。列表头、排序、折叠与面板会话 Tab 完全同款。 */}

@@ -7,8 +7,8 @@
 
 ## 1. 通用约定
 
-- 命名空间 `usageStats`，8 个一元（unary，一问一答，区别于流式）方法：
-  `snapshot/modelDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
+- 命名空间 `usageStats`，9 个一元（unary，一问一答，区别于流式）方法：
+  `snapshot/modelDetail/dateDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
   `rebuild`/`clear`/`seal` **无请求参数**（贡献里 `parameters: []`），其余各带一个具名 request。
   调用经 `ctx.get('remote.usageStats')` 取命名空间服务后调用（本仓库由 `usageStatsRemote()` 封装）；
   线路上走客户端 Connection 的 RPC：`POST /api/usageStats/<方法>`，请求体为
@@ -20,7 +20,7 @@
   `src/remote/contribution.ts` 头注释）；只改实现体不动贡献，改签名必须同步。
 - **参数名即线路字段名**：SRC 分发下网关从服务端方法源码文本
   （`Function.prototype.toString`）读参数名，作为请求 `args` 的字段名；带参方法的参数名
-  必须与贡献里的 `wire` 逐字相同（本仓库五个带参方法均为 `request`），改名即改协议。
+  必须与贡献里的 `wire` 逐字相同（本仓库六个带参方法均为 `request`），改名即改协议。
   服务端产物因此不做压缩（见 `docs/ARCHITECTURE.md` §6），
   `test/smoke.mjs` 的「SRC 线路字段」自检逐方法对齐两侧。
 
@@ -54,6 +54,25 @@
   `sessions` 取账本 `events` 按 `provider`/`model` 过滤后 `GROUP BY session_id` 的聚合；
   合计由会话行求和，与按日合计互为校验（`test/smoke.mjs` 断言相等）。
 - 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前账本里的数据，可能偏少。
+
+## 2.2 usageStats/dateDetail
+
+- 目的：某一个本地日的明细，供日期页点开一行时在弹窗里查看这一天分别花在哪些会话、哪些模型上。
+  **按需查询，不进快照**——「日 × 会话」交叉数据若随快照下发，会让每 4 秒一次的轮询体积
+  随「有量天数 × 会话数」膨胀。
+- request `{ day: number }`：`day` 是**浏览器端日期表行里的本地日零点**
+  （快照 `series.all` 的 `SeriesPoint.t` 原样传来），服务端按同一套 `startOfDay`
+  （`src/utils.ts`）归一——有限且大于 0 的取值向下取整后归一，其余一律返回空明细
+  （`day` 为 `0`、合计为零、两个维度为空数组），**不抛错**。
+- 响应 `value` 为 `DateDetail`（`src/types.ts`）：归一后的 `day`、当天合计 `calls` 与 `usage`、
+  当天有量的模型 `models: ModelStat[]`（与快照 `models[]` 同形，单日不重复下发 `series`）、
+  当天有量的会话 `sessions: SessionStat[]`（与快照 `sessionsList` 同形，含会话元数据与
+  子代理归属）。两个维度都按总计降序：模型同值按「供应商 + 模型」升序、会话同值按 `id` 升序。
+- 数据来源：两个维度都取内存聚合的当日桶——模型维度 `modelDaily`（键 `provider\0model`）、
+  会话维度各会话的 `daily`，桶键就是 `startOfDay` 的本地日零点，因此**不读账本 events**
+  （单日按会话再走一遍 SQL 聚合没有收益，见 `src/host/detail.ts` 头注释）；
+  合计由当天模型行求和，与会话行合计互为校验（`test/smoke.mjs` 断言三者一致）。
+- 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前聚合里的数据，可能偏少。
 
 ## 3. 额度查询通用约定（goQuota / deepseekBalance / zaiQuota 共用）
 

@@ -58,7 +58,7 @@ export function ModelDetailDates({
   const pageDays = useMemo(() => slice(sortedDays), [slice, sortedDays]);
 
   return (
-    <div className={css.tableBlock}>
+    <div className={shared.detailTableBlock}>
       <div className={shared.charts}>
         <div className={shared.chartCard}>
           <StackedBar mode="date" series={daily} range={range} t={t} />

@@ -204,6 +204,20 @@
   font-size: 11px;
 }
 
+/* 归并来源标记：跟在「模型 · 供应商」之后的低调小标签，悬浮出明细
+   （模型页与日期明细的按模型表共用，同行同一枚）。 */
+.mergedChip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 /* ---- 翻页栏：固定底部居中，三 Tab 共用 ---- */
 .paginationBar {
   flex: none;
@@ -378,6 +392,147 @@
 
 .tab svg {
   flex: none;
+}
+
+/* ---- 二级明细弹窗 chrome 与明细入口链接：模型明细（ModelDetail）、日期明细（DateDetail）
+   与模型页 / 日期页两处「明细」列共用，见 docs/STYLE.md §11 ---- */
+
+/* 尺寸比详情面板（960x640）小一档，视觉上明确「叠在面板之上」；窄视口按 92vw/vh 收缩。
+   gap 必须显式归零：基座 Modal 的 dialog 自带 20px flex gap，headless 模式下会插在
+   头部 / 标签栏 / 内容区之间，把三段 chrome 各撑开一条空带。 */
+.detailModal {
+  width: min(860px, calc(100vw - 32px));
+  height: min(600px, calc(100vh - 32px));
+  max-width: 92vw;
+  max-height: 92vh;
+  padding: 0;
+  gap: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--dsw-shadow-lv2);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+/* 头部单行：标题（模型 · 供应商，或日期 + 当天合计）与关闭按钮；高度与详情面板头部对齐 */
+.detailHeader {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.detailTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.detailClose {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.detailClose:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* 内容区：失败 / 加载 / 空态与明细子视图共用容器 */
+.detailBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 表格块占满内容区：内层 tableWrap 自己滚、分页条作为固定条贴在它下方
+   （与三张主表同构）——分页条不再吸在滚动内容上、把末行裁成半截 */
+.detailTableBlock {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 明细入口列：主表最后一列，只放一个 link 样式的「明细」按钮 */
+.detailCell {
+  text-align: right;
+  padding-left: 2px;
+}
+
+/* link 样式按钮：用主题的 --dsw-alias-link（深浅主题都是品牌蓝）；常态只给颜色、
+   悬浮与聚焦才出下划线，避免满屏下划线盖过数值列 */
+.detailLink {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-link);
+  cursor: pointer;
+  text-underline-offset: 3px;
+}
+
+.detailLink:hover,
+.detailLink:focus-visible {
+  text-decoration: underline;
+}
+
+.detailLink:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.detailRetry {
+  margin-left: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.detailRetry:hover {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+}
+
+@media (max-width: 800px) {
+  .detailHeader {
+    padding: 12px;
+  }
 }
 
 .rangeBar {

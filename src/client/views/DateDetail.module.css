@@ -1,0 +1,16 @@
+/* 日期明细弹窗（DateDetail 与两个子视图）：日期页每行末尾的「明细」链接打开的二级弹窗。
+   弹窗 chrome 与表格、图表、分页基元全部沿用 components/UsageStatsCommon.module.css
+   （detailModal/detailHeader/…/detailRetry 与 tabbar、tableWrap），此处只保留两张明细表的
+   首列最小宽度——列集合与面板同名 Tab 对齐，只少一列「最近活跃」，颜色全走 --dsw-alias-* token。 */
+
+/* 会话列的最小宽度，与模型明细的按会话表同值 */
+.sessionsWrap th:nth-child(1),
+.sessionsWrap td:nth-child(1) {
+  min-width: 180px;
+}
+
+/* 模型列的最小宽度，与模型页同值 */
+.modelsWrap th:nth-child(1),
+.modelsWrap td:nth-child(1) {
+  min-width: 160px;
+}

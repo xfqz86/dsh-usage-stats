@@ -16,8 +16,8 @@
  *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、
  *     截断尾帧、坏帧）；
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
- *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细
- *     请求与结果）；
+ *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与
+ *     单日明细的请求与结果）；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
  *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带
  *     表单身份（热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧
@@ -483,9 +483,9 @@ describe('fork 继承前缀：只折本会话自有事件', () => {
 });
 
 describe('remote：手写严格贡献', () => {
-  it('8 个一元方法与服务一致', () => {
+  it('9 个一元方法与服务一致', () => {
     assert.deepEqual([...METHOD_NAMES], [
-      'snapshot', 'modelDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
+      'snapshot', 'modelDetail', 'dateDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
     ]);
     assert.equal(USAGE_STATS_REMOTE.package, '@xfqz86/dsh-usage-stats');
     assert.deepEqual(
@@ -533,6 +533,37 @@ describe('remote：手写严格贡献', () => {
     // 结果缺字段整条被拒：host 必须字段齐全，不能少下发 sessions/daily
     const result = detail.result.create();
     assert.throws(() => result.parse({ ok: true, value: { provider: 'p', model: 'm' } }));
+  });
+
+  it('单日明细请求与结果 schema 收发合法、拒非法', () => {
+    const detail = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'dateDetail');
+    assert.ok(detail && detail.parameters.length === 1);
+    const codec = detail.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    // day 只有本地日零点一种取值，非法值应在服务端归一，线路层只认数字。
+    schema.parse({ day: 1_700_000_000_000 });
+    assert.throws(() => schema.parse({}));
+    assert.throws(() => schema.parse({ day: '2026-08-17' }));
+    // 结果缺字段整条被拒：host 必须字段齐全，不能少下发 models/sessions
+    const result = detail.result.create();
+    assert.throws(() => result.parse({ ok: true, value: { day: 0, calls: 0 } }));
+    const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+    result.parse({ ok: true, value: { day: 1_700_000_000_000, calls: 0, usage, models: [], sessions: [] } });
+    // 模型行可省 series（单日不下发按日序列），但其余字段缺一即拒
+    result.parse({
+      ok: true,
+      value: {
+        day: 1_700_000_000_000,
+        calls: 1,
+        usage,
+        models: [{ provider: 'p', model: 'm', calls: 1, usage }],
+        sessions: [],
+      },
+    });
+    assert.throws(() => result.parse({ ok: true, value: { day: 1, calls: 1, usage, models: [{ provider: 'p' }], sessions: [] } }));
   });
 
   it('结果信封成功分支严格、错误分支透传', () => {

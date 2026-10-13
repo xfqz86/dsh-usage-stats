@@ -1,6 +1,7 @@
 /* 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
-   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard/firstCol 等）已抽至
-   components/UsageStatsCommon.module.css，此处仅保留列宽差异与布局差异。 */
+   公共基元（tableWrap/tableViewRoot/paginationBar/chips/chartCard/firstCol/
+   detailCell/detailLink/mergedChip 等）已抽至 components/UsageStatsCommon.module.css，
+   此处仅保留列宽差异与布局差异。 */
 
 /* 模型列的最小宽度（「吃满剩余宽度、其余列按内容自适应」见共用基元 .firstCol） */
 .tableWrap th:nth-child(1),
@@ -32,49 +33,5 @@
   .charts {
     grid-template-columns: 1fr;
   }
-}
-
-/* 归并来源标记：跟在「模型 · 供应商」之后的低调小标签，悬浮出明细 */
-.mergedChip {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent);
-  font-size: 11px;
-  line-height: 16px;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-/* 明细入口列：表格最后一列，只放一个 link 样式的「明细」按钮 */
-.detailCell {
-  text-align: right;
-  padding-left: 2px;
-}
-
-/* link 样式按钮：用主题的 --dsw-alias-link（深浅主题都是品牌蓝）；常态只给颜色、
-   悬浮与聚焦才出下划线，避免满屏下划线盖过数值列 */
-.detailLink {
-  padding: 0;
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-link);
-  cursor: pointer;
-  text-underline-offset: 3px;
-}
-
-.detailLink:hover,
-.detailLink:focus-visible {
-  text-decoration: underline;
-}
-
-.detailLink:focus-visible {
-  outline: 2px solid var(--dsw-alias-state-business-primary);
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 

@@ -119,7 +119,7 @@ export function UsageStatsPanel({
   const value = data;
 
   // 模型统计重定向：按偏好里的规则归并模型行（设置页拿原始行当候选，故这里才算），
-  // 只有模型页消费归并结果——会话/日期/概览/底栏都不读 models。
+  // 模型页消费归并结果，日期明细的按模型标签拿规则自己算当天的行（服务端明细始终是原始行）。
   const redirect = useMemo(
     () => redirectModels(value?.models ?? [], settings.modelRedirects),
     [value?.models, settings.modelRedirects],
@@ -151,7 +151,7 @@ export function UsageStatsPanel({
             zaiEnabled={settings.zaiEnabled}
           />
         )}
-        {active === 'dates' && <DatesTab series={value.series.all} t={t} />}
+        {active === 'dates' && <DatesTab series={value.series.all} rules={settings.modelRedirects} t={t} />}
         {active === 'sessions' && (
           <SessionsTab sessionsList={value.sessionsList} t={t} />
         )}

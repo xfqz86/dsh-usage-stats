@@ -2,7 +2,8 @@
  * 模型明细弹窗（ModelDetail）：模型页每行末尾的「明细」链接打开的二级弹窗，
  * 含标题、按日期 / 按会话两个子标签、加载 / 失败 / 空态与关闭按钮。
  *
- * 用 headless Modal 自建 chrome：基座 Modal 自带层级栈（只给最上层 Escape 与焦点、
+ * 用 headless Modal 自建 chrome（类名与日期明细弹窗共用 UsageStatsCommon 的 detail* 一套）：
+ * 基座 Modal 自带层级栈（只给最上层 Escape 与焦点、
  * 点遮罩关自己），因此叠在详情面板之上时 Esc 只关这一层。两个子视图各自独立成文件
  * （ModelDetailDates / ModelDetailSessions），本文件只管弹窗 chrome 与状态切换；
  * 子标签状态不跨关闭保留——关闭即卸载，与各 Tab 的视图状态口径一致。
@@ -53,8 +54,8 @@ export function ModelDetail({
     if (error !== null) {
       return (
         <div className={shared.empty}>
-          {t('models.detailFailed')}
-          <button type="button" className={css.retry} onClick={reload}>{t('models.retry')}</button>
+          {t('detail.failed')}
+          <button type="button" className={shared.detailRetry} onClick={reload}>{t('detail.retry')}</button>
         </div>
       );
     }
@@ -73,10 +74,10 @@ export function ModelDetail({
       onClose={onClose}
       title={`${model} · ${provider}`}
       headless
-      className={css.modal}
+      className={shared.detailModal}
     >
-      <header className={css.header}>
-        <div className={css.title}>
+      <header className={shared.detailHeader}>
+        <div className={shared.detailTitle}>
           {model} <span className={shared.sub}>· {provider}</span>
           {mergedCount > 0 && (
             <span className={css.mergedNote}>{t('models.mergedSources', { n: mergedCount })}</span>
@@ -84,9 +85,9 @@ export function ModelDetail({
         </div>
         <button
           type="button"
-          className={css.close}
+          className={shared.detailClose}
           onClick={onClose}
-          aria-label={t('models.closeDetail')}
+          aria-label={t('detail.close')}
         >
           <IconCloseOutlineRegular size={14} />
         </button>
@@ -115,7 +116,7 @@ export function ModelDetail({
           <span>{t('models.detailSessions')}</span>
         </button>
       </div>
-      <div className={css.body} role="tabpanel">
+      <div className={shared.detailBody} role="tabpanel">
         {renderBody()}
       </div>
     </Modal>

@@ -1,6 +1,6 @@
 /**
  * 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露
- * usageStats 命名空间的 8 个一元 Remote 方法。
+ * usageStats 命名空间的 9 个一元 Remote 方法。
  *
  * 数据流（账本为唯一事实来源、聚合为派生缓存）与原 apply 函数版一致：
  * openLedger → 先挂 session/event 实时监听 →
@@ -15,8 +15,10 @@
 import { Service } from '@deepseek-ai/cordis';
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 
+import { startOfDay } from '../utils.ts';
+
 import { queryDeepSeekBalance } from './deepseekBalance.ts';
-import { modelDetail } from './detail.ts';
+import { dateDetail, modelDetail } from './detail.ts';
 import { queryGoQuota } from './goquota.ts';
 import { Ledger } from './ledger.ts';
 import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregates } from './scan.ts';
@@ -29,6 +31,8 @@ import { queryZaiQuota } from './zaiQuota.ts';
 // SessionEventMap；协议类型集中 src/types.ts。
 import type {
   ClearResult,
+  DateDetail,
+  DateDetailRequest,
   DeepSeekBalance,
   GoQuota,
   ModelDetail,
@@ -204,6 +208,20 @@ export default class UsageStatsService extends TypertRemoteService {
       ? Math.floor(rawSince)
       : null;
     return modelDetail(this.store, this.ledger, provider, model, since);
+  }
+
+  /**
+   * usageStats/dateDetail：某一天的明细（按模型 + 按会话），日期页点某行的「明细」时按需调用。
+   * 纯读，不判 busy、不写账本；`day` 是浏览器端日期行的本地日零点，
+   * 非有限或非正数一律返回空明细（`day` 为 0），不抛错。
+   * @param request - 本地日零点。
+   * @returns 单日明细 value（当天合计、按模型、按会话）。
+   */
+  @Remote('dateDetail')
+  dateDetail(request: DateDetailRequest): DateDetail {
+    const raw = request.day;
+    const day = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? startOfDay(Math.floor(raw)) : 0;
+    return dateDetail(this.store, this.ledger, day);
   }
 
   /**
