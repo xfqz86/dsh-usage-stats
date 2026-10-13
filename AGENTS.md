@@ -72,7 +72,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
 
 ## 8. 运行时与 Remote API
 - **注入**：`static inject=['sessionQuery', 'sessionPersistence']`（全必需）；`credentials` 可选不进 inject，调用处 `ctx.get` 判空，缺席时额度查询直接返回 `no-key`，不读 env 与文件；偏好设置靠条目自带 `static Config`，不需注入 `settings`。先挂实时监听再 `bootstrap`。
-- **接口**：`UsageStatsService`（`usageStats` 命名空间，8 个一元 `@Remote` 方法）经网关 `POST /api/usageStats/<方法>` 调用，信任与认证由网关载体统一处理，不注册 HTTP 路由、不自建围栏。协议（方法表、请求/响应、TTL、偏好字段）唯一权威是 `docs/API.md`，改签名必须同步实现体、手写贡献与该文件。
+- **接口**：`UsageStatsService`（`usageStats` 命名空间下全部一元 `@Remote` 方法）经网关 `POST /api/usageStats/<方法>` 调用，信任与认证由网关载体统一处理，不注册 HTTP 路由、不自建围栏。协议（方法表、请求/响应、TTL、偏好字段）唯一权威是 `docs/API.md`，改签名必须同步实现体、手写贡献与该文件。
 - Host 侧 SRC 分发（装饰器标记+实时绑定）；Client 侧自挂载 `src/remote/contribution.ts` 的手写严格贡献（独立仓库跑不了 harness 生成器管线）——只改实现体不动贡献。
 - **偏好设置走 harness 用户设置体系，禁止 localStorage**：Host 以插件条目 Config 声明 `usage-stats` schema（`src/host/settings.ts`，字段须 `.volatile()`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `configForms` 按条目 id 绑定读写（`src/client/settings.ts`）；字段语义与旧版迁移（含基座导入失败后的 settings.yaml.imported 回收）见 `docs/API.md` §5。
 
