@@ -29,6 +29,8 @@ import type {
   QuotaRequest,
   RebuildResult,
   SealResult,
+  SessionDetail,
+  SessionDetailRequest,
   SnapshotRequest,
   UsageSnapshot,
   ZaiQuota,
@@ -98,6 +100,14 @@ const dateDetailSchema = z.object({
   usage: usageAggSchema,
   models: z.array(modelStatSchema),
   sessions: z.array(sessionStatSchema),
+});
+
+/** 会话明细：集合合计 + 按本地日 + 按模型；模型行省略 series（明细不画该模型的按日图）。 */
+const sessionDetailSchema = z.object({
+  calls: z.number(),
+  usage: usageAggSchema,
+  daily: z.array(seriesPointSchema),
+  models: z.array(modelStatSchema),
 });
 
 const usageSnapshotSchema = z.object({
@@ -183,6 +193,11 @@ const dateDetailRequestSchema = z.object({
   day: z.number(),
 });
 
+/** 会话集合：顺序无关、重复无效，线路层只收字符串数组（服务端仍防御非数组/非字符串）。 */
+const sessionDetailRequestSchema = z.object({
+  sessionIds: z.array(z.string()),
+});
+
 const quotaRequestSchema = z.object({
   intervalMinutes: z.number().optional(),
   force: z.boolean().optional(),
@@ -238,7 +253,7 @@ function requestParam(typeSymbol: string, schema: z.ZodTypeAny): {
   return { name: 'request', wire: 'request', source: 'json', codec: strictCodec(typeSymbol, schema) };
 }
 
-/** 可挂载的严格贡献：9 个一元方法，无 lookup、无取消。 */
+/** 可挂载的严格贡献：10 个一元方法，无 lookup、无取消。 */
 export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
   package: PACKAGE,
   descriptors: [
@@ -268,6 +283,15 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       invocation: { kind: 'direct' },
       parameters: [requestParam(`${PACKAGE}/types#DateDetailRequest`, dateDetailRequestSchema)],
       result: strictCodec(`${PACKAGE}/types#DateDetail`, envelope(dateDetailSchema)),
+    },
+    {
+      id: `${PACKAGE}#${NAMESPACE}/sessionDetail`,
+      service: NAMESPACE,
+      namespace: NAMESPACE,
+      method: 'sessionDetail',
+      invocation: { kind: 'direct' },
+      parameters: [requestParam(`${PACKAGE}/types#SessionDetailRequest`, sessionDetailRequestSchema)],
+      result: strictCodec(`${PACKAGE}/types#SessionDetail`, envelope(sessionDetailSchema)),
     },
     {
       id: `${PACKAGE}#${NAMESPACE}/rebuild`,
@@ -331,6 +355,7 @@ export const METHOD_NAMES = [
   'snapshot',
   'modelDetail',
   'dateDetail',
+  'sessionDetail',
   'rebuild',
   'clear',
   'seal',
@@ -345,6 +370,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     snapshot: (request: SnapshotRequest) => Promise<RemoteResult<UsageSnapshot>>
     modelDetail: (request: ModelDetailRequest) => Promise<RemoteResult<ModelDetail>>
     dateDetail: (request: DateDetailRequest) => Promise<RemoteResult<DateDetail>>
+    sessionDetail: (request: SessionDetailRequest) => Promise<RemoteResult<SessionDetail>>
     rebuild: () => Promise<RemoteResult<RebuildResult>>
     clear: () => Promise<RemoteResult<ClearResult>>
     seal: () => Promise<RemoteResult<SealResult>>
@@ -356,6 +382,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'usageStats/snapshot': (request: SnapshotRequest) => Promise<RemoteResult<UsageSnapshot>>
     'usageStats/modelDetail': (request: ModelDetailRequest) => Promise<RemoteResult<ModelDetail>>
     'usageStats/dateDetail': (request: DateDetailRequest) => Promise<RemoteResult<DateDetail>>
+    'usageStats/sessionDetail': (request: SessionDetailRequest) => Promise<RemoteResult<SessionDetail>>
     'usageStats/rebuild': () => Promise<RemoteResult<RebuildResult>>
     'usageStats/clear': () => Promise<RemoteResult<ClearResult>>
     'usageStats/seal': () => Promise<RemoteResult<SealResult>>
@@ -380,6 +407,8 @@ export type {
   QuotaRequest,
   RebuildResult,
   SealResult,
+  SessionDetail,
+  SessionDetailRequest,
   SnapshotRequest,
   UsageSnapshot,
   ZaiQuota,

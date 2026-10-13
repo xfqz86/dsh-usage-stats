@@ -1,8 +1,8 @@
 /**
- * 明细构建：把 usageStats/modelDetail 与 usageStats/dateDetail 的结果 value
- * 从聚合缓存与账本整理出来，不触碰传输层与 ctx。
+ * 明细构建：把 usageStats/modelDetail、usageStats/dateDetail 与 usageStats/sessionDetail
+ * 的结果 value 从聚合缓存与账本整理出来，不触碰传输层与 ctx。
  *
- * 两个方法取数路径不同，各有理由：
+ * 三个方法取数路径不同，各有理由：
  *   - modelDetail：按日走聚合缓存的 modelDaily —— 它就是 startOfDay 分的桶，
  *     本地日划分的唯一来源是 utils.ts（docs/ARCHITECTURE.md §5），不在 SQLite
  *     里再分一次日；按会话的内存里没有该维度，读账本 modelSessions，会话行
@@ -13,6 +13,11 @@
  *     聚合没有收益；桶键本就是 utils.ts startOfDay 的本地日零点，与浏览器端
  *     日期行里的 SeriesPoint.t 同源，不会出现「服务端另分一次日」的漂移。
  *     合计由当天模型行求和，与会话行合计互为校验（test/smoke.mjs 断言相等）。
+ *   - sessionDetail：合计与按日取集合内各会话的内存聚合（总桶 / 日桶），
+ *     与快照会话行、会话页行数字同一条路径；按模型读账本 sessionModels ——
+ *     内存没有「会话 × 模型」交叉数据。集合**由客户端传**（所点行的折叠分组），
+ *     服务端不自走 session_meta 子树：快照列表有截断、父会话可能没有用量，
+ *     自走子树得到的集合会与行数字不同源（docs/API.md §2.3）。
  */
 import { splitModelKey } from '../utils.ts';
 
@@ -22,11 +27,16 @@ import { metaOf } from './store.ts';
 import type { Agg } from './agg.ts';
 import type { Ledger } from './ledger.ts';
 import type { UsageStore } from './store.ts';
-import type { DateDetail, ModelDetail, ModelStat, SessionStat, UsageAgg } from '../types.ts';
+import type { DateDetail, ModelDetail, ModelStat, SessionDetail, SessionStat, UsageAgg } from '../types.ts';
 
 /** 明细合计的零值起点，两台明细各由自己维度的行逐行累加（modelDetail 累会话行、dateDetail 累模型行）。 */
 function zeroUsage(): UsageAgg {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+}
+
+/** 会话明细并桶的零值起点（Agg 比 UsageAgg 多 calls），与 agg.newAgg 同形。 */
+function zeroBucket(): Agg {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 };
 }
 
 /**
@@ -148,6 +158,75 @@ export function dateDetail(store: UsageStore, ledger: Ledger, day: number): Date
     || a.model.localeCompare(b.model));
   sessions.sort((a, b) => (b.usage.total - a.usage.total) || a.id.localeCompare(b.id));
   return { day: dayKey, calls, usage, models, sessions };
+}
+
+/**
+ * 构建一条会话明细 value：合计与按日都取集合内各会话的内存聚合——合计逐 id 累加
+ * 会话总桶（与快照会话行、会话页行数字同一条路径，未知 id 按 0 跳过），
+ * 按日把各会话的日桶并桶后走 `buildSeries`（本地日升序，只含有桶的日子）；
+ * 按模型读账本聚合（内存没有该维度）。
+ * 集合由客户端界定：服务端只聚合给定集合，不按 `session_meta` 自走子树——
+ * 快照列表有截断、父会话可能没有用量（孤儿回落顶层行），只有与行数字同源才能
+ * 逐位对齐（见 `docs/API.md` §2.3）。
+ * @param store - 聚合缓存，提供集合内各会话的总桶与日桶。
+ * @param ledger - 账本，提供集合按模型的聚合。
+ * @param sessionIds - 已归一（非空字符串、去重）的会话 id 集合。
+ * @returns 集合合计、按本地日升序的日序列（只含有量的日子）与按模型行（总计降序）。
+ */
+export function sessionDetail(
+  store: UsageStore,
+  ledger: Ledger,
+  sessionIds: readonly string[],
+): SessionDetail {
+  const usage = zeroUsage();
+  let calls = 0;
+  const dailyMap = new Map<number, Agg>();
+  for (const id of sessionIds) {
+    const info = store.sessions.get(id);
+    // 未知 id（已清零、已删除、不在本次快照内）按 0 计，不抛错
+    if (info === undefined) continue;
+    calls += info.allAgg.calls;
+    usage.input += info.allAgg.input;
+    usage.output += info.allAgg.output;
+    usage.cacheRead += info.allAgg.cacheRead;
+    usage.cacheWrite += info.allAgg.cacheWrite;
+    usage.reasoning += info.allAgg.reasoning;
+    usage.total += info.allAgg.total;
+    for (const [day, agg] of info.daily) {
+      let bucket = dailyMap.get(day);
+      if (bucket === undefined) {
+        bucket = zeroBucket();
+        dailyMap.set(day, bucket);
+      }
+      bucket.input += agg.input;
+      bucket.output += agg.output;
+      bucket.cacheRead += agg.cacheRead;
+      bucket.cacheWrite += agg.cacheWrite;
+      bucket.reasoning += agg.reasoning;
+      bucket.total += agg.total;
+      bucket.calls += agg.calls;
+    }
+  }
+
+  const models: ModelStat[] = [];
+  for (const row of ledger.sessionModels(sessionIds)) {
+    const total = row.input + row.output + row.cacheRead + row.cacheWrite;
+    models.push({
+      provider: row.provider,
+      model: row.model,
+      calls: row.calls,
+      usage: {
+        input: row.input, output: row.output, cacheRead: row.cacheRead,
+        cacheWrite: row.cacheWrite, reasoning: row.reasoning, total,
+      },
+    });
+  }
+  // 默认排序与 dateDetail 的模型行同款：总计降序、同值按供应商与模型升序
+  models.sort((a, b) => (b.usage.total - a.usage.total)
+    || a.provider.localeCompare(b.provider)
+    || a.model.localeCompare(b.model));
+
+  return { calls, usage, daily: buildSeries(dailyMap), models };
 }
 
 /** 按 `since` 截取每日桶，null 时原样返回（不复制，调用方只读）。 */

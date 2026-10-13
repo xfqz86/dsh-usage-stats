@@ -1,6 +1,6 @@
 /**
  * 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露
- * usageStats 命名空间的 9 个一元 Remote 方法。
+ * usageStats 命名空间的 10 个一元 Remote 方法。
  *
  * 数据流（账本为唯一事实来源、聚合为派生缓存）与原 apply 函数版一致：
  * openLedger → 先挂 session/event 实时监听 →
@@ -18,7 +18,7 @@ import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typer
 import { startOfDay } from '../utils.ts';
 
 import { queryDeepSeekBalance } from './deepseekBalance.ts';
-import { dateDetail, modelDetail } from './detail.ts';
+import { dateDetail, modelDetail, sessionDetail } from './detail.ts';
 import { queryGoQuota } from './goquota.ts';
 import { Ledger } from './ledger.ts';
 import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregates } from './scan.ts';
@@ -40,6 +40,8 @@ import type {
   QuotaRequest,
   RebuildResult,
   SealResult,
+  SessionDetail,
+  SessionDetailRequest,
   SnapshotRequest,
   UsageSnapshot,
   ZaiQuota,
@@ -222,6 +224,30 @@ export default class UsageStatsService extends TypertRemoteService {
     const raw = request.day;
     const day = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? startOfDay(Math.floor(raw)) : 0;
     return dateDetail(this.store, this.ledger, day);
+  }
+
+  /**
+   * usageStats/sessionDetail：一条会话的明细（按日期 + 按模型），会话页点主会话行的「明细」时按需调用。
+   * 集合由客户端传：所点行的折叠分组（主会话 + 展平的全部子代理），服务端只聚合给定集合，
+   * 保证与行数字同源（docs/API.md §2.3）。纯读，不判 busy、不写账本；非法入参不抛错，
+   * 一律返回空明细——非数组视为空集合，元素只收非空字符串，精确去重后顺序无关。
+   * @param request - 折叠集合的会话 id 列表。
+   * @returns 会话明细 value（集合合计、按本地日升序的日序列、按模型行）。
+   */
+  @Remote('sessionDetail')
+  sessionDetail(request: SessionDetailRequest): SessionDetail {
+    const raw = request.sessionIds;
+    const ids: string[] = [];
+    // id 是不透明键：只过滤非字符串与空串，不做 trim、不做 NUL 清洗，必须与快照/账本原文逐字一致
+    const seen = new Set<string>();
+    if (Array.isArray(raw)) {
+      for (const value of raw) {
+        if (typeof value !== 'string' || value.length === 0 || seen.has(value)) continue;
+        seen.add(value);
+        ids.push(value);
+      }
+    }
+    return sessionDetail(this.store, this.ledger, ids);
   }
 
   /**

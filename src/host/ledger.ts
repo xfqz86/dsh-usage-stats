@@ -11,7 +11,8 @@
  *     序事件再按毫秒时间戳区分。结构化列主键，列顺序为 t、session_id、seq。
  *     无 time 的畸形事件以"当天内确定性毫秒偏移"入账：同日重放幂等，
  *     跨日重放理论上可能重复——防御路径罕见可接受。另有 (provider, model, t)
- *     普通索引，供模型明细按模型过滤后按会话聚合（modelSessions）。
+ *     普通索引，供模型明细按模型过滤后按会话聚合（modelSessions）；(session_id, t)
+ *     普通索引供会话明细按会话集合聚合（sessionModels）。
  *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/lastActive/parentSession/origin/delegationDepth，初始化扫描抄录、实时 session/title 事件更新。
  *   - `agg_*` 预统计表（agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint 共 7 张）：派生聚合的物化视图，见 §5 预统计；与 events 同库但各自提交，
  *     命中时直接加载即可，无需重放全量事件。
@@ -91,6 +92,18 @@ export interface ModelSessionAgg {
   lastActive: number
 }
 
+/** 某会话集合按模型聚合的一行，会话明细的「按模型」维度读回形状。 */
+export interface SessionModelAgg {
+  provider: string
+  model: string
+  calls: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  reasoning: number
+}
+
 /** events 表 DDL，列名 snake_case，读回时映射回 camelCase。 */
 const EVENT_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -114,6 +127,14 @@ CREATE TABLE IF NOT EXISTS events (
  */
 const EVENTS_MODEL_INDEX_DDL = `
 CREATE INDEX IF NOT EXISTS idx_events_model ON events (provider, model, t)`;
+
+/**
+ * events 的按会话索引：会话明细按会话集合过滤后再按「供应商 + 模型」聚合，
+ * 会话页一次要查「主会话 + 展平的全部子代理」几十个 id，无索引即全表扫描。
+ * 同 idx_events_model：纯查询加速，不参与 user_version 判定，表重建后由 open() 补建。
+ */
+const EVENTS_SESSION_INDEX_DDL = `
+CREATE INDEX IF NOT EXISTS idx_events_session ON events (session_id, t)`;
 
 /** session_meta 表 DDL。 */
 const META_TABLE_DDL = `
@@ -256,6 +277,7 @@ interface LedgerStatements {
   upsertCheckpoint: ReturnType<DatabaseSync['prepare']>
   allEventsSince: ReturnType<DatabaseSync['prepare']>
   modelSessions: ReturnType<DatabaseSync['prepare']>
+  sessionModels: ReturnType<DatabaseSync['prepare']>
 }
 
 /** 新建空会话元数据，字段可增量补齐。 */
@@ -410,6 +432,7 @@ export class Ledger {
     }
     // 索引在版本判定之后建：走重建分支时表刚被 DROP 连带删掉，这里正好补回。
     this.db.exec(EVENTS_MODEL_INDEX_DDL);
+    this.db.exec(EVENTS_SESSION_INDEX_DDL);
     const hasEvent = this.db.prepare('SELECT 1 AS x FROM events LIMIT 1');
     const hasEventByPK = this.db.prepare('SELECT 1 AS x FROM events WHERE t = ? AND session_id = ? AND seq = ? LIMIT 1');
     const insertEvent = this.db.prepare(
@@ -558,12 +581,23 @@ export class Ledger {
        FROM events WHERE provider = ? AND model = ? AND t >= ?
        GROUP BY session_id`,
     );
+    // 会话明细的按模型聚合：集合经 json_each 展开，条件走 (session_id, t) 索引，
+    // 单条语句没有占位符个数问题（空集合 json_each('[]') 恒 0 行）。
+    const sessionModels = this.db.prepare(
+      `SELECT provider, model,
+              COUNT(*) AS calls,
+              SUM(input) AS input, SUM(output) AS output,
+              SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write,
+              SUM(reasoning) AS reasoning
+       FROM events WHERE session_id IN (SELECT value FROM json_each(?))
+       GROUP BY provider, model`,
+    );
     this.stmts = {
       hasEvent, hasEventByPK, insertEvent, allEvents, upsertMeta, allMeta,
       hasAgg, getAggTotal, allAggDaily, allAggModel, allAggModelDaily, allAggSession, allAggSessionDaily,
       incAggTotal, incAggDaily, incAggModel, incAggModelDaily, incAggSession, incAggSessionDaily,
       insertAggTotalBulk, insertAggDailyBulk, insertAggModelBulk, insertAggModelDailyBulk, insertAggSessionBulk, insertAggSessionDailyBulk,
-      getCheckpoint, upsertCheckpoint, allEventsSince, modelSessions,
+      getCheckpoint, upsertCheckpoint, allEventsSince, modelSessions, sessionModels,
     };
     for (const row of allMeta.all() as Record<string, unknown>[]) {
       const id = String(row.session_id);
@@ -687,6 +721,28 @@ export class Ledger {
       cacheWrite: Number(r.cache_write) || 0,
       reasoning: Number(r.reasoning) || 0,
       lastActive: Number(r.last_active) || 0,
+    }));
+  }
+
+  /**
+   * 某会话集合的事件按模型聚合，会话明细的「按模型」维度用：集合内一次
+   * `GROUP BY provider, model`，结果集与命中模型数同阶，与事件总量无关；
+   * 内存聚合没有「会话 × 模型」交叉数据，单集合拆分只能回账本。
+   * @param ids - 会话 id 集合（调用方已去重；空集合返回空数组）。
+   * @returns 每模型一行，调用数与各 token 分量求和，provider/model 为账本列原文。
+   */
+  sessionModels(ids: readonly string[]): SessionModelAgg[] {
+    this.assertOpen();
+    const rows = this.stmts.sessionModels.all(JSON.stringify(ids)) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      provider: String(r.provider),
+      model: String(r.model),
+      calls: Number(r.calls) || 0,
+      input: Number(r.input) || 0,
+      output: Number(r.output) || 0,
+      cacheRead: Number(r.cache_read) || 0,
+      cacheWrite: Number(r.cache_write) || 0,
+      reasoning: Number(r.reasoning) || 0,
     }));
   }
 

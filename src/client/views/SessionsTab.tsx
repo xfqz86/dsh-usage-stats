@@ -1,9 +1,11 @@
 /**
  * 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开，数据完整展示。
  * 独立成文件，一个组件一个文件。
- * 列顺序：会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃；
+ * 列顺序：会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃 | 明细；
  * 表头支持点击排序，稳定排序，分组后分页前执行；分组与排序比较在 stats.ts，
  * 与模型明细的按会话表共用同一份（两处列、排序与折叠一致）。
+ * 行末「明细」入口只挂主会话行：打开的是该分组（含子代理）的会话明细弹窗，
+ * 集合在点击那一刻由 sessionGroupIds 冻结，子会话行同列留空。
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
@@ -11,11 +13,14 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Pagination } from '../components/Pagination.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { avgPerCall, compareSessionGroup, fmt, fmtFull, formatLastActive, hitRateOfDay, pctOf, shortId, usageTotal, groupSessions, type SessionSortKey } from '../stats.ts';
+import { avgPerCall, compareSessionGroup, fmt, fmtFull, formatLastActive, hitRateOfDay, pctOf, shortId, usageTotal, groupSessions, sessionGroupIds, type SessionSortKey } from '../stats.ts';
+import { useSessionDetail } from '../useSessionDetail.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
+import { SessionDetail } from './SessionDetail.tsx';
 import css from './SessionsTab.module.css';
 
+import type { ModelRedirect } from '../../types.ts';
 import type { LocaleFn } from '../locales.ts';
 import type { SessionStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
@@ -24,9 +29,11 @@ const PAGE_SIZE = 20;
 
 /** 会话 Tab：分页每页 20 条，子代理折叠，主会话前显示 + / −，子项不占页位，数据完整展示全分量。 */
 export function SessionsTab({
-  sessionsList, t,
+  sessionsList, rules, t,
 }: {
   sessionsList: SessionStat[]
+  /** 模型统计重定向规则，透传给会话明细弹窗的按模型子视图。 */
+  rules: readonly ModelRedirect[]
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   // 本地化函数单点转换：纯函数要的无命名空间形态，组件内统一用 tFn。
@@ -37,6 +44,9 @@ export function SessionsTab({
   // 排序分页三件套（三表同一交互，比较函数保留领域差异；排序不增删行）
   const { sortKey, sortDir, handleSort, page, totalPages, setPage, slice } = useSortTable<SessionSortKey>('lastActive', groups.length, PAGE_SIZE);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  // 打开的明细：集合在点击那一刻冻结（之后新增的子代理不并入，重开/重试才对齐）
+  const [detail, setDetail] = useState<{ id: string; ids: string[] } | null>(null);
+  const detailState = useSessionDetail(detail?.ids ?? null);
 
   // 排序：分组后、分页前；比较函数与模型明细的按会话表共用（stats.compareSessionGroup）
   const sortedGroups = useMemo(
@@ -57,6 +67,12 @@ export function SessionsTab({
     if (changed) setExpanded(next);
   }, [groups, expanded]);
 
+  // 消失守卫：快照里主会话没了（清零、过期）就收起明细弹窗，不让它挂在一行不存在的数字上
+  useEffect(() => {
+    if (detail === null) return;
+    if (!groups.some((g) => g.main.id === detail.id)) setDetail(null);
+  }, [groups, detail]);
+
   const pageGroups = useMemo(() => slice(sortedGroups), [slice, sortedGroups]);
 
   const toggle = (id: string) => {
@@ -71,6 +87,9 @@ export function SessionsTab({
   if (sessionsList.length === 0) {
     return <div className={shared.empty}>{t('state.noUsage')}</div>;
   }
+
+  // 弹窗标题取当前行（标题缺省回落短 id，与表格行同一表现）
+  const openGroup = detail === null ? undefined : groups.find((g) => g.main.id === detail.id);
 
   return (
     <div className={`${shared.section} ${shared.tableViewRoot}`}>
@@ -88,6 +107,8 @@ export function SessionsTab({
               <ThSortable k="calls" label={t('table.calls')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <ThSortable k="avg" label={t('table.avgPerCall')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className={shared.thSm} />
               <ThSortable k="lastActive" label={t('table.lastActive')} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              {/* 明细入口列：不参与排序，表头留空（单元格里的链接自己说明用途） */}
+              <th aria-label={t('detail.view')} />
             </tr>
           </thead>
           <tbody>
@@ -129,6 +150,17 @@ export function SessionsTab({
                     <td className={shared.num}>{fmtFull(g.agg.calls)}</td>
                     <td className={shared.num}>{fmtFull(aggAvg)}</td>
                     <td className={shared.num}>{when}</td>
+                    {/* 打开这一行的明细弹窗，集合是折叠后的整个分组（含子代理） */}
+                    <td className={shared.detailCell}>
+                      <button
+                        type="button"
+                        className={shared.detailLink}
+                        aria-label={t('detail.view')}
+                        onClick={() => setDetail({ id: g.main.id, ids: sessionGroupIds(g) })}
+                      >
+                        {t('detail.link')}
+                      </button>
+                    </td>
                   </tr>
                   {isExpanded &&
                     g.children.map((c) => {
@@ -151,6 +183,8 @@ export function SessionsTab({
                           <td className={shared.num}>{fmtFull(c.calls)}</td>
                           <td className={shared.num}>{fmtFull(childAvg)}</td>
                           <td className={shared.num}>{childWhen}</td>
+                          {/* 子会话行不挂入口：明细只从主会话行打开，这里留空保持网格对齐 */}
+                          <td className={shared.detailCell} />
                         </tr>
                       );
                     })}
@@ -164,6 +198,17 @@ export function SessionsTab({
         <div className={shared.paginationBar}>
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} t={t} />
         </div>
+      )}
+      {/* 明细弹窗：叠在详情面板之上，基座 Modal 的层级栈保证 Esc 只关这一层 */}
+      {detail !== null && openGroup !== undefined && (
+        <SessionDetail
+          id={detail.id}
+          title={openGroup.main.title || shortId(openGroup.main.id)}
+          rules={rules}
+          state={detailState}
+          onClose={() => setDetail(null)}
+          t={t}
+        />
       )}
     </div>
   );

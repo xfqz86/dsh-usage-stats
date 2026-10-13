@@ -193,6 +193,15 @@ export function groupSessions(list: SessionStat[]): SessionGroup[] {
 export type SessionSortKey = 'session' | 'cacheRead' | 'input' | 'output' | 'total' | 'hitRate' | 'calls' | 'avg' | 'lastActive';
 
 /**
+ * 一个分组的折叠会话 id 集合：主会话 + 展平到它下面的全部子代理。
+ * 会话明细请求的唯一构造点——明细必须与所点行同源（同一分组），
+ * 在点击那一刻取一次并随弹窗冻结，之后不随快照轮询重算（见 `docs/API.md` §2.3）。
+ */
+export function sessionGroupIds(group: SessionGroup): string[] {
+  return [group.main.id, ...group.children.map((child) => child.id)];
+}
+
+/**
  * 会话分组排序比较：两处会话表共用，保证同一排序键给出同一顺序。
  * 文本列按标题（缺标题回落 id）比较，数值列一律取折叠后的分组合计（子代理计入主会话）。
  * @param key - 排序键，与表头一一对应。

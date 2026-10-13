@@ -153,7 +153,7 @@ export function UsageStatsPanel({
         )}
         {active === 'dates' && <DatesTab series={value.series.all} rules={settings.modelRedirects} t={t} />}
         {active === 'sessions' && (
-          <SessionsTab sessionsList={value.sessionsList} t={t} />
+          <SessionsTab sessionsList={value.sessionsList} rules={settings.modelRedirects} t={t} />
         )}
         {active === 'models' && (
           <ModelsTab models={redirect.models} mergedSources={redirect.mergedSources} t={t} />

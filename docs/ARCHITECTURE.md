@@ -22,7 +22,8 @@
   `PK(t,session_id,seq)` 天然幂等 `ON CONFLICT DO UPDATE`；`t` 缺失时当天确定性毫秒偏移。
   约束：TEXT 禁 `\0`，内存键 `provider\0model` 写时 `splitModelKey` 拆列，标题/cwd 等
   先 `sanitizeSqlText`（`\0→\uFFFD`）。另有 `(provider, model, t)` 普通索引
-  `idx_events_model`，供模型明细按模型过滤后按会话聚合；索引随建表语句幂等创建，
+  `idx_events_model`（供模型明细按模型过滤后按会话聚合）与 `(session_id, t)` 普通索引
+  `idx_events_session`（供会话明细按会话集合聚合）；索引随建表语句幂等创建，
   只是查询加速，不是数据结构或口径变化、不递增 `user_version`。
 - **session_meta**：`(session_id PK, title, cwd, created_at, last_active, parent_session,
   origin, delegation_depth)`，初始化抄录、运行时由 `session/title` 与 `session/event`
@@ -65,7 +66,11 @@
      `GROUP BY session_id`（走 `idx_events_model`），会话元数据复用账本 `session_meta`；
    - `usageStats/dateDetail`：两个维度都取内存聚合的当日桶（模型×日与会话×日），
      不读账本 events——单日两边都是既有桶的一次查表，再走一遍 SQL 聚合没有收益；
-   - 两者都不新增表、不改 `user_version`。
+   - `usageStats/sessionDetail`：合计与按日取内存聚合（集合内各会话的总桶与日桶并桶），
+     按模型读账本 `events` 按集合 `GROUP BY provider, model`（走 `idx_events_session`）；
+     集合由客户端传（所点行的折叠分组），服务端不自走 `session_meta` 子树——
+     快照列表有截断、父会话可能没有用量，只有与行数字同源才能逐位对齐（协议见 `docs/API.md` §2.3）；
+   - 三者都不新增表、不改 `user_version`。
 
 ## 4. 折叠与去重（`agg.ts` / `store.ts`）
 
@@ -109,6 +114,16 @@
   桶键就是 `startOfDay` 的本地日零点，与浏览器端日期行同源。展示与面板同名 Tab 同一套：
   按会话复用 `groupSessions`/`compareSessionGroup`（子代理折叠与排序键与会话 Tab 一致），
   按模型复用模型页的占比口径（`largestRemainderPcts`）。
+- **会话明细口径**（`usageStats/sessionDetail`，协议见 `docs/API.md` §2.3）：一条会话的
+  合计 + 按日期 + 按模型，**集合由客户端界定**——会话页把所点主会话行的折叠分组
+  （主会话 + `groupSessions` 展平的全部子代理）随请求传入，服务端只聚合给定集合，
+  不自走 `session_meta` 子树：快照列表有截断、父会话可能没有用量（孤儿回落顶层成行），
+  只有与行数字同源才能逐位相等。合计等于集合内各会话总桶之和，`daily` 由各会话日桶并桶
+  （`startOfDay` 零点、升序、只含有量的日子、全历史不截断），`models` 读账本按集合
+  `GROUP BY provider, model`（原始键、不做重定向归并，归并在浏览器端）；合计与两个维度
+  在同一数据代次内逐位相等（`test/smoke.mjs` 断言）。展示与面板同名 Tab 同一套：
+  按日期复用 `StackedBar` date 模式（窗口固定 `all`，上限 366 天）与日期页的列，
+  按模型复用模型页的列、占比与归并标记。
 - **不计入项（数据源边界，非本仓可补）**：
   - 会话标题生成的辅助调用——`session/title-llm-request` 只记请求，harness 取标题
     文本后丢弃响应 usage，日志里没有用量可折；

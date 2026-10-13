@@ -7,8 +7,8 @@
 
 ## 1. 通用约定
 
-- 命名空间 `usageStats`，9 个一元（unary，一问一答，区别于流式）方法：
-  `snapshot/modelDetail/dateDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
+- 命名空间 `usageStats`，10 个一元（unary，一问一答，区别于流式）方法：
+  `snapshot/modelDetail/dateDetail/sessionDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；其中
   `rebuild`/`clear`/`seal` **无请求参数**（贡献里 `parameters: []`），其余各带一个具名 request。
   调用经 `ctx.get('remote.usageStats')` 取命名空间服务后调用（本仓库由 `usageStatsRemote()` 封装）；
   线路上走客户端 Connection 的 RPC：`POST /api/usageStats/<方法>`，请求体为
@@ -20,7 +20,7 @@
   `src/remote/contribution.ts` 头注释）；只改实现体不动贡献，改签名必须同步。
 - **参数名即线路字段名**：SRC 分发下网关从服务端方法源码文本
   （`Function.prototype.toString`）读参数名，作为请求 `args` 的字段名；带参方法的参数名
-  必须与贡献里的 `wire` 逐字相同（本仓库六个带参方法均为 `request`），改名即改协议。
+  必须与贡献里的 `wire` 逐字相同（本仓库七个带参方法均为 `request`），改名即改协议。
   服务端产物因此不做压缩（见 `docs/ARCHITECTURE.md` §6），
   `test/smoke.mjs` 的「SRC 线路字段」自检逐方法对齐两侧。
 
@@ -73,6 +73,34 @@
   （单日按会话再走一遍 SQL 聚合没有收益，见 `src/host/detail.ts` 头注释）；
   合计由当天模型行求和，与会话行合计互为校验（`test/smoke.mjs` 断言三者一致）。
 - 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前聚合里的数据，可能偏少。
+
+## 2.3 usageStats/sessionDetail
+
+- 目的：一条会话的明细，供会话页点主会话行的「明细」时在弹窗里查看该行折叠分组
+  （主会话 + 展平的全部子代理）「按日期 / 按模型」。**按需查询，不进快照**——
+  「会话 × 模型」交叉数据若随快照下发，会让每 4 秒一次的轮询体积随「会话数 × 模型数」膨胀。
+- request `{ sessionIds: string[] }`：**集合由客户端界定**——会话页把所点行的分组 id 集合
+  （`groupSessions` 展平后的 `main.id` + `children[].id`，由 `stats.sessionGroupIds` 单点构造，
+  点击那一刻取一次并随弹窗冻结）随请求传入，服务端只聚合给定集合，
+  **不按 `session_meta` 自走子树**。理由：行数字 = 对该分组 id 集合在聚合缓存里逐会话求和，
+  服务端自走子树会与行数字不同源——快照 `sessionsList` 有 `limit` 截断（可能截掉个别子会话）、
+  `session_meta` 里有父会话完全没有用量的子代理（客户端按「孤儿回落顶层」把它当顶层行，
+  服务端按 meta 建树会挂到一个根本没有行的父下），多级展平与防环也要复刻；
+  集合因此是截断与孤儿场景下保证不变量成立的唯一方案。
+  - 服务端归一：只收非空字符串、精确去重；非数组视为空集合、其余元素丢弃，**一律不抛错**；
+    不设条数上限、不截断（截断会静默破坏合计不变量）。
+  - id 是不透明键：不做 trim、不做 NUL 清洗、不区分大小写，必须与快照/账本原文逐字一致。
+- 响应 `value` 为 `SessionDetail`（`src/types.ts`）：集合合计 `calls` 与 `usage`、
+  按本地日升序的 `daily: SeriesPoint[]`（只含有量的日子，桶键为 `startOfDay` 零点，
+  全历史不截断）、按总计降序的 `models: ModelStat[]`（`provider`/`model` 为账本原始键，
+  **不做重定向归并**——归并归浏览器端，见 §5；行省略 `series`，同值按「供应商 + 模型」升序）。
+  空集合 / 全未知 id 恒返回字段齐全的空明细（`calls: 0`、六字段零值 `usage`、两个空数组），不抛错。
+- 核心不变量（同一数据代次内逐位精确、无舍入）：`calls` 与 `usage` 等于所点行折叠后的合计，
+  并同时等于 `Σdaily` 与 `Σmodels`；明细打开期间新增的用量不并入本次响应（重开或重试对齐，
+  时间在走不是口径漂移）。
+- 数据来源：合计与 `daily` 取聚合缓存里各会话的总桶与日桶（与会话行数字同一条路径），
+  `models` 读账本 `events` 按集合 `GROUP BY provider, model`（走 `idx_events_session`）。
+- 纯读：不判 `usageStats/busy`、不写账本；扫描或重建进行中返回的是当前数据，可能偏少。
 
 ## 3. 额度查询通用约定（goQuota / deepseekBalance / zaiQuota 共用）
 
@@ -200,7 +228,8 @@
   三组独立联动：关闭 `*Enabled` 时对应「侧边栏展示」与「抓取间隔」一并置灰。偏好不落
   账本（账本只记用量），额度轮询间隔取自偏好。
 - **模型统计重定向**（浏览器端归并，服务端快照保持原始行）：
-  - 归并只在「模型」页消费（`src/client/stats.ts` 的 `redirectModels`）；服务端不归并，
+  - 归并在浏览器端消费：模型页、日期明细的「按模型」与会话明细的「按模型」三处共用
+    `src/client/stats.ts` 的 `redirectModels`；服务端（快照与各明细）一律不归并，
     设置页才能拿原始「供应商 + 模型」当规则候选。
   - 匹配按 `provider + model` 精确比较（trim 后，区分大小写）；同一来源配多条时只有
     列表最上面一条生效；四项没填齐的规则不生效（界面保留待填）。

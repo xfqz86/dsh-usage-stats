@@ -63,6 +63,7 @@ import {
 } from '../src/client/settings.ts';
 import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
 import { createStore, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from '../src/host/store.ts';
+import { sessionDetail } from '../src/host/detail.ts';
 import { snapshot } from '../src/host/snapshot.ts';
 import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
@@ -89,6 +90,7 @@ import {
   pieSlicesOf,
   redirectModels,
   resolveRedirectKey,
+  sessionGroupIds,
   shortId,
   todayOf,
   unusedRedirectSources,
@@ -483,9 +485,9 @@ describe('fork 继承前缀：只折本会话自有事件', () => {
 });
 
 describe('remote：手写严格贡献', () => {
-  it('9 个一元方法与服务一致', () => {
+  it('10 个一元方法与服务一致', () => {
     assert.deepEqual([...METHOD_NAMES], [
-      'snapshot', 'modelDetail', 'dateDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
+      'snapshot', 'modelDetail', 'dateDetail', 'sessionDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
     ]);
     assert.equal(USAGE_STATS_REMOTE.package, '@xfqz86/dsh-usage-stats');
     assert.deepEqual(
@@ -564,6 +566,38 @@ describe('remote：手写严格贡献', () => {
       },
     });
     assert.throws(() => result.parse({ ok: true, value: { day: 1, calls: 1, usage, models: [{ provider: 'p' }], sessions: [] } }));
+  });
+
+  it('会话明细请求与结果 schema 收发合法、拒非法', () => {
+    const detail = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'sessionDetail');
+    assert.ok(detail && detail.parameters.length === 1);
+    const codec = detail.parameters[0].codec;
+    assert.equal(codec.mode, 'strict');
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    assert.equal(schema, codec.schema);
+    // 集合语义在服务端归一（去重、非字符串丢弃、未知 id 按 0），线路层只认字符串数组。
+    schema.parse({ sessionIds: [] });
+    schema.parse({ sessionIds: ['s-1', 's-2'] });
+    assert.throws(() => schema.parse({}));
+    assert.throws(() => schema.parse({ sessionIds: 's-1' }));
+    assert.throws(() => schema.parse({ sessionIds: [1] }));
+    // 结果缺字段整条被拒：host 必须字段齐全，不能少下发 daily/models/usage
+    const result = detail.result.create();
+    assert.throws(() => result.parse({ ok: true, value: { calls: 0 } }));
+    const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+    result.parse({ ok: true, value: { calls: 0, usage, daily: [], models: [] } });
+    // 模型行可省 series（会话明细不画该模型的按日图），但其余字段缺一即拒
+    result.parse({
+      ok: true,
+      value: {
+        calls: 1,
+        usage,
+        daily: [{ t: 1_700_000_000_000, input: 1, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, calls: 1 }],
+        models: [{ provider: 'p', model: 'm', calls: 1, usage }],
+      },
+    });
+    assert.throws(() => result.parse({ ok: true, value: { calls: 1, usage, daily: [], models: [{ provider: 'p' }] } }));
   });
 
   it('结果信封成功分支严格、错误分支透传', () => {
@@ -692,6 +726,17 @@ describe('stats：会话分组', () => {
       sess('b', { lastActive: 2, parentSession: 'a', origin: 'subagent', delegationDepth: 1 }),
     ]);
     assert.equal(groups.length, 2);
+  });
+
+  it('sessionGroupIds 给出折叠集合：主会话 + 展平的全部子代理', () => {
+    const groups = groupSessions([
+      sess('m1', { lastActive: 1 }),
+      sess('c1', { lastActive: 2, parentSession: 'm1', origin: 'subagent', delegationDepth: 1 }),
+      sess('g', { lastActive: 3, parentSession: 'c1', origin: 'subagent', delegationDepth: 2 }),
+    ]);
+    assert.equal(groups.length, 1);
+    // 子按 lastActive 降序（g 在 c1 前），集合含主会话与两级子代理
+    assert.deepEqual(sessionGroupIds(groups[0]), ['m1', 'g', 'c1']);
   });
 });
 
@@ -1090,6 +1135,61 @@ describe('snapshot：构建与截断', () => {
     assert.equal(snap.models[0].series.length, 366);
     assert.equal(snap.all.calls, 400);
     assert.equal(snap.models[0].calls, 400);
+  });
+});
+
+describe('会话明细：集合聚合', () => {
+  const d0 = new Date(2026, 4, 1).getTime();
+  const d1 = new Date(2026, 4, 2).getTime();
+  /** 构造聚合缓存里的一条会话：日桶与总桶。 */
+  const info = (daily, allAgg) => ({ daily: new Map(daily), allAgg, maxSeq: -1, lastActive: 0 });
+
+  it('合计按集合求和（含子会话），日序列升序并桶，模型行原始键总计降序', () => {
+    const store = createStore();
+    store.sessions.set('m', info([[d0, agg(10, 1)], [d1, agg(20, 2)]], agg(30, 3)));
+    store.sessions.set('c', info([[d1, agg(5, 1)]], agg(5, 1)));
+    // 账本桩：按集合返回原始 provider/model 行（服务端不做重定向归并）
+    const ledger = {
+      sessionModels: (ids) => [
+        ...(ids.includes('c') ? [{ provider: 'a', model: 'm1', calls: 1, input: 30, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }] : []),
+        ...(ids.includes('m') ? [{ provider: 'b', model: 'm2', calls: 1, input: 5, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }] : []),
+      ],
+    };
+    const detail = sessionDetail(store, ledger, ['c', 'm']);
+    // 合集 = 主 3 次 + 子 1 次，总计 35；日序列升序，d1 并桶后 3 次
+    assert.equal(detail.calls, 4);
+    assert.equal(detail.usage.total, 35);
+    assert.deepEqual(detail.daily.map((p) => p.t), [d0, d1]);
+    assert.equal(detail.daily[0].input, 10);
+    assert.equal(detail.daily[1].input, 25);
+    assert.equal(detail.daily[1].calls, 3);
+    // 模型行按总计降序（a/m1 的 30 > b/m2 的 5），provider/model 为原始键
+    assert.deepEqual(detail.models.map((m) => [m.provider, m.model, m.usage.total]), [['a', 'm1', 30], ['b', 'm2', 5]]);
+  });
+
+  it('未知 id 按 0 计不抛错；空集合恒字段齐全的空明细', () => {
+    const store = createStore();
+    store.sessions.set('m', info([], agg(0, 0)));
+    const onlyMissing = sessionDetail(store, { sessionModels: () => [] }, ['missing']);
+    assert.deepEqual(onlyMissing, {
+      calls: 0,
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 },
+      daily: [],
+      models: [],
+    });
+    const empty = sessionDetail(store, { sessionModels: () => [] }, []);
+    assert.deepEqual(empty, onlyMissing);
+  });
+
+  it('只认「有桶」的日子：四段全 0、仅 reasoning 的日子也保留', () => {
+    const store = createStore();
+    const onlyReasoning = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 7, total: 0, calls: 1 };
+    store.sessions.set('m', info([[d0, onlyReasoning]], { ...onlyReasoning }));
+    const detail = sessionDetail(store, { sessionModels: () => [] }, ['m']);
+    assert.equal(detail.daily.length, 1);
+    assert.equal(detail.daily[0].reasoning, 7);
+    assert.equal(detail.usage.total, 0);
+    assert.equal(detail.calls, 1);
   });
 });
 

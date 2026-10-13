@@ -168,6 +168,28 @@ export interface DateDetail {
 }
 
 /**
+ * usageStats/sessionDetail 请求：按会话集合取一条会话明细。
+ * 集合由客户端界定——会话页所点行的折叠分组（主会话 + `groupSessions` 展平的全部子代理），
+ * 与服务端各自按父子关系重建子树相比，只有这样才能与「行数字」同源（见 docs/API.md §2.3）。
+ */
+export interface SessionDetailRequest {
+  /** 该行折叠集合的会话 id（主会话 + 展平的全部子代理）；顺序无关、重复无效、未知 id 按 0 计。 */
+  sessionIds: string[]
+}
+
+/**
+ * 会话明细：集合合计 + 按本地日 + 按模型，为 usageStats/sessionDetail 成功时的 value。
+ * 子会话与主会话一视同仁，合计按集合求和；`daily` 只含有量的日子且升序，
+ * `models` 为账本原始「供应商 + 模型」行（重定向归并归浏览器端）、省略 `series`。
+ */
+export interface SessionDetail {
+  calls: number
+  usage: UsageAgg
+  daily: SeriesPoint[]
+  models: ModelStat[]
+}
+
+/**
  * usageStats/snapshot 的 value 部分快照协议，为本插件自有 API 协议，
  * 见 AGENTS §8，host snapshot() 构建与 client useSnapshot 消费共用，避免两端镜像漂移。
  * Remote 传输外层为 { ok, value } 信封，此类型对应成功时的 value。
