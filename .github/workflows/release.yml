@@ -4,8 +4,8 @@
 #       docs/releases/v<版本>.md 更新说明存在；workflow_dispatch 仅构建不发布，不校验
 # 产物：
 #   - npmjs：@xfqz86/dsh-usage-stats（预构建 lib，无 prepare，避免安装时 build 脚本授权）
-#   - tarball：GitHub Release 附件为固定别名 xfqz86-dsh-usage-stats.tgz（README 的 latest 固定地址，
-#     永不变动）；workflow artifact 保持 npm 的版本化命名，装指定版本请用 npm
+#   - tarball：GitHub Release 附件为固定别名 xfqz86-dsh-usage-stats.tgz（下载地址固定在
+#     /releases/latest/download/，README 不再介绍这条安装路径）；workflow artifact 保持 npm 的版本化命名，装指定版本请用 npm
 #     （见 .agents/skills/release/SKILL.md 交付形态）
 #   - GitHub Release 正文：docs/releases/v<版本>.md（面向用户的人话版更新说明，见 .agents/skills/release/SKILL.md）
 #   - GitHub 安装：依赖 prepare + release 分支（见 release-branch.yml），此处仅校验
@@ -171,7 +171,7 @@ jobs:
         id: alias
         shell: bash
         run: |
-          # 附件用固定文件名：README 的 latest 下载地址据此永不变动；指定版本从 npm 取
+          # 附件用固定文件名：/releases/latest/download/ 地址稳定；README 不再介绍这条路径；指定版本从 npm 取
           versioned=$(ls package/xfqz86-dsh-usage-stats-*.tgz | head -n1)
           stable=package/xfqz86-dsh-usage-stats.tgz
           cp "$versioned" "$stable"

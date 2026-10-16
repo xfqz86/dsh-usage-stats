@@ -65,7 +65,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - 账本九表、数据流、折叠与去重、fork 继承前缀、清零墓碑的唯一权威是 `docs/ARCHITECTURE.md`——改 `ledger/store/agg/scan/rawlog` 相关代码前必读；本文件不复述。
 
 ## 6. 统计口径
-- 精确口径唯一权威是 `docs/ARCHITECTURE.md` §5（用户语言版在 `README.md`）；统计口径变化必须递增账本 `user_version`（见该文件 §2），本文件不复述。
+- 精确口径唯一权威是 `docs/ARCHITECTURE.md` §5；统计口径变化必须递增账本 `user_version`（见该文件 §2），本文件不复述。
 
 ## 7. 构建
 - 产物形态与 CSS 内联机制见 `docs/ARCHITECTURE.md` §6；构建命令见 §9。

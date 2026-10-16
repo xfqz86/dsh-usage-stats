@@ -18,7 +18,7 @@ description: dsh-usage-stats 的发版流程——改三处版本信息（packag
 | GitHub 源码 | 仓库源码，安装时 `prepare: tsdown` 自构建 | `dsh plugin add github:xfqz86/dsh-usage-stats` |
 | GitHub 预构建 | `release` 分支（只含交付物） | `dsh plugin add github:xfqz86/dsh-usage-stats#release` |
 | npm | `@xfqz86/dsh-usage-stats` | `dsh plugin add @xfqz86/dsh-usage-stats` |
-| tarball | `xfqz86-dsh-usage-stats.tgz`（固定文件名，无版本号，每个 Release 都叫这个）；带版本号的那份不发 GitHub Release，只作 workflow artifact 与 npm 发布源 | `dsh plugin add <下载地址>`，README 给的是 `/releases/latest/download/…` 固定地址 |
+| tarball | `xfqz86-dsh-usage-stats.tgz`（固定文件名，无版本号，每个 Release 都叫这个）；带版本号的那份不发 GitHub Release，只作 workflow artifact 与 npm 发布源 | `dsh plugin add <下载地址>`，固定地址为 `/releases/latest/download/xfqz86-dsh-usage-stats.tgz`（README 不再介绍这条路径） |
 
 ## 分支
 
