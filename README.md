@@ -5,9 +5,9 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 <div align="center">
   <a href="https://github.com/deepseek-ai/deepseek-harness"><img alt="Powered by DSH" src="https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white" /></a>
   &nbsp;
-  <a href="https://www.npmjs.com/package/@xfqz86/dsh-usage-stats"><img alt="NPM Downloads" src="https://img.shields.io/npm/d18m/%40xfqz86%2Fdsh-usage-stats?style=flat-square&logo=npm&logoColor=white&label=NPM%20下载量" /></a>
+  <a href="https://www.npmjs.com/package/@xfqz86/dsh-usage-stats"><img alt="NPM Downloads" src="https://img.shields.io/npm/d18m/%40xfqz86%2Fdsh-usage-stats?style=flat-square&logo=npm&logoColor=white&label=NPM%20%E4%B8%8B%E8%BD%BD%E9%87%8F" /></a>
   &nbsp;
-  <a href="https://github.com/xfqz86/dsh-usage-stats/releases/latest/"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/xfqz86/dsh-usage-stats/xfqz86-dsh-usage-stats.tgz?displayAssetName=false&style=flat-square&logo=github&logoColor=white&label=Github%20下载量" /></a>
+  <a href="https://github.com/xfqz86/dsh-usage-stats/releases/latest/"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/xfqz86/dsh-usage-stats/xfqz86-dsh-usage-stats.tgz?displayAssetName=false&style=flat-square&logo=github&logoColor=white&label=Github%20%E4%B8%8B%E8%BD%BD%E9%87%8F" /></a>
   &nbsp;
   <a href="https://github.com/xfqz86/dsh-usage-stats"><img alt="GitHub stars" src="https://img.shields.io/github/stars/xfqz86/dsh-usage-stats" /></a>
   &nbsp;
