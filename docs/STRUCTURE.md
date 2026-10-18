@@ -44,14 +44,16 @@ dsh-usage-stats/
 │   │   ├── v0.4.4.md
 │   │   ├── v0.4.5.md
 │   │   ├── v0.4.6.md
-│   │   └── v0.4.7.md
+│   │   ├── v0.4.7.md
+│   │   └── v0.5.0.md
 │   ├── screenshot/
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png
 │   │   ├── 03-sessions.png
 │   │   ├── 04-models.png
 │   │   ├── 05-settings.png
-│   │   └── footer.png
+│   │   ├── footer.png
+│   │   └── install-help.png
 │   ├── API.md ← Remote 协议与偏好设置约定（随接口演进维护）
 │   ├── ARCHITECTURE.md ← 架构与统计口径唯一权威（账本/数据流/折叠/墓碑/口径；AGENTS.md 只留规则与指针）
 │   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
