@@ -10,7 +10,7 @@ import {
   IconSparkleRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
+import { goLevelOf, goPercent, goResetsAt, QUOTA_CREDENTIAL_KEYS } from '../../utils.ts';
 import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { dayTotal, fmt, fmtFull, todayOf } from '../stats.ts';
@@ -116,10 +116,10 @@ export function OverviewTab({
     }
     if (deepseek.status === 'ok') {
       if (!deepseek.isAvailable) {
-        return <span className={shared.goHint}>{t('deepseek.notAvailable')}</span>;
+        return <HintCard variant="empty" title={t('deepseek.notAvailable')} />;
       }
       if (deepseek.balances.length === 0) {
-        return <span className={shared.goHint}>{t('deepseek.balancesEmpty')}</span>;
+        return <HintCard variant="empty" title={t('deepseek.balancesEmpty')} />;
       }
       const singleCurrency = deepseek.balances.length === 1;
       return (
@@ -154,9 +154,16 @@ export function OverviewTab({
       );
     }
     if (deepseek.status === 'no-key') {
-      return <span className={shared.goHint}>{t('deepseek.notConfigured')}</span>;
+      return (
+        <HintCard
+          variant="unset"
+          title={t('hint.notConfigured')}
+          detail={t('hint.setInCredentials')}
+          keys={QUOTA_CREDENTIAL_KEYS.deepseek}
+        />
+      );
     }
-    return <HintCard text={t('deepseek.unavailable')} variant="error" />;
+    return <HintCard variant="error" title={t('hint.queryFailed')} detail={t('hint.autoRetry')} />;
   }
 
   // Go 额度内容的条件渲染，避免嵌套三元
@@ -194,12 +201,19 @@ export function OverviewTab({
       );
     }
     if (go.status === 'no-key') {
-      return <span className={shared.goHint}>{t('go.notConfigured')}</span>;
+      return (
+        <HintCard
+          variant="unset"
+          title={t('hint.notConfigured')}
+          detail={t('hint.setInCredentials')}
+          keys={QUOTA_CREDENTIAL_KEYS.go}
+        />
+      );
     }
     if (go.status === 'no-plan') {
-      return <HintCard text={t('go.noPlan')} />;
+      return <HintCard variant="plan" title={t('hint.noSubscription')} detail={t('go.planName')} />;
     }
-    return <HintCard text={t('go.unavailable')} variant="error" />;
+    return <HintCard variant="error" title={t('hint.queryFailed')} detail={t('hint.autoRetry')} />;
   }
 
   // Z.ai 额度内容的条件渲染，避免嵌套三元
@@ -213,7 +227,7 @@ export function OverviewTab({
         && zai.weekly === null
         && zai.webSearches === null
       ) {
-        return <span className={shared.goHint}>{t('zai.noData')}</span>;
+        return <HintCard variant="empty" title={t('zai.noData')} />;
       }
       return (
         <>
@@ -301,12 +315,19 @@ export function OverviewTab({
       );
     }
     if (zai.status === 'no-key') {
-      return <span className={shared.goHint}>{t('zai.notConfigured')}</span>;
+      return (
+        <HintCard
+          variant="unset"
+          title={t('hint.notConfigured')}
+          detail={t('hint.setInCredentials')}
+          keys={QUOTA_CREDENTIAL_KEYS.zai}
+        />
+      );
     }
     if (zai.status === 'no-plan') {
-      return <HintCard text={t('zai.noPlan')} />;
+      return <HintCard variant="plan" title={t('hint.noSubscription')} detail={t('zai.planName')} />;
     }
-    return <HintCard text={t('zai.unavailable')} variant="error" />;
+    return <HintCard variant="error" title={t('hint.queryFailed')} detail={t('hint.autoRetry')} />;
   }
 
   return (

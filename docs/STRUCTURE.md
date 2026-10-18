@@ -64,8 +64,8 @@ dsh-usage-stats/
 ├── src/
 │   ├── client/
 │   │   ├── components/
-│   │   │   ├── HintCard.module.css ← 额度状态提示卡：图标徽标 + 短文案，磁贴浅底与 tooltip 深底共用同一版式。
-│   │   │   ├── HintCard.tsx ← 额度状态提示卡：图标徽标配短文案，概览磁贴与侧边栏 tooltip 共用。
+│   │   │   ├── HintCard.module.css ← 状态提示卡：图标徽标 + 状态标题 + 说明 / 凭据名 / 操作，磁贴浅底与 tooltip 深底共用同一版式。
+│   │   │   ├── HintCard.tsx ← 状态提示卡：图标徽标 + 状态标题 + 可选说明、凭据名与操作，概览磁贴、侧边栏 tooltip 与各报错区共用，所有非正常态走同一版式，不再各处手写纯文本提示。
 │   │   │   ├── ModelPieChart.module.css ← 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条

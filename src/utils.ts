@@ -69,6 +69,16 @@ export function goLevelOf(pct: number): 'over' | 'warn' | 'ok' {
   return 'ok';
 }
 
+/**
+ * 三份额度的凭据名，按用户最可能配置的顺序列出，供界面「未配置」提示逐个展示。
+ * 服务端解析另有历史别名回退（见 host/deepseekBalance.ts 等），此处只列主名与常见双名。
+ */
+export const QUOTA_CREDENTIAL_KEYS = {
+  deepseek: ['DEEPSEEK_API_KEY'],
+  go: ['OPENCODE_GO_API_KEY'],
+  zai: ['ZAI_API_KEY', 'ZAI_CODING_CN_API_KEY'],
+} as const;
+
 /** 额度轮询 TTL 下限：仅约束自动轮询的有效 TTL（见 effectiveQuotaTtl），手动 force 刷新不受限。 */
 export const QUOTA_MIN_FETCH_MS = 3 * 60 * 1000;
 /** 额度结果缓存上限：默认 5 分钟；客户端可按抓取间隔调短有效缓存。 */

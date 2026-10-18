@@ -125,6 +125,12 @@
 - **额度三件套**：轮询骨架只活在 `useQuota`，服务端查询只活在
   `createQuotaQuery`/`resolveFirstKey`（`host/quota.ts`），新增额度来源时配
   端点/键名/error 占位，不抄整份文件。
+- **非正常态提示**：额度未配置/未订阅/查询失败/暂无数据、面板与明细加载失败、
+  配置解析错误、设置存储告警一律用 `components/HintCard.tsx`——`variant` 选语义色，
+  正文按 `title` → `detail` → `keys`（凭据名）→ `action`（重试）四段，
+  磁贴与深色 tooltip 只差 `tone`；面板与明细弹窗里用 `shared.statusWrap` 居中限宽，
+  内联块（设置页、配置迁移）直接放卡片；不另写纯文本错误提示，也不在视图里复刻卡片版式。
+  加载中与说明性小字仍用 `shared.goHint`。
 - **确认操作/间隔输入**：走 `useConfirmOp`/`useIntervalText`，接口调用走 `postLedgerApi`。
 - **判空**：可空类型全是 `T | null`，用 `=== null`/`!== null`；`!= null` 只留给
   运行时可能出现 undefined 的防御位（如 `p?.t`）；`== null` 不出现。

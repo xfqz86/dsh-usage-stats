@@ -15,6 +15,7 @@
 import { IconCheckOutlineRegular, IconCopyOutlineRegular, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useRef, useState } from 'react';
 
+import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { changedSettingFields, decodeConfigTransfer, encodeConfigTransfer } from '../configTransfer.ts';
 
@@ -203,7 +204,7 @@ export function ConfigTransfer({
         {/* 只读说明：与按钮 disabled 同步出现，避免点了没反应；导出不受只读影响 */}
         {!writable && <span className={shared.goHint}>{t('settings.configReadonlyHint')}</span>}
         {error !== null && (
-          <span className={css.errorHint} role="alert">{t(ERROR_KEYS[error])}</span>
+          <HintCard variant="error" role="alert" title={t(ERROR_KEYS[error])} />
         )}
         {preview !== null && (
           <div className={css.preview}>

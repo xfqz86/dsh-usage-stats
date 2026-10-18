@@ -13,15 +13,18 @@
  *   DeepSeek 迷你芯片，两行含货币与金额缩写，今日用量迷你芯片，两行含今日与 tokens 缩写数值，
  *   tooltip 给出今日完整明细。整块按钮任意位置可点。
  *
+ * 三额度芯片与今日明细的 tooltip 正常态为卡片化明细，未配置、未订阅、查询失败与无数据统一为深色底状态提示卡
+ * （HintCard，tone="tip"）。
+ *
  * Go 额度、DeepSeek 余额与 Z.ai 额度的抓取开关、侧边栏展示开关与抓取间隔来自偏好设置 useUsageSettings（服务端设置文档，见 client/settings.ts）：
  * 关闭抓取则不轮询，对应数据恒为 null，芯片自然不渲染；侧边栏开关只影响底部芯片展示，不影响模态窗内详情。
  */
 
-import { IconDataOutlineRegular, Tooltip as BaseTooltip } from '@deepseek-ai/dsh-client-ui-primitives';
+import { IconDataOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useRef, useState } from 'react';
 
 
-import { cacheTotal, goLevelOf, goPercent, goResetsAt } from '../../utils.ts';
+import { cacheTotal, goLevelOf, goPercent, goResetsAt, QUOTA_CREDENTIAL_KEYS } from '../../utils.ts';
 import { HintCard } from '../components/HintCard.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
@@ -34,8 +37,10 @@ import { useUsageSettings } from '../useUsageSettings.ts';
 import css from './UsageStatsFooter.module.css';
 import { UsageStatsPanel } from './UsageStatsPanel.tsx';
 
+import type { DeepSeekBalance } from '../../types.ts';
 import type { LocaleFn } from '../locales.ts';
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
+import type { ReactNode } from 'react';
 
 export type UsageStatsFooterProps =
   PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-stats'>;
@@ -64,13 +69,18 @@ const TIP_LEVEL_COLOR: Record<'ok' | 'warn' | 'over', string> = {
   over: 'var(--dsw-alias-state-error-primary, #e5484d)',
 };
 
+/** 余额气泡是否进入正常态：查询成功、接口可用且至少一项币种明细。 */
+function hasBalance(value: DeepSeekBalance): boolean {
+  return value.status === 'ok' && value.isAvailable && value.balances.length > 0;
+}
+
 /** tooltip 标题行，13px 字号、700 字重，底部留白与卡片群分隔。 */
-function TipTitle({ children }: { children: React.ReactNode }) {
+function TipTitle({ children }: { children: ReactNode }) {
   return <div className={shared.tipTitle}>{children}</div>;
 }
 
 /** 小徽标 pill，展示货币代码或订阅计划名；超长计划名由调用方给 maxWidth 收窄。 */
-function TipPill({ children, maxWidth }: { children: React.ReactNode; maxWidth?: number }) {
+function TipPill({ children, maxWidth }: { children: ReactNode; maxWidth?: number }) {
   return (
     <span className={shared.tipPill} style={maxWidth === undefined ? undefined : { maxWidth }}>
       {children}
@@ -78,13 +88,8 @@ function TipPill({ children, maxWidth }: { children: React.ReactNode; maxWidth?:
   );
 }
 
-/** 状态提示卡，用于 no-key、no-plan、error 与空数据等非正常态。 */
-function TipHint({ children }: { children: React.ReactNode }) {
-  return <div className={shared.tipHint}>{children}</div>;
-}
-
 /** tooltip 底部更新时间，右对齐、顶部带分割线，弱化但仍可读。 */
-function TipFooter({ children }: { children: React.ReactNode }) {
+function TipFooter({ children }: { children: ReactNode }) {
   return <div className={shared.tipFooter}>{children}</div>;
 }
 
@@ -191,6 +196,30 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       : [];
   const resetsOf = (win: GoWindow): string => goResetsAt(t, win);
 
+  // 非正常态提示卡统一映射：未配置列凭据名、查询失败给自动重试说明，未订阅额外标出计划名（仅 Go / Z.ai 有该态），
+  // DeepSeek 无订阅态，查询成功但余额不可用 / 无明细为信息卡；tooltip 内一律 tone="tip"。
+  const quotaHintCard = (status: 'no-key' | 'no-plan' | 'error', keys: readonly string[], planName?: string): ReactNode => {
+    if (status === 'no-key') {
+      return <HintCard variant="unset" title={t('hint.notConfigured')} detail={t('hint.setInCredentials')} keys={keys} tone="tip" />;
+    }
+    if (status === 'no-plan') {
+      return <HintCard variant="plan" title={t('hint.noSubscription')} detail={planName} tone="tip" />;
+    }
+    return <HintCard variant="error" title={t('hint.queryFailed')} detail={t('hint.autoRetry')} tone="tip" />;
+  };
+  const deepseekHintCard = (value: DeepSeekBalance): ReactNode => {
+    if (value.status !== 'ok') return quotaHintCard(value.status, QUOTA_CREDENTIAL_KEYS.deepseek);
+    const emptyTitle = value.isAvailable ? t('deepseek.balancesEmpty') : t('deepseek.notAvailable');
+    return <HintCard variant="empty" title={emptyTitle} tone="tip" />;
+  };
+  // DeepSeek 非正常态气泡：来源标题行 + 提示卡，宽列与折叠 rail 共用。
+  const deepseekStatusPanel = (value: DeepSeekBalance): ReactNode => (
+    <div className={shared.tipPanel}>
+      <TipTitle>{t('deepseek.title')}</TipTitle>
+      {deepseekHintCard(value)}
+    </div>
+  );
+
   // 额度芯片档位样式，避免嵌套三元
   const getChipClass = (level: 'over' | 'warn' | 'ok'): string => {
     if (level === 'over') return css.goChipOver;
@@ -212,26 +241,12 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   };
 
   // ---- DeepSeek 余额，多币种余额明细，仅含余额、无今日用量 ----
-  // 卡片式布局，标题 + 货币卡片含徽标与大字号总额 + 赠送与充值两行细分含圆点标识与分割线 + 底部更新时间。
+  // 卡片式布局，标题 + 货币卡片含徽标与大字号总额 + 赠送与充值两行细分含圆点标识与分割线 + 底部更新时间；
+  // 未配置、查询失败与余额不可用 / 无明细为非正常态提示卡。
   const deepseekWideTooltip = (() => {
-    if (deepseek?.status !== 'ok') return null;
+    if (deepseek === null) return '';
+    if (!hasBalance(deepseek)) return deepseekStatusPanel(deepseek);
     const balances = deepseek.balances;
-    if (!deepseek.isAvailable) {
-      return (
-        <div className={shared.tipPanel}>
-          <TipTitle>{t('deepseek.title')}</TipTitle>
-          <TipHint>{t('deepseek.notAvailable')}</TipHint>
-        </div>
-      );
-    }
-    if (balances.length === 0) {
-      return (
-        <div className={shared.tipPanel}>
-          <TipTitle>{t('deepseek.title')}</TipTitle>
-          <TipHint>{t('deepseek.balancesEmpty')}</TipHint>
-        </div>
-      );
-    }
     return (
       <div className={shared.tipPanelWide}>
         <TipTitle>{t('deepseek.title')}</TipTitle>
@@ -294,72 +309,48 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const railRolling = goWindows.find((w) => w.key === 'rolling');
 
   // Go 额度 tooltip，宽列芯片与折叠 rail 共用，卡片化三档窗口明细，
-  // 每档一张窗口卡含窗口名、档位着色百分比、进度条与重置时间，异常态为提示卡。
+  // 每档一张窗口卡含窗口名、档位着色百分比、进度条与重置时间，未配置、未订阅与查询失败为提示卡。
   const goTipContent = (() => {
     if (go === null) return '';
-    const wrap = (hint: string) => (
+    if (go.status !== 'ok') {
+      return (
+        <div className={shared.tipPanelGo}>
+          <TipTitle>{t('go.title')}</TipTitle>
+          {quotaHintCard(go.status, QUOTA_CREDENTIAL_KEYS.go, t('go.planName'))}
+        </div>
+      );
+    }
+    if (goWindows.length === 0) return '';
+    return (
       <div className={shared.tipPanelGo}>
         <TipTitle>{t('go.title')}</TipTitle>
-        <TipHint>{hint}</TipHint>
+        <div className={shared.tipStack}>
+          {goWindows.map((w) => {
+            const pct = goPercent(w.win);
+            return (
+              <QuotaTipRow
+                key={w.key}
+                label={w.full}
+                pct={pct}
+                level={goLevelOf(pct)}
+                reset={resetsOf(w.win)}
+              />
+            );
+          })}
+        </div>
+        <TipFooter>
+          {t('updatedAt')} {new Date(go.fetchedAt).toLocaleTimeString()}
+        </TipFooter>
       </div>
     );
-    if (go.status === 'ok') {
-      if (goWindows.length === 0) return '';
-      return (
-        <div className={shared.tipPanelGo}>
-          <TipTitle>{t('go.title')}</TipTitle>
-          <div className={shared.tipStack}>
-            {goWindows.map((w) => {
-              const pct = goPercent(w.win);
-              return (
-                <QuotaTipRow
-                  key={w.key}
-                  label={w.full}
-                  pct={pct}
-                  level={goLevelOf(pct)}
-                  reset={resetsOf(w.win)}
-                />
-              );
-            })}
-          </div>
-          <TipFooter>
-            {t('updatedAt')} {new Date(go.fetchedAt).toLocaleTimeString()}
-          </TipFooter>
-        </div>
-      );
-    }
-    if (go.status === 'no-key') return wrap(t('go.notConfigured'));
-    if (go.status === 'no-plan') {
-      return (
-        <div className={shared.tipPanelGo}>
-          <TipTitle>{t('go.title')}</TipTitle>
-          <HintCard text={t('go.noPlan')} tone="tip" />
-        </div>
-      );
-    }
-    return wrap(t('go.unavailable'));
   })();
 
-  // 折叠态 DeepSeek 芯片 tooltip，与宽列同款卡片设计，共用助手，rail 下宽度略收。
+  // 折叠态 DeepSeek 芯片 tooltip，与宽列同款卡片设计，共用助手，rail 下宽度略收；
+  // 非正常态与宽列共用同一状态提示卡。
   const railDeepSeekContent = (() => {
-    if (deepseek?.status !== 'ok') return '';
+    if (deepseek === null) return '';
+    if (!hasBalance(deepseek)) return deepseekStatusPanel(deepseek);
     const balances = deepseek.balances;
-    if (!deepseek.isAvailable) {
-      return (
-        <div className={shared.tipPanel}>
-          <TipTitle>{t('deepseek.title')}</TipTitle>
-          <TipHint>{t('deepseek.notAvailable')}</TipHint>
-        </div>
-      );
-    }
-    if (balances.length === 0) {
-      return (
-        <div className={shared.tipPanel}>
-          <TipTitle>{t('deepseek.title')}</TipTitle>
-          <TipHint>{t('deepseek.balancesEmpty')}</TipHint>
-        </div>
-      );
-    }
     return (
       <div className={shared.tipPanelRail}>
         <TipTitle>{t('deepseek.title')}</TipTitle>
@@ -438,32 +429,30 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   const railZaiCls = railZaiLevel ? getChipClass(railZaiLevel) : '';
 
   // Z.ai 额度 tooltip，宽列芯片与折叠 rail 共用，卡片化明细 —
-  // 标题行带订阅计划徽标，会话与本周窗口卡及 Web 搜索次数卡含进度条与重置时间，底部带更新时间，异常态为提示卡。
+  // 标题行带订阅计划徽标，会话与本周窗口卡及 Web 搜索次数卡含进度条与重置时间，底部带更新时间，
+  // 未配置、未订阅、查询失败与无额度数据为提示卡。
   const zaiTipContent = (() => {
     if (zai === null) return '';
-    const wrap = (hint: string) => (
-      <div className={shared.tipPanelGo}>
-        <TipTitle>{t('zai.title')}</TipTitle>
-        <TipHint>{hint}</TipHint>
-      </div>
-    );
     if (zai.status !== 'ok') {
-      if (zai.status === 'no-key') return wrap(t('zai.notConfigured'));
-      if (zai.status === 'no-plan') {
-        return (
-          <div className={shared.tipPanelGo}>
-            <TipTitle>{t('zai.title')}</TipTitle>
-            <HintCard text={t('zai.noPlan')} tone="tip" />
-          </div>
-        );
-      }
-      return wrap(t('zai.unavailable'));
+      return (
+        <div className={shared.tipPanelGo}>
+          <TipTitle>{t('zai.title')}</TipTitle>
+          {quotaHintCard(zai.status, QUOTA_CREDENTIAL_KEYS.zai, t('zai.planName'))}
+        </div>
+      );
     }
     const webReset = zai.webSearches?.resetsAt
       ? t('zai.resetsAt', { time: new Date(zai.webSearches.resetsAt).toLocaleString() })
       : '';
     const hasRows = zaiWindows.length > 0 || zai.webSearches !== null;
-    if (!hasRows) return wrap(t('zai.noData'));
+    if (!hasRows) {
+      return (
+        <div className={shared.tipPanelGo}>
+          <TipTitle>{t('zai.title')}</TipTitle>
+          <HintCard variant="empty" title={t('zai.noData')} tone="tip" />
+        </div>
+      );
+    }
     return (
       <div className={shared.tipPanelGo}>
         <div className={shared.tipHeaderRow}>
@@ -506,7 +495,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
 
   // 折叠态 Go 芯片内容，ok 时展示滚动 5 小时窗口，no-key、no-plan、error 与加载中均共用 goTipContent，
   // 内容为卡片化明细或提示卡，go 为 null 时内容为空串、气泡自然隐藏。
-  const renderGoRail = (): React.ReactNode => {
+  const renderGoRail = (): ReactNode => {
     if (go?.status === 'ok' && railRolling !== undefined) {
       return (
         <Tooltip content={goTipContent} side="top" delayMs={400}>
@@ -548,7 +537,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   };
 
   // 折叠态 DeepSeek 芯片内容
-  const renderDeepSeekRail = (): React.ReactNode => {
+  const renderDeepSeekRail = (): ReactNode => {
     if (deepseek?.status === 'ok' && deepseek.isAvailable && deepseek.balances.length > 0) {
       return (
         <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
@@ -561,32 +550,32 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     }
     if (deepseek?.status === 'ok' && !deepseek.isAvailable) {
       return (
-        <BaseTooltip label={t('deepseek.notAvailable')} side="top" delayMs={400}>
+        <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
             <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
-        </BaseTooltip>
+        </Tooltip>
       );
     }
     if (deepseek?.status === 'no-key') {
       return (
-        <BaseTooltip label={t('deepseek.notConfigured')} side="top" delayMs={400}>
+        <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
             <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
-        </BaseTooltip>
+        </Tooltip>
       );
     }
     if (deepseek?.status === 'error') {
       return (
-        <BaseTooltip label={t('deepseek.unavailable')} side="top" delayMs={400}>
+        <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
           <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
             <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
             <span className={css.goRailChipPct}>!</span>
           </span>
-        </BaseTooltip>
+        </Tooltip>
       );
     }
     return (
@@ -600,7 +589,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
   };
 
   // 折叠态 Z.ai 芯片内容，全部状态共用 zaiTipContent，内容为卡片化明细或提示卡。
-  const renderZaiRail = (): React.ReactNode => {
+  const renderZaiRail = (): ReactNode => {
     if (zai?.status === 'ok' && railZai) {
       return (
         <Tooltip content={zaiTipContent} side="top" delayMs={400}>
@@ -743,19 +732,19 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
                 </Tooltip>
               )}
               {deepseek.status === 'ok' && !deepseek.isAvailable && (
-                <BaseTooltip label={t('deepseek.notAvailable')} side="top" delayMs={400}>
+                <Tooltip content={deepseekWideTooltip} side="top" delayMs={400}>
                   <span className={css.goChip}>—</span>
-                </BaseTooltip>
+                </Tooltip>
               )}
               {deepseek.status === 'no-key' && (
-                <BaseTooltip label={t('deepseek.notConfigured')} side="top" delayMs={400}>
+                <Tooltip content={deepseekWideTooltip} side="top" delayMs={400}>
                   <span className={`${css.goChip} ${css.goChipHint}`}>{t('state.noKey')}</span>
-                </BaseTooltip>
+                </Tooltip>
               )}
               {deepseek.status === 'error' && (
-                <BaseTooltip label={t('deepseek.unavailable')} side="top" delayMs={400}>
+                <Tooltip content={deepseekWideTooltip} side="top" delayMs={400}>
                   <span className={`${css.goChip} ${css.goChipOver}`}>!</span>
-                </BaseTooltip>
+                </Tooltip>
               )}
             </span>
           )}

@@ -147,13 +147,6 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
-/* 解析错误：与预览同层级，用错误色标明不是提示而是拒绝 */
-.errorHint {
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-state-error-primary);
-}
-
 /* 内联反馈（已复制 / 导入成功）：成功色，紧跟操作行下方 */
 .feedback {
   align-self: flex-start;

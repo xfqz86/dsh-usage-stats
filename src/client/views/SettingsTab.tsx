@@ -5,7 +5,7 @@
  * 偏好设置持久化在服务端 profile 配置文档（`usage-stats` 条目，经 ctx.configForms 的
  * 设置表单读写，见 ../settings.ts 与 ../useUsageSettings.ts），
  * 换浏览器、换设备共用同一份；正常态不显示存储说明，只有读不到或写不了 profile 配置时
- * 才在表格上方提示一行（内容即改动不会保存）。
+ * 才在表格上方挂一张状态提示卡（内容即改动不会保存）。
  * 额度监控由一个四列表格承载（见 QuotaMonitorTable）：一行一个来源，
  * 列为监控项 / 启用监控 / 在侧边栏展示 / 抓取间隔；
  * 启用项对应 deepseekEnabled / goEnabled / zaiEnabled，关闭后不再轮询该来源官方接口；
@@ -36,6 +36,7 @@ import {
 import { useState } from 'react';
 
 import { postLedgerApi } from '../api.ts';
+import { HintCard } from '../components/HintCard.tsx';
 import { SettingsSwitch } from '../components/SettingsSwitch.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { fmtFull } from '../stats.ts';
@@ -103,7 +104,7 @@ export function SettingsTab({
   return (
     <div className={shared.section}>
       {/* 存储告警：只在读不到/写不了 profile 配置时出现，正常态直接从额度监控卡片开始 */}
-      {storageWarning !== null && <span className={shared.goHint}>{storageWarning}</span>}
+      {storageWarning !== null && <HintCard variant="warn" role="status" title={storageWarning} />}
 
       {/* 额度监控：三个来源压成一张四列表格，开关与间隔的读写全在子视图内 */}
       <QuotaMonitorTable settings={settings} onUpdateSettings={onUpdateSettings} t={t} />

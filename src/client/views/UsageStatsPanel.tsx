@@ -26,6 +26,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useState, useMemo, type ComponentType } from 'react';
 
+import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { redirectModels } from '../stats.ts';
 
@@ -128,8 +129,17 @@ export function UsageStatsPanel({
   // 内容区渲染，避免嵌套三元
   function renderBody() {
     if (err) {
-      // TODO(诊断后删除)：括号内为真实失败原因，定位用。
-      return <div className={shared.empty}>{t('state.unavailable')}{errDetail ? ` (${errDetail})` : ''}</div>;
+      // TODO(诊断后删除)：errDetail 是真实失败原因，作为卡片第二行展示，没有则省略。
+      return (
+        <div className={shared.statusWrap}>
+          <HintCard
+            variant="error"
+            role="alert"
+            title={t('state.unavailable')}
+            detail={errDetail ?? undefined}
+          />
+        </div>
+      );
     }
     if (!value) {
       return <div className={shared.empty}>{t('state.loading')}</div>;
