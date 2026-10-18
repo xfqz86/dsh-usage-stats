@@ -100,14 +100,16 @@ dsh-usage-stats/
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表，含占比条，布局与会话 Tab 对齐。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab OverviewTab：Bento 磁贴网格 — 布局见布局图：今日/总计左列，热力图右大区，底行 DeepSeek/Go。
 │   │   │   ├── OverviewTab.tsx ← 概览 Tab，Bento 磁贴网格，包含「今日」与「总计」英雄磁贴，左列上下两格， 右大区为「热力图」占 3 列 2 行，底行含「DeepSeek 余额」、「OpenCode Go 额度」与「Z.ai 额度」， 各卡片受监控开关控制，未启用时隐藏，布局严格按布局图分区，使用 grid-template-areas，独立成文件。
+│   │   │   ├── QuotaMonitorTable.module.css ← 额度监控表格 QuotaMonitorTable：设置 Tab 的专属子视图样式， 一张四列表格承载三个额度来源的启用 / 侧边栏展示 / 抓取间隔。
+│   │   │   ├── QuotaMonitorTable.tsx ← 额度监控表格：设置 Tab 的专属子视图，把 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度压成 一张四列表格（监控项 / 启用监控 / 在侧边栏展示 / 抓取间隔），一行一个额度来源。
 │   │   │   ├── SessionDetail.module.css ← 会话明细弹窗（SessionDetail 与两个子视图）：会话页主会话行末尾的「明细」链接打开的 二级弹窗。
 │   │   │   ├── SessionDetail.tsx ← 会话明细弹窗（SessionDetail）：会话页主会话行末尾的「明细」链接打开的二级弹窗， 含标题（会话标题 + 合计）、按日期 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮。
 │   │   │   ├── SessionDetailDates.tsx ← 会话明细弹窗的「按日期」子视图：该会话集合的每日用量——顶部每日趋势图、下方用量表， 与日期 Tab 同一套展示（图由 StackedBar 补齐每一天，表格只列真正有量的日子）； 列与日期 Tab / 模型明细的按日期表对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
 │   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 默认按「总计」降序、可排序、每页 15 条；占比以集合这张表的总和为分母， 用 stats.largestRemainderPcts 配分（与模型页同一口径，1 位小数总和恰为 100）。
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab SessionsTab：仅保留首列最小宽度。
 │   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开，数据完整展示。
-│   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、 抓取间隔数字输入、可折叠分区（账本操作、配置迁移）与底部页脚。
-│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置，含 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度监控各三项，配置迁移折叠内含导出与导入配置串，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
+│   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、可折叠分区（账本操作、配置迁移） 与底部页脚。
+│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置，额度监控表格汇总 DeepSeek 余额 / OpenCode Go 额度 / Z.ai 额度三项监控，配置迁移折叠内含导出与导入配置串，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
 │   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层，支持宽列与 56px rail 两种形态，几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。

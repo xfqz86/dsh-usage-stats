@@ -1,8 +1,8 @@
-/* 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、
-   抓取间隔数字输入、可折叠分区（账本操作、配置迁移）与底部页脚。颜色全部使用设计 token
-   （token 名以 test/styles.mjs 对照 harness 主题校验，不得自造）。 */
+/* 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、可折叠分区（账本操作、配置迁移）
+   与底部页脚。颜色全部使用设计 token（token 名以 test/styles.mjs 对照 harness 主题校验，不得自造）。 */
 /* .section* / .goHint 等基元见 UsageStatsCommon.module.css；
-   折叠内的配置迁移样式见 ConfigTransfer.module.css。 */
+   折叠内的配置迁移样式见 ConfigTransfer.module.css；
+   额度监控表格（含开关行与抓取间隔输入）的样式在 QuotaMonitorTable.module.css。 */
 
 /* ---- 重建账本操作按钮 ---- */
 .refreshBtn {
@@ -79,11 +79,6 @@
   flex: none;
 }
 
-.prefGroupIconDeepSeek {
-  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
-  color: var(--dsw-alias-state-success-primary);
-}
-
 .prefGroupTitle {
   font-size: 12px;
   font-weight: 600;
@@ -124,15 +119,6 @@
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
 
-.settingRowDisabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.settingRowDisabled:hover {
-  background: transparent;
-}
-
 .settingText {
   display: flex;
   flex-direction: column;
@@ -150,44 +136,6 @@
   font-size: 11px;
   line-height: 16px;
   color: var(--dsw-alias-label-tertiary);
-}
-
-/* 抓取间隔数字输入：焦点高亮，禁用时半透明。 */
-.intervalInput {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: 12px;
-}
-
-.intervalInput input {
-  width: 56px;
-  padding: 4px 8px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--dsw-alias-label-primary);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.intervalInput input:focus {
-  outline: none;
-  border-color: var(--dsw-alias-brand-primary);
-}
-
-.intervalInput input:disabled {
-  opacity: 0.6;
-}
-
-.intervalUnit {
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--dsw-alias-label-tertiary);
-  white-space: nowrap;
 }
 
 /* ---- 可折叠分区：账本操作与配置迁移两块共用同一套外观，

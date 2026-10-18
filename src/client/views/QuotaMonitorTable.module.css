@@ -1,0 +1,245 @@
+/* 额度监控表格 QuotaMonitorTable：设置 Tab 的专属子视图样式，
+   一张四列表格承载三个额度来源的启用 / 侧边栏展示 / 抓取间隔。卡片外观沿用设置页既有
+   语言（圆角 12px、border-l2、bg-layer-2、shadow-lv1），颜色只引用 --dsw-* 主题 token
+   （test/styles.mjs 对照 harness 主题校验，不写自定义属性兜底）。 */
+
+/* ---- 卡片与卡头：与 SettingsTab.module.css 的 prefGroup* 同一套外观 ---- */
+.card {
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-shadow-lv1);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.headIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  /* 品牌底用 state-business-primary（DeepSeek 蓝，两套主题恒定色调），
+     不用 brand-primary——后者是文字前景色，深色模式近白，做底色会变成浅色块。 */
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.headTitle {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  white-space: nowrap;
+}
+
+/* 已启用计数 pill：与各分组头部的计数徽标同一套写法 */
+.count {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 14%, transparent);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- 表格骨架：fixed 布局让首列（监控项）吃满剩余宽度，三个控制列按契约固定 ---- */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.colEnable {
+  width: 96px;
+}
+
+.colSidebar {
+  width: 118px;
+}
+
+.colInterval {
+  width: 132px;
+}
+
+.table th,
+.table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+/* 表头：说明性小标签，caption 档只在表头/分区标题这类位置用（docs/STYLE.md §8） */
+.table thead th {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  color: var(--dsw-alias-label-caption);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* 行名单元：<th scope="row"> 内放图标 chip + 主名/副标题两行 */
+.table tbody th {
+  font-weight: 400;
+  text-align: left;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--dsw-alias-label-tertiary) 12%, transparent);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.itemText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.itemName {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemSub {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 三个控制列居中；关闭监控时后两列整格半透明（控件同时 disabled，取值不回写） */
+.control {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.controlOff {
+  opacity: 0.5;
+}
+
+/* 行悬浮沿用设置页列表项的反馈色 */
+.table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.table tbody tr:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* 最后一行不留底边框：卡片圆角处不再多出一条线 */
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 间隔输入：52px 装得下三位数，右侧单位贴着输入框基线 */
+.interval {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.intervalInput {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-primary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.intervalInput:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.intervalInput:disabled {
+  cursor: not-allowed;
+}
+
+.intervalUnit {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+/* 卡底提示条：说明关闭监控与「在侧边栏展示」各自的作用范围 */
+.hint {
+  padding: 8px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* 仅读屏文本（caption 与首列表头）：视觉留空但不丢表格语义 */
+.srOnly {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ≤800px 视口收窄控制列与单元格留白，给行名让出宽度 */
+@media (max-width: 800px) {
+  .colEnable {
+    width: 84px;
+  }
+
+  .colSidebar {
+    width: 106px;
+  }
+
+  .colInterval {
+    width: 124px;
+  }
+
+  .table th,
+  .table td {
+    padding: 6px 8px;
+  }
+}

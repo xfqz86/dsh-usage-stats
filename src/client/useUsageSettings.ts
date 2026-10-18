@@ -7,7 +7,7 @@
  * 于是刷新页面、换浏览器、换机器都保持同一份偏好。
  *
  * 返回 [settings, update]：update 接受 Partial 局部合并并做夹取后写回。
- * 设置页另用 useUsageSettingsView 读存储状态，提示设置落在服务端文档、不可用时明确告知。
+ * 设置页另用 useUsageSettingsView 读存储状态，只在配置不可读/不可写时提示一行。
  */
 
 import { useCallback, useSyncExternalStore } from 'react';
@@ -26,7 +26,7 @@ export function useUsageSettings(): [UsageSettings, (patch: Partial<UsageSetting
   return [view.settings, update];
 }
 
-/** 偏好存储状态 hook：设置页据此提示设置存放在服务端配置文件的何处、当前是否可写。 */
+/** 偏好存储状态 hook：设置页据此在配置不可读/不可写时提示改动不会保存。 */
 export function useUsageSettingsView(): UsageSettingsView {
   return useSyncExternalStore(subscribeUsageSettings, usageSettingsView, usageSettingsView);
 }
