@@ -536,7 +536,8 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     );
   };
 
-  // 折叠态 DeepSeek 芯片内容
+  // 折叠态 DeepSeek 芯片内容：芯片固定 36px 宽、标签 9px，非正常态用短名「余额」，
+  // 全名 63px 会撑出芯片底色（宽列仍用 deepseek.label 全名）。
   const renderDeepSeekRail = (): ReactNode => {
     if (deepseek?.status === 'ok' && deepseek.isAvailable && deepseek.balances.length > 0) {
       return (
@@ -552,7 +553,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
-            <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
+            <span className={css.goRailChipLabel}>{t('deepseek.short.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
         </Tooltip>
@@ -562,7 +563,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
           <span className={css.goRailChipBox}>
-            <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
+            <span className={css.goRailChipLabel}>{t('deepseek.short.label')}</span>
             <span className={css.goRailChipPct}>—</span>
           </span>
         </Tooltip>
@@ -572,7 +573,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
       return (
         <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
           <span className={`${css.goRailChipBox} ${css.goChipOver}`}>
-            <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
+            <span className={css.goRailChipLabel}>{t('deepseek.short.label')}</span>
             <span className={css.goRailChipPct}>!</span>
           </span>
         </Tooltip>
@@ -581,7 +582,7 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
     return (
       <Tooltip content={railDeepSeekContent} side="top" delayMs={400}>
         <span className={css.goRailChipBox}>
-          <span className={css.goRailChipLabel}>{t('deepseek.label')}</span>
+          <span className={css.goRailChipLabel}>{t('deepseek.short.label')}</span>
           <span className={css.goRailChipPct}>—</span>
         </span>
       </Tooltip>
