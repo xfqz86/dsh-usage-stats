@@ -6,10 +6,12 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-19
+
 ### 变更
 
 - **额度监控改成一张表**：三份额度并成一张表，开关与抓取间隔一眼对齐，一屏看全，改设置不用再来回翻；关掉某项监控时，同一行里联动的两项设置直接变灰
-- **提示统一成状态卡**：额度未配置时直接列出要配的凭据名，未订阅、查询失败、暂无数据与明细加载失败也换成同一张提示卡（加载失败可点重试），磁贴、侧边栏悬浮气泡与设置页观感一致
+- **提示统一成状态卡**：额度未配置时直接列出要配的凭据名，未订阅、查询失败、暂无数据与明细加载失败也换成同一张提示卡（明细加载失败可点重试），磁贴、侧边栏悬浮气泡与设置页观感一致
 
 ### 修复
 
@@ -184,7 +186,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.5...v0.4.6
