@@ -1,11 +1,9 @@
 /**
- * 统一堆叠柱状图 StackedBar，合并 DateStackedBar 与 ModelStackedBar 为单一组件。
- * 每日一柱、按 token 类型 date 模式或按模型 model 模式堆叠，横向滚动。
- * date 模式仅展示输入、输出、缓存三段，柱上叠加缓存命中率折线（0-100% 映射柱高，空值断开）。
- * 抽提公共壳逻辑：wrapRef/tipRef、tip/tipPos 状态、滚动到末尾、悬浮定位、空状态、
- * header+图例容器、scroll+grid+axis+tip 壳；差异仅在图例、柱段与 tooltip 的分支渲染。
- * 样式已合并至 StackedBar.module.css，单文件承载公共壳与变体类。
- * 独立成文件，遵循一个组件一个文件原则。
+ * 堆叠柱状图 StackedBar：date 模式按 token 类型（输入/输出/缓存）堆叠并叠加缓存命中率折线，
+ * model 模式按模型堆叠；每日一柱，横向滚动。
+ *
+ * 两种模式共用同一套壳（wrapRef/tipRef、悬浮定位、滚动到末尾、空状态、header 与图例），
+ * 只在图例、柱段与 tooltip 上分支；几何常量 `BAR_W`/`BAR_GAP` 与 CSS 尺寸的换算见函数内注释。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';

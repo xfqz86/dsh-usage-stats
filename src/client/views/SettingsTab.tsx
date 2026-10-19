@@ -1,30 +1,14 @@
 /**
- * 设置 Tab：偏好设置，额度监控表格汇总 DeepSeek 余额 / OpenCode Go 额度 / Z.ai 额度三项监控，配置迁移折叠内含导出与导入配置串，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
- * 独立成文件，一个组件一个文件。
+ * 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
  *
- * 偏好设置持久化在服务端 profile 配置文档（`usage-stats` 条目，经 ctx.configForms 的
- * 设置表单读写，见 ../settings.ts 与 ../useUsageSettings.ts），
- * 换浏览器、换设备共用同一份；正常态不显示存储说明，只有读不到或写不了 profile 配置时
- * 才在表格上方挂一张状态提示卡（内容即改动不会保存）。
- * 额度监控由一个四列表格承载（见 QuotaMonitorTable）：一行一个来源，
- * 列为监控项 / 启用监控 / 在侧边栏展示 / 抓取间隔；
- * 启用项对应 deepseekEnabled / goEnabled / zaiEnabled，关闭后不再轮询该来源官方接口；
- * 展示项对应 showDeepSeekInSidebar / showGoInSidebar / showZaiInSidebar，只影响侧边栏底部芯片；
- * 间隔项对应 deepseekFetchMinutes / goFetchMinutes / zaiFetchMinutes，单位分钟，下限见
- * utils.ts 的三套 clamp 常量，关闭监控时后两列置灰不可改。
- * 模型统计重定向分组：规则表 modelRedirects，把来源供应商/模型的用量算到目标供应商/
- * 模型名下（只影响模型页统计），编辑与提交见 ModelRedirectEditor，徽标显示规则条数。
- * 会话分组一项：会话标题旁展示会话 ID（showSessionId，默认开启），关闭后标题右侧
- * 工具区不再挂 session-id 徽标（`conversation.session.header.utilities`
- * 的 `dsh-usage-stats-session-id` entry 渲染空）。
- * 两个折叠区共用 CSS Modules 的 fold* 外观，自上而下为配置迁移、账本操作——前者只读写
- * 偏好设置文档，后者动的才是用量数据，危险度高的排下面。
- * 配置迁移折叠：标题为 t('settings.configTransfer')，默认折叠，导出与导入见 ConfigTransfer；
- * 账本操作折叠：标题为 t('settings.ledgerOps')，内含清零与重建两项危险操作；
- * 快照 scanning 为真（首启扫描或重建扫描进行中）时两项同时置灰并给出原因，
- * 扫描期间不允许清零/重建——两者会与扫描交错写同一账本与聚合，服务端也以
- * usageStats/busy 拒绝。
- * 底部页脚：展示事件数与更新时间，原概览页脚迁移至此。
+ * 偏好持久化在服务端 profile 配置文档的 `usage-stats` 条目（经 ctx.configForms 的表单读写，
+ * 见 ../settings.ts 与 ../useUsageSettings.ts），换浏览器、换设备共用同一份；读不到或写不了
+ * 时在额度监控表格上方挂一张状态提示卡，正常态不显示存储说明。
+ * 额度监控是一张四列表格（行 = 来源，列 = 监控项 / 启用 / 侧边栏展示 / 抓取间隔）：
+ * 启用项关掉后不再轮询该来源，展示项只影响侧边栏芯片，关闭监控时后两列置灰不可改。
+ * 其余分组为模型统计重定向规则表（ModelRedirectEditor）与会话 ID 徽标开关。
+ * 两个折叠区自上而下为配置迁移、账本操作（危险度高的在下）；快照 scanning 为真时
+ * 清零/重建置灰，展开账本操作区时给出原因——扫描会与写账本交错，服务端也以 usageStats/busy 拒绝。
  */
 
 import {
@@ -247,7 +231,7 @@ export function SettingsTab({
         onConfirm={rebuild.confirm}
       />
 
-      {/* 底部页脚：事件数与更新时间，原概览页脚迁移至此 */}
+      {/* 底部页脚：事件数与更新时间 */}
       <div className={css.footer}>
         <span>{t('events')} {fmtFull(value?.foldedEvents ?? 0)}</span>
         <span>{t('updatedAt')} {value?.time ? new Date(value.time).toTimeString().slice(0, 8) : '--'}</span>

@@ -369,7 +369,7 @@ export function modelRangeCutoff(range: ModelRange): number | null {
 // ---- 模型统计重定向：按用户规则把来源模型的用量并入目标模型 ----
 // 归并在浏览器端做，服务端快照始终是原始行：设置页要拿原始「供应商 + 模型」
 // 当规则候选，改规则也要立刻重算，不必等下一次轮询或重启。
-// 规则表来自偏好设置（utils.ts 归一化，client/settings.ts 读写），模型页消费。
+// 规则表来自偏好设置（utils.ts 归一化，client/settings.ts 读写），模型页与日期、会话明细的按模型表消费。
 
 /** 模型键：与账本、快照同一口径 `provider\0model`，utils.ts 的 splitModelKey 拆回。 */
 function modelKeyOf(provider: string, model: string): string {
@@ -624,7 +624,7 @@ export function filterModelsByRange(models: ModelStat[], range: ModelRange): Mod
   const out: ModelStat[] = [];
   for (const m of models) {
     const series = (m as { series?: SeriesPoint[] }).series ?? [];
-    // 无细分时，旧快照，该范围下置 0，避免误用全量
+    // 没有按日序列（明细类接口不带 series）时该范围下置 0，避免误用全量
     if (!series || series.length === 0) continue;
     let input = 0; let output = 0; let cacheRead = 0; let cacheWrite = 0; let reasoning = 0; let total = 0; let calls = 0;
     const filteredSeries: SeriesPoint[] = [];
@@ -671,7 +671,7 @@ export function buildModelStack(models: ModelStat[], range: ModelRange): ModelSt
   const modelOrder = filtered.map((m) => ({ provider: m.provider, model: m.model }));
   const byKey = new Map<string, ModelStat>();
   for (const m of filtered) byKey.set(m.provider + '\u0000' + m.model, m);
-  // 生成日桶，与 buildSet 同款日历推进，避免 DST 漂移
+  // 生成日桶：与 buildDateStack 同款日历推进，避免 DST 漂移
   const days: number[] = [];
   const cutoff = modelRangeCutoff(range);
   if (cutoff != null) {

@@ -1,48 +1,39 @@
 /**
  * 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
  *
- * 以真实 cordis Context 挂载 UsageStatsService（存储不 mock：账本直接写
- * node:sqlite 文件），直接调用 10 个 @Remote 方法，验证：
- *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/
- *     dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
- *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠
- *     事件，初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
- *   - 模型明细：按日（内存每日桶）与按会话（账本聚合）两路合计都对上快照模型行、
- *     相互一致，`since` 过滤与未知键返回空明细；
- *   - 单日明细：取快照里真实有量的一天，用量与快照该日系列点相等，并与当天
- *     模型行求和、会话行求和三者一致；同日不同时刻归一到同一本地日，非法 day
- *     与未来日期返回空明细；
- *   - 会话明细：集合由客户端传（所点行的折叠分组），合计与快照会话行（含子会话）
- *     逐位一致，两个维度与合计互相自洽；未知 id / 空集合返回空明细，乱序与重复
- *     等价；独立用例断言含子代理的主会话明细严格大于主会话自身、并等于分组行数字；
- *   - 方法与手写严格贡献相容：真实出入值过 zod 信封，错误码透传不断解析；
- *     SRC 线路字段（产物方法源码参数名）与贡献 wire 名逐个对齐——生产构建压缩
- *     方法签名会让新版网关拒收全部带参请求，此处立即失败；
+ * 以真实 cordis Context 挂载 UsageStatsService（存储不 mock：账本直接写 node:sqlite 文件），
+ * 直接调用 10 个 @Remote 方法，验证：
+ *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
+ *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠事件（锚点就在本文件，期望值运行时推导），
+ *     初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
+ *   - 模型明细：按日（内存每日桶）与按会话（账本聚合）两路合计都对上快照模型行、相互一致，
+ *     `since` 过滤与未知键返回空明细；
+ *   - 单日明细：用量等于快照该日系列点，并与当天模型行求和、会话行求和三者一致；
+ *     同日不同时刻归一到同一本地日，非法 day 与未来日期返回空明细；
+ *   - 会话明细：集合由客户端传（所点行的折叠分组），合计与快照会话行（含子会话）逐位一致；
+ *     未知 id / 空集合返回空明细，乱序与重复等价；含子代理的主会话明细严格大于主会话自身，
+ *     并等于分组行数字；
+ *   - 方法与手写严格贡献相容：真实出入值过 zod 信封，错误码透传；SRC 线路字段（产物方法源码
+ *     参数名）与贡献 wire 名逐个对齐——生产构建压缩方法签名会让新版网关拒收全部带参请求；
  *   - rebuild 并发返回 usageStats/busy，clear/seal 语义正确；
  *   - 三路额度在凭据中心缺席时确定性 no-key，不产生任何真实外网请求；
- *   - 重启恢复：重开同一 sqlite 文件、会话清单返回空，仍能从介质重建统计
- *     （不依赖重扫日志）；
- *   - 旧代次会话兼容：harness 两路以 SessionFormatUnsupportedError 拒绝时，raw 兜底
- *     自读磁盘最高代次原始日志（多帧 zstd / 未压缩明文）把用量折入账本，只折最高代次；
- *   - 清零墓碑回归（独立 DSH_HOME）：清零后重启保持归零且不再扫描，重建恢复 394
- *     后墓碑清除，再重启统计仍在；
+ *   - 重启恢复：重开同一 sqlite 文件、会话清单返回空，仍能从介质重建统计（不依赖重扫日志）；
+ *   - 旧代次会话兼容：harness 两路以 SessionFormatUnsupportedError 拒绝时，raw 兜底自读磁盘
+ *     最高代次原始日志（多帧 zstd / 未压缩明文）把用量折入账本，只折最高代次；
+ *   - 清零墓碑回归（独立 DSH_HOME）：清零后重启保持归零且不再扫描，重建后墓碑清除、统计仍在；
  *   - fork 继承前缀回归（独立 DSH_HOME）：query 与 raw 两路都只折自有事件；
- *   - 压缩调用计入回归（独立 DSH_HOME）：compaction/summary 的用量计入总量与模型
- *     拆分，缺 usage/零用量不入账，实时路径同样接纳；
- *   - 偏好设置条目接入与落盘（独立 DSH_HOME，真实 app-boot Loader + 真实
- *     ConfigEditor/SettingsForms）：条目把 usage-stats schema 作为 Config 声明后，
- *     describe 列出该命名空间且解析值为默认值、schema 可 JSON 序列化；浏览器端
- *     走的 settings.mutate 路径只把显式改过的字段写进 profile 补丁文档，其余字段
- *     继续跟随默认值，规则表整表落成 YAML 列表并原样读回；
- *   - 旧设置文档迁移两路（flow 风格真实片段）：基座自动导入尚存的 settings.yaml；
- *     基座导入失败后的现场（只剩 settings.yaml.imported）由插件回收，两路都只写与
- *     默认值不同的字段、不改段里没有的字段；回收只跑一次——同一 home 再启动两次
- *     （其间清空条目 config）都不得复活旧值；条目已有用户自己的配置时回收让位
- *     （不覆盖用户取值）但同样落标记，此后清空条目也不复活旧值。
+ *   - 压缩调用计入回归（独立 DSH_HOME）：compaction/summary 的用量计入总量与模型拆分，
+ *     缺 usage / 零用量不入账，实时路径同样接纳；
+ *   - 偏好设置条目接入与落盘（独立 DSH_HOME，真实 app-boot Loader + ConfigEditor/SettingsForms）：
+ *     describe 列出该命名空间且解析值为默认值、schema 可 JSON 序列化；浏览器端 settings.mutate
+ *     只把显式改过的字段写进 profile 补丁文档，规则表整表落成 YAML 列表并原样读回；
+ *   - 旧设置文档迁移两路（flow 风格真实片段）：基座自动导入尚存的 settings.yaml；基座导入失败后
+ *     的现场（只剩 settings.yaml.imported）由插件回收，两路都只写与默认值不同的字段；回收只跑一次，
+ *     条目已有用户配置时让位但同样落标记。
  * 信任与认证由网关载体统一处理，本测试只覆盖业务语义。
  *
- * 运行 `node --experimental-strip-types test/smoke.mjs`：lib 内 Remote
- * 服务为构建产物，贡献（zod）直引 src 源码。
+ * 运行 `node --experimental-strip-types test/smoke.mjs`：lib 内 Remote 服务为构建产物，
+ * 贡献（zod）直引 src 源码。
  */
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -81,7 +72,7 @@ const events = readFileSync(fixturePath, 'utf8')
   .split('\n').filter(Boolean).map((l) => JSON.parse(l))
 const SESSION_ID = 'session-910656fd-379b-4651-8301-c9233eaeead7'
 const OTHER_ID = 'session-66d03fb3-cffa-4af1-bc0b-4afcf034fac4'
-// 绝对基线（AGENTS §9）：fixture 共 397 行，其中 394 条为带 usage 且各 token
+// 绝对基线（锚点在本文件）：fixture 共 397 行，其中 394 条为带 usage 且各 token
 // 分量非负且总和为正的 assistant/message 事件 —— 全部可折叠（foldLedgerEvent
 // 对零用量行跳过）。期望值从 fixture 运行时推导后锚定 394：fixture 被裁剪或
 // 折叠口径回归时，双重断言都会显式失败而非静默通过。
@@ -93,7 +84,7 @@ const foldableCount = events.filter((e) => {
   return Number.isFinite(sum) && sum > 0
 }).length
 if (foldableCount !== 394) {
-  console.error(`FAIL: fixture 可折叠事件数为 ${String(foldableCount)}，与 AGENTS §9 锚定的 394 不一致（fixture 被改动？）`)
+  console.error(`FAIL: fixture 可折叠事件数为 ${String(foldableCount)}，与本文件锚定的 394 不一致（fixture 被改动？）`)
   process.exit(1)
 }
 const EXPECTED_FOLDED = foldableCount
@@ -172,11 +163,10 @@ function descriptorOf(method) {
 
 /**
  * SRC 线路字段自检（构建产物 × 手写贡献）：新网关把方法源码文本里的参数名
- * （`Function.prototype.toString`）当作线路字段名，压缩重命名参数即逐次拒收
- * （曾经生产构建把 `snapshot(request)` 压成 `snapshot(e)`，请求被判
- * `gateway/arguments-invalid: unexpected "request"`）。这里用同一读法取产物
- * 原型方法的参数名，与贡献的 wire 名逐方法对齐——本地 `pnpm build`（不压缩）
- * 与 CI 生产构建（压缩策略同发布）都必须在场，产物签名一旦被改写立即失败。
+ * （`Function.prototype.toString`）当作线路字段名，压缩重命名参数会让请求被判
+ * `gateway/arguments-invalid` 拒收。这里用同一读法取产物原型方法的参数名，与
+ * 贡献的 wire 名逐方法对齐——本地 `pnpm build`（不压缩）与 CI 生产构建都必须
+ * 在场，产物签名一旦被改写立即失败。
  */
 function assertWireFields() {
   for (const descriptor of USAGE_STATS_REMOTE.descriptors) {
@@ -252,7 +242,7 @@ async function waitForFolded(timeoutMs = 10_000, intervalMs = 200) {
 
 // 等待初始扫描完成：轮询至首条事件折叠，首个就绪快照即统计基线
 const snap = await waitForFolded()
-// 绝对基线锚定：初始扫描折满 fixture 全部 394 条可用事件（AGENTS §9）
+// 绝对基线锚定（值见本文件上方「绝对基线」段）：初始扫描折满 fixture 全部 394 条可用事件
 if (snap.foldedEvents !== EXPECTED_FOLDED) {
   console.error(`FAIL: 快照 foldedEvents=${String(snap.foldedEvents)}，应为 ${String(EXPECTED_FOLDED)}`)
   process.exit(1)
@@ -1260,7 +1250,7 @@ await mounted.dispose()
 }
 
 // ===== 偏好设置：条目接入、落盘与旧设置文档迁移（独立 DSH_HOME，不触碰上面的 394 基线）=====
-// 偏好设置不再存 localStorage、也不再注册独立命名空间：条目自己声明 Config
+// 偏好设置不存 localStorage、不注册独立命名空间：条目自己声明 Config
 // schema（src/host/settings.ts 的 UsageSettingsSchema），harness 设置服务把它
 // 投影成设置表单，浏览器端经 ctx.configForms 按条目 id 读写，改动落到 profile
 // 补丁文档。

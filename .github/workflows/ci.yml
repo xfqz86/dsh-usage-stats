@@ -1,5 +1,5 @@
-# CI：验证类型、构建与冒烟测试
-# 每次 PR 与推送到 dev/main 均执行，确保发布前的完整性（dev 为开发分支，main 为生产分支）。
+# CI：类型检查、生产态构建、样式契约与冒烟测试、prepare 校验、剪枝与打包校验
+# 每次 PR 与推送到 dev/main 均执行，确保发布前的完整性（dev 为开发分支，main 为生产分支）；main 通过后由 release-branch.yml 同步交付物。
 name: CI
 on:
   push:

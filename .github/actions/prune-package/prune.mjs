@@ -1,5 +1,6 @@
 /**
- * 剪枝 package.json 至发布所需最小字段集合
+ * 剪枝 package.json 至发布所需最小字段集合。
+ * 首次改写前留 `<package.json>.bak`；`check=true` 时只校验不写入（已剪枝退出 0，否则列出多余字段并退出 1）。
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'

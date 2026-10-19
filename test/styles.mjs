@@ -2,14 +2,13 @@
  * 样式契约单测：本插件全部 *.module.css 只允许引用 dsh 主题真实声明的设计变量。
  *
  * 运行 `node --experimental-strip-types test/styles.mjs`（或 `pnpm test:styles`）。
- * 为什么不测别的：未声明的自定义属性不报错，它让整条声明在计算值阶段失效，
- * 写着 token 的那行形同没写；若该行还带写死的浅色兜底（如 `#f6f7f9`），
- * 浅色模式看着正常、深色模式出现白色色块——设置 Tab 的分组头部与计数徽标
- * 就是这样白了一整年。变量名是否真实存在，只有对照主题表才判得出来。
+ * 为什么要测：未声明的自定义属性不报错，它让整条声明在计算值阶段失效，写着 token 的那行
+ * 形同没写；若该行还带写死的浅色兜底（如 `#f6f7f9`），浅色模式看着正常、深色模式出现白块。
+ * 变量名是否真实存在，只有对照主题表才判得出来。
  *
- * 主题变量来源：devDependency `@deepseek-ai/dsh-client-ui-theme`（界面唯一配色来源，
- * 与 harness 运行时同包同版本），其 `lib/client.js` 内联了主题全部样式表；
- * 不依赖本机 harness checkout，CI 上 `pnpm install` 后即可判定。
+ * 主题变量来源：devDependency `@deepseek-ai/dsh-client-ui-theme`（界面唯一配色来源，与 harness
+ * 运行时同包同版本），其 `lib/client.js` 内联了主题全部样式表；不依赖本机 harness checkout，
+ * CI 上 `pnpm install` 后即可判定。
  */
 import { createRequire } from 'node:module';
 import { readFileSync, readdirSync } from 'node:fs';

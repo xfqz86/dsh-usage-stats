@@ -21,7 +21,7 @@ export type { ModelStat, SessionStat, UsageSnapshot } from '../types.ts';
 export function useSnapshot(intervalMs = SNAPSHOT_INTERVAL_MS): [UsageSnapshot | null, boolean, () => void, string | null] {
   const [data, setData] = useState<UsageSnapshot | null>(null);
   const [err, setErr] = useState(false);
-  // TODO(诊断后删除)：临时把调用失败的真实原因暴露给界面，定位生产环境问题用。
+  // 失败原因（抛错取 message，业务拒绝取 code+message），详情面板作为第二行展示；成功时清空。
   const [errDetail, setErrDetail] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   // 乱序守卫：每次发起请求取递增序号，响应返回时若已有更新的请求发出
@@ -34,7 +34,7 @@ export function useSnapshot(intervalMs = SNAPSHOT_INTERVAL_MS): [UsageSnapshot |
     const load = async () => {
       const mine = ++seqRef.current;
       let parsed: { ok?: boolean; value?: UsageSnapshot } = {};
-      // TODO(诊断后删除)：记录真实失败原因（抛错取 message，业务拒绝取 code+message）。
+      // 记录本次失败原因：抛错取 message，业务拒绝取 code+message。
       let detail: string | null = null;
       try {
         const result = await usageStatsRemote().snapshot({ sessionId: null, limit: SNAPSHOT_LIMIT });
@@ -64,7 +64,7 @@ export function useSnapshot(intervalMs = SNAPSHOT_INTERVAL_MS): [UsageSnapshot |
     return () => { live = false; window.clearInterval(timerId); };
   }, [intervalMs, tick]);
 
-  /** 手动触发一次立即刷新（设置页"手动刷新"按钮用）。 */
+  /** 手动触发一次立即刷新（账本重建/清零完成后重拉快照）。 */
   const refresh = useCallback(() => setTick(v => v + 1), []);
 
   return [data, err, refresh, errDetail];

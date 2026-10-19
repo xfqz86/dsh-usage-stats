@@ -108,7 +108,7 @@ export interface ModelStat {
   model: string
   calls: number
   usage: UsageAgg
-  /** 按日细分，用于时间范围筛选与堆叠柱，可能缺失于旧快照。 */
+  /** 按日细分，用于时间范围筛选与堆叠柱；可缺省（明细类接口的单日行不带）。 */
   series?: SeriesPoint[]
 }
 
@@ -264,7 +264,7 @@ export interface QuotaRequest {
 
 /**
  * 一条模型统计重定向规则：把「来源供应商 + 来源模型」的用量算到
- * 「目标供应商 + 目标模型」名下（只影响模型页统计，不动账本）。
+ * 「目标供应商 + 目标模型」名下（影响模型页与日期、会话明细的按模型统计，不动账本）。
  */
 export interface ModelRedirect {
   /** 来源供应商，如 opencode-go-vision。 */
@@ -306,7 +306,7 @@ export interface UsageSettings {
   showSessionId: boolean
   /**
    * 模型统计重定向规则：按顺序匹配来源（同一来源只有最上面一条生效），
-   * 由浏览器端在模型页归并，见 `src/client/stats.ts` 的 redirectModels。
+   * 由浏览器端在模型页与日期、会话明细的按模型表归并，见 `src/client/stats.ts` 的 redirectModels。
    */
   modelRedirects: ModelRedirect[]
 }

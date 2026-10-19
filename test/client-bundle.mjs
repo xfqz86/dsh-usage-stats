@@ -1,5 +1,5 @@
 /**
- * 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
+ * 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。运行 `node test/client-bundle.mjs`（无需类型剥离，测的是构建产物）。
  *
  * 加载 lib/client.js（CJS 形态的插件 bundle），验证：
  *   1. 顶层通过 window.__ModuleLoader__.load 注册，id 为 @xfqz86/dsh-usage-stats；
@@ -96,12 +96,11 @@ try {
   assert(typeof exports.apply === 'function', 'exports.apply 应为函数')
 
   // CSS 注入验证：每个 .module.css 注入一个 style 标签（按组件拆分的模块都在）。
-  // 共享样式（UsageStatsCommon 被多个 Tab import）只应注入一次 —— 构建脚本按
-  // 物理文件缓存虚拟 id 去重，否则 bundle 会有 N 份重复的样式文本与注入代码。
+  // 共享样式（UsageStatsCommon 被多个 Tab import）只应注入一次 —— 构建脚本按文件
+  // 确定性虚拟 id 去重，否则 bundle 会有 N 份重复的样式文本与注入代码。
   const cssTags = document.styles.map((s) => s.attributes['data-plugin-css'])
-  // 期望全集从源码目录动态枚举（不再硬编码清单）：新增 .module.css 自动纳入断言，
-  // 防止构建插件漏包或忘记补测试导致样式注入回归逃过检查。注入标签 = 文件名
-  // （basename 去扩展名），与 scripts/css-modules-inline.mjs 的 cssTagOf 一致。
+  // 期望全集从源码目录动态枚举：新增 .module.css 自动纳入断言，防构建插件漏包或忘补测试；
+  // 注入标签 = 文件名（basename 去扩展名），与 scripts/css-modules-inline.mjs 的 cssTagOf 一致。
   const expectedTags = [...new Set(walkModuleCss(join(here, '../src')).map((f) => 'dsh-usage-stats/' + basename(f, '.module.css')))]
   assert(expectedTags.length > 0, '源码目录未发现任何 *.module.css（枚举失效）')
   for (const tag of expectedTags) {

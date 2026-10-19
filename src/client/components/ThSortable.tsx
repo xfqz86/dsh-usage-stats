@@ -1,9 +1,7 @@
 /**
  * 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
- * 由 DatesTab / SessionsTab / ModelsTab 组件体内的三处内联实现提取而来——
- * 内联组件在每次父渲染时按"不同组件类型"卸载重挂表头子树（焦点丢失、无谓 GC）；
- * 提取为模块级组件后类型稳定，排序行为与样式类名与原实现一致。
- * 独立成文件（一个组件一个文件），样式见 ThSortable.module.css。
+ * 组件定义在模块级，父组件重渲染时类型稳定，避免表头子树卸载重挂导致焦点丢失与无谓 GC。
+ * 样式见 ThSortable.module.css。
  */
 
 import css from './ThSortable.module.css';

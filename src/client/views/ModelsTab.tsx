@@ -1,18 +1,13 @@
 /**
- * 模型 Tab：按模型/Provider 拆分表，含占比条，布局与会话 Tab 对齐。
- * 顶部为图表区，含饼图与堆叠柱，中间为靠右的时间范围筛选，位于图表与表格之间，默认1年；
- * 表格列：模型 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比 | 明细。
- * 过滤逻辑基于模型的按日细分 series，与饼图/堆叠柱共用同一过滤后切片。
- * 表头可排序，与 SessionsTab 同款交互，分页 20/页、容器与会话 Tab 对齐。
+ * 模型 Tab：模型/Provider 拆分表 + 顶部饼图与堆叠柱 + 靠右的时间范围筛选（默认 1 年）。
+ * 过滤基于模型的按日 series，图表与表格共用同一过滤后切片；表头可排序，分页 20/页。
  *
- * 每行末尾的「明细」链接打开该模型的明细弹窗（ModelDetail）：按日期与按会话两个子视图，
- * 数据按需经 usageStats/modelDetail 取，时间范围跟随本页的范围 chips；
- * 打开的行被范围过滤掉（或模型消失）时自动关闭弹窗。
+ * 每行的「明细」打开 ModelDetail（按日期 / 按会话两个子视图，数据按需查
+ * usageStats/modelDetail，范围跟随本页 chips；行被过滤掉或模型消失时自动关闭）。
  *
- * 传进来的 models 已按偏好里的模型统计重定向规则归并（见 UsageStatsPanel 与
- * ../stats.ts 的 redirectModels）：来源行的用量并进目标行，mergedSources 给出
- * 每个目标行并进来的来源，模型列据此显示「已归并 N」并在悬浮卡片里列出明细；
- * 明细同样按「目标 + 全部来源」各查一次再合并，数字与这一行对得上。
+ * models 已按偏好里的重定向规则归并（见 UsageStatsPanel 与 ../stats.ts 的 redirectModels）：
+ * mergedSources 给出每个目标行并入的来源，模型列据此显示「已归并 N」；明细按「目标 + 全部来源」
+ * 各查一次再合并，数字与这一行对得上。
  */
 
 import { useEffect, useMemo, useState } from 'react';

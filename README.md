@@ -16,7 +16,8 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 
 ## 功能
 
-- 侧边栏底部今日统计，宽列与收起状态自适应展示
+- 侧边栏底部常驻今日用量，宽列与收起状态自适应展示；点击打开详情面板
+- 概览：今日与总计、每日热力图，以及下面三项额度卡片
 - 按日期、会话、模型分别统计 token 用量
 - 日期页每行末尾点「明细」，弹窗看这一天分别花在哪些会话、哪些模型上
 - 模型页每行末尾点「明细」，弹窗看这块模型的每日用量与用它的会话
@@ -24,7 +25,7 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 - 模型统计重定向：可以把某个供应商的某个模型的用量算到另一个供应商的某个模型名下
 - DeepSeek 余额，展示多币种余额
 - OpenCode Go 额度，展示滚动 5 小时、本周、本月三档已使用额度
-- Z.ai 额度，展示滚动 5 小时与本周已使用额度
+- Z.ai 额度，展示滚动 5 小时、本周已使用额度，以及每月 Web 搜索次数
 - 会话标题旁 session-id 徽标，支持一键复制
 
 <p align="center">
@@ -67,11 +68,11 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 
 ### 在 DeepSeek Harness 网页版或桌面版中安装
 
-在 **添加插件** 向导的搜索框中填写 `@xfqz86/dsh-usage-stats`，然后点击 **安装**：
+在 **添加插件** 向导的「包名或地址」输入框中填写 `@xfqz86/dsh-usage-stats`，然后点击 **安装**：
 
 ![Add_plugin_wizard](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/install-help.png)
 
-你也可以填入 `github:xfqz86/dsh-usage-stats#release`，来体验最新代码（可能包含未开发完成的功能）
+你也可以填入 `github:xfqz86/dsh-usage-stats#release`，来体验最新代码（可能包含未开发完成的功能）。
 
 ---
 
@@ -118,19 +119,21 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 
 设置位于详情面板的设置 Tab，保存在 DSH 该 profile 的配置文件 `$DSH_HOME/profiles/<profile>/cordis.patch.yml`（`$DSH_HOME` 未设置的情况下默认为 `~/.dsh`）的 `usage-stats` 条目里。配置文件只写改过的字段。
 
+设置 Tab 可改：三项额度监控的开关、是否在侧边栏展示、抓取间隔（最短 3 分钟），会话标题旁 session-id 徽标开关，以及模型统计重定向规则。
+
 设置 Tab 的「配置迁移」折叠区可以把当前偏好导出成一串配置串（Base64 文本，直接复制粘贴即可），在别的机器、别的 profile 的设置 Tab 里粘贴导入：导入以配置串为准整份覆盖，配置串里没有的项回到默认值，适合备份还原与两台机器对齐。
 
-设置 Tab 底部为账本操作（清零与重建），需二次确认；扫描历史会话期间（面板顶部显示“扫描中…”）两项置灰不可点，等扫描结束自动恢复。
+设置 Tab 底部的「账本操作」折叠区为清零与重建，需二次确认；扫描历史会话期间（面板顶部显示“扫描中…”）两项置灰不可点，等扫描结束自动恢复。
 
-需展示额度时，在 DSH 凭据中心配置对应 Key：
+需展示额度时，在 DSH 凭据中心配置对应 Key（同名多项时按顺序取第一个配好的）：
 
-- DeepSeek：`DEEPSEEK_API_KEY`（兼容 `DEEPSEEK_APIKEY`、`DEEPSEEK_API_TOKEN`、`DEEPSEEK_TOKEN`）
+- DeepSeek：`DEEPSEEK_API_KEY`（也认 `DEEPSEEK_APIKEY`、`DEEPSEEK_API_TOKEN`、`DEEPSEEK_TOKEN`）
 - OpenCode Go：`OPENCODE_GO_API_KEY`
 - Z.ai：`ZAI_CODING_CN_API_KEY` 或 `ZAI_API_KEY`（前者优先）
 
 ## 数据存储
 
-账本位于 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`，SQLite 存储。首次启动自动扫描历史会话并导入，后续随事件实时增量更新，重启后可从账本恢复。
+账本位于 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`。首次启动自动扫描历史会话并导入，之后随事件增量更新，重启后从账本恢复。
 
 ## 开发者
 

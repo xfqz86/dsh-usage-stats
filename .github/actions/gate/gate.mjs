@@ -1,7 +1,8 @@
 /**
  * Gate — 校验指定 SHA 的 CI job 是否已成功（仅供 GitHub Action 使用）
  * 通过 REST API 查询 check-runs，匹配 job 名（支持 "verify" 与 "CI / verify"）。
- * inputs 均由 action.yml 传入，无默认值硬编码在代码外（除 yml 已给）。
+ * inputs 由 action.yml 以 INPUT_* 环境变量传入；代码内的 fallback（workflow=CI、
+ * job=verify）与 action.yml 的默认值一致，token 可回退到 GITHUB_TOKEN。
  */
 
 function getInput(name, fallback = '') {

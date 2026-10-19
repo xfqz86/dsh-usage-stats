@@ -1,27 +1,13 @@
 /**
- * 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情；
- * 会话标题右侧工具区的 session-id 徽标，支持悬停复制。
+ * 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）与会话标题旁的 session-id 徽标。
  *
- * - 注册到 `sidebar.footer.action` 列表插槽，属主为
- *   @deepseek-ai/dsh-client-ui-sidebar，cell id 为 `dsh-usage-stats`。
- * - 注册到 `conversation.session.header.utilities` 列表插槽（session 作用域），
- *   entry id 为 `dsh-usage-stats-session-id`：等宽字体展示当前会话 sessionId，
- *   悬停或聚焦时浮现复制按钮；`showSessionId` 偏好关闭时徽标不渲染。
- * - 底部角标在宽列形态显示今日 tokens、调用数与三色比例条；56px rail 态
- *   收窄为三额度迷你芯片与今日用量芯片的纵向堆叠，明细移入各自 Tooltip；
- *   点击打开模态窗详情，包含汇总、模型拆分、会话列表、每日趋势曲线和热力图。
- * - 数据来自服务端 usageStats/snapshot（ctx.remote，经网关统一鉴权）。
- * - 偏好设置（三额度抓取开关、侧边栏展示开关、抓取间隔、会话徽标开关、
- *   模型统计重定向规则表）来自
- *   服务端 profile 配置文档：表单取自 ctx.configForms 的 `usage-stats` 插件条目
- *   （schema 在 src/host/settings.ts，随条目 Config 下发），组件经 useUsageSettings
- *   读写，不再用 localStorage；旧版本的 localStorage 偏好由 migrateLegacySettings
- *   一次性迁移。
- *
- * 所有类型均为 harness 自带：ClientContext 即 cordis Context，插槽表由
- * ui-sidebar 合并，slots 服务来自 ui-renderer，locale 服务来自 client-locale，
- * remote 服务来自 api-gateway，configForms 服务来自 client-ui-settings，
- * 各自通过 declare module 合并进 cordis Context。
+ * - 注册 `sidebar.footer.action`（cell id `dsh-usage-stats`，order 1）与
+ *   `conversation.session.header.utilities`（entry id `dsh-usage-stats-session-id`，order -20）。
+ * - 底部角标宽列显示今日 tokens、调用数与三色比例条，56px rail 收窄为额度与今日迷你芯片，
+ *   点击打开模态窗详情；数据经 usageStatsRemote() 取命名空间服务调用 usageStats/snapshot。
+ * - 偏好设置（三额度开关/展示/间隔、会话徽标、模型重定向规则）来自服务端 profile 配置文档：
+ *   表单取自 ctx.configForms 的 `usage-stats` 条目（schema 在 src/host/settings.ts），组件经
+ *   useUsageSettings 读写；旧版本 localStorage 偏好由 migrateLegacySettings 一次性迁移。
  */
 
 import { createElement } from 'react';

@@ -1,24 +1,13 @@
 /**
- * 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip
- * 当前只接受纯文本（`label: string | (() => string)`），
- * 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个
- * 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、
- * maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增——
+ * 富内容 Tooltip：为需要多行排版或跟随鼠标的气泡提供 `content` 插槽与 `follow` 定位。
+ * 基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 只接受纯文本 `label`，
+ * 而本插件的额度明细、热力图单元格、比例条与归并来源标记需要多行排版；纯文字提示仍用基座。
  *
- * - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div
- *   以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space；
+ * - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器用 div 支持块级排版；
  * - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
  *
- * 纯文字提示直接用基座 Tooltip，不经过本组件，避免同一份能力维护两套；
- * 需要排版的内容（含状态提示卡）一律走这里。
- *
- * 用法：
- * ```tsx
- * <Tooltip content={() => <MyPanel />} side="top" delayMs={300}><span>...</span></Tooltip>
- * <Tooltip follow content={barRows} side="top"><span>...</span></Tooltip>
- * ```
- *
- * 独立成文件，一个组件一个文件，样式见 `./Tooltip.module.css`。
+ * 用法：`<Tooltip content={() => <MyPanel />} side="top" delayMs={300}><span>…</span></Tooltip>`；
+ * 样式见 `./Tooltip.module.css`。
  */
 
 import { cloneElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -62,7 +51,7 @@ export function Tooltip({
   disabled?: boolean
   /** 气泡宽度上限，单位像素，用于长文案超出默认 50vw 的场景。 */
   maxWidth?: number
-  /** 为 true 时水平跟随鼠标，即原 FollowTooltip 行为；为 false 时为普通锚点定位。 */
+  /** 为 true 时水平跟随鼠标；为 false 时为普通锚点定位。 */
   follow?: boolean
   /** 单个锚点元素；其原有 ref 为回调或对象，会与 Tooltip 的 ref 一并转发。 */
   children: ReactElement<AnchorProps>
@@ -76,7 +65,7 @@ export function Tooltip({
     else if (childRef != null) (childRef as MutableRefObject<HTMLElement | null>).current = el;
   }, [childRef]);
 
-  // 实际方位：未显式传入时，跟随态默认 'bottom'，普通态默认 'right'，保持与合并前两组件一致。
+  // 实际方位：未显式传入时，跟随态默认 'bottom'，普通态默认 'right'。
   const effectiveSide: TooltipSide = side ?? (follow ? 'bottom' : 'right');
 
   // 锚点边缘而非最终坐标：垂直翻转需基于对侧边缘重算气泡 top。

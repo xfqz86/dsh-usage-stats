@@ -20,14 +20,14 @@ dsh-usage-stats/
 │   │   │   └── gate.mjs ← Gate — 校验指定 SHA 的 CI job 是否已成功（仅供 GitHub Action 使用） 通过 REST API 查询 check-runs，匹配 job 名（支持 "verify" 与 "CI / verify"）。
 │   │   ├── prune-package/
 │   │   │   ├── action.yml ← 剪枝复合动作：把 package.json 剪到发布所需最小字段白名单
-│   │   │   └── prune.mjs ← 剪枝 package.json 至发布所需最小字段集合
+│   │   │   └── prune.mjs ← 剪枝 package.json 至发布所需最小字段集合。
 │   │   ├── setup/
 │   │   │   └── action.yml ← 统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装
 │   │   └── verify-pack/
 │   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
 │   │       └── verify.mjs ← 校验交付物仅含 7 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
-│       ├── ci.yml ← CI：类型检查 / 构建 / 样式契约 / 冒烟测试（每次 PR 与推送 dev/main 执行）
+│       ├── ci.yml ← CI：类型检查 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）
 ├── docs/
@@ -74,12 +74,12 @@ dsh-usage-stats/
 │   │   │   ├── SessionIdBadge.tsx ← 会话 ID 徽标：会话标题右侧工具区的等宽 sessionId 展示与悬停复制。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用描边色填充， on 用成功绿，滑块用前景色（token 配色，深色模式随之翻转）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
-│   │   │   ├── StackedBar.module.css ← 统一堆叠柱状图（StackedBar）：合并 DateStackedBar / ModelStackedBar 及原 StackedBarCommon 的公共壳样式。
-│   │   │   ├── StackedBar.tsx ← 统一堆叠柱状图 StackedBar，合并 DateStackedBar 与 ModelStackedBar 为单一组件。
-│   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
+│   │   │   ├── StackedBar.module.css ← 堆叠柱状图（StackedBar）：两种模式共用外壳样式，图例最大宽度按模式用变体类区分（date 70% / model 60%）。
+│   │   │   ├── StackedBar.tsx ← 堆叠柱状图 StackedBar：date 模式按 token 类型（输入/输出/缓存）堆叠并叠加缓存命中率折线， model 模式按模型堆叠；每日一柱，横向滚动。
+│   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐；颜色全部使用设计 token。
 │   │   │   ├── ThSortable.tsx ← 通用可排序表头（ThSortable）：点击切换排序方向的 <th> 单元格。
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
-│   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：基座 `@deepseek-ai/dsh-client-ui-primitives` 的 Tooltip 当前只接受纯文本（`label: string | (() => string)`）， 而本插件的额度明细、热力图单元格与比例条需要多行排版，故在此保留一个 只做富内容的扩展版：定位、视口自适应、hover/focus 双触发、delay、disabled、 maxWidth、ref 转发与视觉 token 全部复刻基座实现，仅新增—— - `content` 插槽接受任意 React 节点或惰性求值函数，气泡容器由 span 改为 div 以支持块级排版，内容为富组件时包一层 `.rich` 重置 white-space； - `follow` 让气泡水平跟随鼠标，用于比例条这类横向细长锚点。
+│   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：为需要多行排版或跟随鼠标的气泡提供 `content` 插槽与 `follow` 定位。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、Tab 栏、通用提示等。
 │   │   ├── views/
 │   │   │   ├── ConfigTransfer.module.css ← 配置迁移区 ConfigTransfer：导出与导入两个子块的标题、说明、文本域、 操作按钮、差异预览与内联反馈。
@@ -97,11 +97,11 @@ dsh-usage-stats/
 │   │   │   ├── ModelDetailDates.tsx ← 模型明细弹窗的「按日期」子视图：该模型在范围内的每日用量——顶部每日趋势图、 下方用量表，构成与日期 Tab 一致（图由 StackedBar 补齐范围内每一天，表格只列 真正有量的日子）；列与日期 Tab 对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
 │   │   │   ├── ModelDetailSessions.tsx ← 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，表与会话 Tab 完全同款—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃）、 子代理折叠到主会话并带 + 展开、默认按「最近活跃」降序、可排序、每页 15 条； 分组与排序比较走 stats.ts 的共用实现（groupSessions / compareSessionGroup）。
 │   │   │   ├── ModelRedirectEditor.module.css ← 模型统计重定向规则编辑器 ModelRedirectEditor：规则行（来源 → 目标）、 删除按钮、添加按钮与提示文字。
-│   │   │   ├── ModelRedirectEditor.tsx ← 模型统计重定向规则编辑器：设置 Tab 的专属子视图，一个组件一个文件。
+│   │   │   ├── ModelRedirectEditor.tsx ← 模型统计重定向规则编辑器：设置 Tab 的专属子视图。
 │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
-│   │   │   ├── ModelsTab.tsx ← 模型 Tab：按模型/Provider 拆分表，含占比条，布局与会话 Tab 对齐。
-│   │   │   ├── OverviewTab.module.css ← 概览 Tab OverviewTab：Bento 磁贴网格 — 布局见布局图：今日/总计左列，热力图右大区，底行 DeepSeek/Go。
-│   │   │   ├── OverviewTab.tsx ← 概览 Tab，Bento 磁贴网格，包含「今日」与「总计」英雄磁贴，左列上下两格， 右大区为「热力图」占 3 列 2 行，底行含「DeepSeek 余额」、「OpenCode Go 额度」与「Z.ai 额度」， 各卡片受监控开关控制，未启用时隐藏，布局严格按布局图分区，使用 grid-template-areas，独立成文件。
+│   │   │   ├── ModelsTab.tsx ← 模型 Tab：模型/Provider 拆分表 + 顶部饼图与堆叠柱 + 靠右的时间范围筛选（默认 1 年）。
+│   │   │   ├── OverviewTab.module.css ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行），颜色全部使用设计 token。
+│   │   │   ├── OverviewTab.tsx ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行）， 布局用 grid-template-areas 分区；三张额度卡片受监控开关控制，未启用时隐藏且底行自动补位。
 │   │   │   ├── QuotaMonitorTable.module.css ← 额度监控表格 QuotaMonitorTable：设置 Tab 的专属子视图样式， 一张四列表格承载三个额度来源的启用 / 侧边栏展示 / 抓取间隔。
 │   │   │   ├── QuotaMonitorTable.tsx ← 额度监控表格：设置 Tab 的专属子视图，把 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度压成 一张四列表格（监控项 / 启用监控 / 在侧边栏展示 / 抓取间隔），一行一个额度来源。
 │   │   │   ├── SessionDetail.module.css ← 会话明细弹窗（SessionDetail 与两个子视图）：会话页主会话行末尾的「明细」链接打开的 二级弹窗。
@@ -109,20 +109,20 @@ dsh-usage-stats/
 │   │   │   ├── SessionDetailDates.tsx ← 会话明细弹窗的「按日期」子视图：该会话集合的每日用量——顶部每日趋势图、下方用量表， 与日期 Tab 同一套展示（图由 StackedBar 补齐每一天，表格只列真正有量的日子）； 列与日期 Tab / 模型明细的按日期表对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
 │   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 默认按「总计」降序、可排序、每页 15 条；占比以集合这张表的总和为分母， 用 stats.largestRemainderPcts 配分（与模型页同一口径，1 位小数总和恰为 100）。
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab SessionsTab：仅保留首列最小宽度。
-│   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开，数据完整展示。
+│   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开； 展示快照下发的会话（最多 SNAPSHOT_LIMIT 条，默认按最近活跃倒序）。
 │   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、可折叠分区（账本操作、配置迁移） 与底部页脚。
-│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置，额度监控表格汇总 DeepSeek 余额 / OpenCode Go 额度 / Z.ai 额度三项监控，配置迁移折叠内含导出与导入配置串，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
+│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
 │   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层，支持宽列与 56px rail 两种形态，几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。
-│   │   │   ├── UsageStatsFooter.tsx ← 用量统计的侧边栏底部动作：渲染在 `sidebar.footer.action` 列表插槽设置按钮上方的今日统计触发器。
+│   │   │   ├── UsageStatsFooter.tsx ← 用量统计的侧边栏底部动作：注册在 `sidebar.footer.action` 插槽的今日统计触发器。
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。
-│   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，采用 Tab 化布局。
-│   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定。
+│   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，头部 + Tab 栏 + 内容区。
+│   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定：调用前经 usageStatsRemote() 取命名空间服务。
 │   │   ├── configTransfer.ts ← 配置串编解码：把整份偏好打包成可复制粘贴的 Base64 文本，并反向解析。
-│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作，包含今日统计角标与模态窗详情； 会话标题右侧工具区的 session-id 徽标，支持悬停复制。
+│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）与会话标题旁的 session-id 徽标。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
-│   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口。
+│   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口：apply 内挂载手写贡献，hooks 经 usageStatsRemote() 取服务。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何、模型统计重定向归并。
 │   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
@@ -135,7 +135,7 @@ dsh-usage-stats/
 │   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
 │   │   └── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
 │   ├── host/
-│   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink， 事件守卫 usable、modelKeyOf。
+│   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、 modelKeyOf。
 │   │   ├── deepseekBalance.ts ← DeepSeek 余额查询：通过 `GET https://api.deepseek.com/user/balance` 获取当前余额。
 │   │   ├── detail.ts ← 明细构建：把 usageStats/modelDetail、usageStats/dateDetail 与 usageStats/sessionDetail 的结果 value 从聚合缓存与账本整理出来，不触碰传输层与 ctx。
 │   │   ├── goquota.ts ← OpenCode Go 订阅额度查询：滚动 5 小时 / 本周 / 本月三档用量百分比 与重置时间，端点为 `GET https://opencode.ai/zen/go/v1/usage`。
@@ -144,12 +144,12 @@ dsh-usage-stats/
 │   │   ├── logs.ts ← 会话日志的目录发现与 NDJSON 解析。
 │   │   ├── quota.ts ← 额度查询共享基元（服务端）：浏览器 UA、key 回退解析、TTL 缓存单飞工厂。
 │   │   ├── rawlog.ts ← 会话原始日志的物理代次识别与多帧 zstd 解码：扫描拼接 zstd 帧边界后逐帧解压为 NDJSON 文本，供扫描链路在 harness 读取失败时兜底读取旧代次会话。
-│   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，经 foldRecord 写入账本（events、session_meta 共 9 表， 含 agg_* 预统计）并折叠聚合缓存。
+│   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取， 经 foldRecord 写入账本（events、session_meta 共 9 表，含 agg_* 预统计）并折叠聚合缓存； harness 两路读取被拒或返回空事件时回退 rawlog 自读原始日志。
 │   │   ├── service.ts ← 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露 usageStats 命名空间的 10 个一元 Remote 方法。
-│   │   ├── settings.ts ← 服务端（Host）的插件偏好设置 schema：`usage-stats` 插件条目（cordis.patch.yml 插入的 Loader 条目，id 即 USAGE_SETTINGS_NAMESPACE）的 Config，被 harness 设置 服务（ctx.settings）投影成设置表单，偏好因此落在 profile 配置文档里、属于部署 而不是某一个浏览器。
+│   │   ├── settings.ts ← 服务端（Host）的插件偏好设置 schema：`usage-stats` 插件条目（cordis.patch.yml 插入的 Loader 条目，id 即 USAGE_SETTINGS_NAMESPACE）的 Config，被 harness 设置 服务（ctx.settings）投影成设置表单，偏好因此落在 profile 配置文档里、属于部署而不是某一个浏览器。
 │   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 usageStats/snapshot 的结果 value，不触碰传输层与 ctx。
 │   │   ├── store.ts ← 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、模型×日、全量维度组织。
-│   │   └── zaiQuota.ts ← Z.ai 智谱额度查询：滚动 5 小时、每周 7 天百分比与每月 Web 搜索次数，端点为 GET https://api.z.ai/api/monitor/usage/quota/limit。
+│   │   └── zaiQuota.ts ← Z.ai 智谱额度查询：滚动 5 小时、每周 7 天百分比与每月 Web 搜索次数，端点为 `GET https://api.z.ai/api/monitor/usage/quota/limit`。
 │   ├── remote/
 │   │   └── contribution.ts ← usageStats 命名空间的手写严格 Remote 贡献。
 │   ├── css-modules.d.ts ← CSS Modules 的类型声明（与 harness 的 ui-primitives 同款）： `import css from './X.module.css'` 得到 scoped 类名映射。
@@ -157,7 +157,7 @@ dsh-usage-stats/
 │   └── utils.ts ← 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
 ├── test/
 │   ├── client-bundle.mjs ← 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
-│   ├── pure.mjs ← 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
+│   ├── pure.mjs ← 纯逻辑、账本折叠与协议/偏好逻辑的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
 │   ├── smoke.mjs ← 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
 │   └── styles.mjs ← 样式契约单测：本插件全部 *.module.css 只允许引用 dsh 主题真实声明的设计变量。
@@ -171,7 +171,7 @@ dsh-usage-stats/
 ├── pnpm-lock.yaml ← 锁文件（不手改）
 ├── pnpm-workspace.yaml ← pnpm 工作区（含版本保鲜期白名单）
 ├── README.md ← 面向普通用户的功能说明
-├── screenshots.json
+├── screenshots.json ← 插件市场展示用的截图清单
 ├── tsconfig.json ← TS 编译配置（严格模式）
 └── tsdown.config.ts ← 双 bundle 构建配置（host ESM + client CJS）
 ```

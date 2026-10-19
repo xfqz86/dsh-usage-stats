@@ -1,21 +1,17 @@
 /**
- * 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的
- * Loader 条目）的设置表单。
+ * 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
  *
  * 偏好的事实来源是 profile 配置文档，浏览器端只是它的一个视图：`apply` 时经
  * `ctx.configForms.get` 取到本条目的表单（attachUsageSettings），组件经
- * subscribeUsageSettings 订阅变化、经 updateUsageSettings 写回显式改过的字段
- * （路径写入，未改的字段继续跟随 schema 默认值）。取值经 normalizeUsageSettings
- * 归一化并夹取，表单尚未就绪（加载中、条目未挂载或部署不支持写入）时回退
- * USAGE_SETTINGS_DEFAULTS。写入走路径操作，只落显式给出的字段：标量按字段写，
- * 模型统计重定向规则表整表写入（一条规则一个对象，不做数组下标级增删，避免并发写时错位）。
+ * subscribeUsageSettings 订阅、经 updateUsageSettings 路径写入显式改过的字段
+ * （未改的字段继续跟随 schema 默认值）；取值经 normalizeUsageSettings 归一化并夹取，
+ * 表单未就绪（加载中、条目未挂载或部署不支持写入）时回退 USAGE_SETTINGS_DEFAULTS。
+ * 规则表整表写入，不做数组下标级增删，避免并发写时错位。
  *
- * 配置串导入走整份覆盖（replaceUsageSettings）：与默认值相等的字段 unset 回到
- * schema 默认值，其余逐字段 set，一次 mutate 提交。
+ * 配置串导入走整份覆盖（replaceUsageSettings）：与默认值相等的字段 unset，其余逐字段 set。
  *
- * 旧版本把偏好存在 localStorage，本模块保留一次性迁移：表单落定为就绪、可写、
- * 用户片段尚不存在时，把与默认值不同的旧字段写进配置文档并删除旧键；服务端设置
- * 缺席或只读时保留旧键（没有可靠落点，删掉等于丢设置）。
+ * 旧版本把偏好存在 localStorage，本模块保留一次性迁移：表单就绪、可写、用户片段不存在时，
+ * 把与默认值不同的旧字段写进配置文档并删除旧键；没有可靠落点时保留旧键。
  *
  * 纯逻辑模块，无 React，可单测；React 绑定在 useUsageSettings.ts。
  */

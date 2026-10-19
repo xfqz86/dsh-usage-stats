@@ -1,23 +1,12 @@
 /**
- * 用量统计的侧边栏底部动作：渲染在 `sidebar.footer.action` 列表插槽设置按钮上方的今日统计触发器。
+ * 用量统计的侧边栏底部动作：注册在 `sidebar.footer.action` 插槽的今日统计触发器。
+ * 宽列与 56px rail 各有一个整块可点的按钮，点击打开模态窗详情（UsageStatsPanel）。
  *
- * 合一按钮，宽列与折叠 rail 共用，侧边栏排序自上而下为 Z.ai 额度、Go 额度、DeepSeek 余额、今日用量，
- * 全部在同一按钮内，任意位置点击均打开模态窗详情 {@link UsageStatsPanel}。
- *
- * 宽列：按钮内纵向多行——
- *   1) 带"Z.ai 额度"标签的 Z.ai 额度芯片，含滚动 5 小时、本周百分比与 Web 搜索次数，悬浮显示卡片化额度明细，
- *   2) 带"Go 额度"标签的 OpenCode Go 订阅额度芯片，含滚动 5 小时、本周与本月用量百分比，≥80% 预警、≥100% 超支，悬浮显示三档窗口卡片明细，
- *   3) 带"DeepSeek余额"标签的 DeepSeek 余额芯片，含多币种 totalBalance，悬浮显示余额卡片明细，
- *   4) 图标 + "今日" + 今日 tokens / 调用次数 + 三色比例条，含缓存、输入与输出，悬浮显示各类别具体数值。
- * 56px rail 即折叠列：按钮内纵向堆叠，与宽列同序——Z.ai 迷你芯片、Go 迷你芯片，两行含短标签与百分比，
- *   DeepSeek 迷你芯片，两行含货币与金额缩写，今日用量迷你芯片，两行含今日与 tokens 缩写数值，
- *   tooltip 给出今日完整明细。整块按钮任意位置可点。
- *
- * 三额度芯片与今日明细的 tooltip 正常态为卡片化明细，未配置、未订阅、查询失败与无数据统一为深色底状态提示卡
- * （HintCard，tone="tip"）。
- *
- * Go 额度、DeepSeek 余额与 Z.ai 额度的抓取开关、侧边栏展示开关与抓取间隔来自偏好设置 useUsageSettings（服务端设置文档，见 client/settings.ts）：
- * 关闭抓取则不轮询，对应数据恒为 null，芯片自然不渲染；侧边栏开关只影响底部芯片展示，不影响模态窗内详情。
+ * 纵向顺序自上而下为 Z.ai 额度、OpenCode Go 额度、DeepSeek 余额、今日用量：
+ * 宽列给出标签与数值行，rail 收窄为迷你芯片；明细与非正常态（未配置、未订阅、
+ * 查询失败、暂无数据）走 Tooltip，后者统一为深色底 HintCard（tone="tip"）。
+ * 抓取开关、侧边栏展示开关与抓取间隔来自偏好设置（useUsageSettings）：关闭抓取则不轮询、
+ * 对应数据恒为 null、芯片不渲染；侧边栏开关只影响底部芯片，不影响模态窗内详情。
  */
 
 import { IconDataOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';

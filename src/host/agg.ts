@@ -1,15 +1,10 @@
 /**
- * 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，
- * 事件守卫 usable、modelKeyOf。本地日划分 startOfDay 在 utils.ts，
- * host 与 client 共用，避免两处定义漂移。
+ * 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、
+ * modelKeyOf。本地日划分 startOfDay 在 utils.ts，host 与 client 共用。
  *
- * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测。
- *
- * 统计口径：带 provider 上报用量（data.usage 为对象）的计量事件即视为可用，
- * 共两类——对话调用 assistant/message（模型身份在 data.message.source）与
- * 压缩调用 compaction/summary（模型身份在 data.provider/data.model）。
- * 数值归一（非有限/负数按 0、向下取整）在 ledger 层完成；
- * total = input + output + cacheRead + cacheWrite，reasoning 单列，不计入 total。
+ * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测。只有 assistant/message 与
+ * compaction/summary 两类计量事件可用（模型身份分别在 data.message.source 与
+ * data.provider/model），数值归一在 ledger 层完成；口径见 docs/ARCHITECTURE.md §5。
  */
 import type { Agg } from '../types.ts';
 import type { TokenUsage } from '@deepseek-ai/dsh-llm';

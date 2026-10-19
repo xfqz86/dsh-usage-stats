@@ -107,7 +107,7 @@ export default tseslint.config(
       '@stylistic/comma-spacing': ['error', {before: false, after: true}],
       'prefer-rest-params': 'error',
       'prefer-spread': 'error',
-      // ——— warn（需手工收敛，t5 前清零或达到阈值） ———
+      // ——— warn（需手工收敛，新代码不应新增） ———
       '@typescript-eslint/no-non-null-assertion': 'warn',
       'max-len': [
         'warn',

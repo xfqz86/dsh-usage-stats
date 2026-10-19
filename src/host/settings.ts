@@ -1,21 +1,13 @@
 /**
  * 服务端（Host）的插件偏好设置 schema：`usage-stats` 插件条目（cordis.patch.yml
  * 插入的 Loader 条目，id 即 USAGE_SETTINGS_NAMESPACE）的 Config，被 harness 设置
- * 服务（ctx.settings）投影成设置表单，偏好因此落在 profile 配置文档里、属于部署
- * 而不是某一个浏览器。
+ * 服务（ctx.settings）投影成设置表单，偏好因此落在 profile 配置文档里、属于部署而不是某一个浏览器。
  *
- * 注册方式与官方范式（llm-deepseek、ui-theme 等）一致：插件条目自带 Config schema，
- * 设置服务按「schema 默认值 → 组合 base → profile 片段」顺序解析；用户片段只存显式
- * 改过的字段（浏览器端 ConfigForm 走路径写入），未写过的字段继续跟随默认值。同一个
- * schema 随 describe 下发浏览器，ConfigForm 用它校验收到的取值。
+ * 每字段必须标 `.volatile()`（否则不投影成表单、也不接受写入）；字段名与默认值必须
+ * 与 USAGE_SETTINGS_DEFAULTS 对齐，`test/pure.mjs` 直接断言。schema 只约束类型、不设
+ * 间隔下限——越界值夹取由浏览器端归一化负责（见 docs/API.md §5）。
  *
- * 每个字段必须标 `.volatile()`：设置服务只把 volatile 字段投影成表单，也只有
- * volatile 路径接受写入（packages/settings/settings/src/schema.ts）。字段名与默认值
- * 必须与 USAGE_SETTINGS_DEFAULTS 逐一对齐，test/pure.mjs 直接断言这一点。
- *
- * 旧版本把偏好注册成 `$DSH_HOME/settings.yaml` 的独立命名空间。基座升级时会把该文档
- * 一次性导入 profile（改名 settings.yaml.imported），但那一版插件没有 Config schema，
- * 导入到本条目时必然失败且不重试——于是旧偏好只剩在那份 .imported 副本里。收尾见
+ * 旧设置文档（`$DSH_HOME/settings.yaml.imported`）里本插件那段的回收见
  * {@link recoverLegacyUsageSettings}。
  */
 
@@ -110,22 +102,11 @@ function markLegacySettingsHandled(marker: string, source: string, action: Legac
 }
 
 /**
- * 回收卡在旧设置文档里的偏好（基座导入失败后的收尾）。
+ * 回收卡在旧设置文档里的偏好（基座导入失败后的收尾）：写在 Loader 落定之后，
+ * settings 服务缺席或组合里没有 Loader 时静默跳过。
  *
- * 基座的一次性导入在 Loader 落定后跑，且**改名后不重试**：升级那一刻插件若还没有
- * Config schema（0.4.4 及更早），本条目那段导入必然失败，`settings.yaml` 已被改名成
- * `settings.yaml.imported`，此后永不重试——用户旧偏好就只能靠这一次回收搬回来。
- *
- * **同一份旧文档只处理一次**：处理完毕即写下 {@link LEGACY_RECOVERY_MARKER} 标记，
- * 此后启动直接返回——标记记的是「旧文档已有定论」，不要求这次真的搬了值，否则用户
- * 把条目清空时旧值会在之后某次启动突然复活。三种落标记的现场：①回收成功；②条目已有
- * 用户片段（用户在界面上改过值，回收让位不覆盖，但不再反复尝试）；③旧文档里没有本
- * 条目那段。其余现场都没有定论，一律不落标记、下次启动重看：`settings.yaml` 还在
- * （基座自己会导，不抢写——两侧同时写有先后竞态）、`.imported` 不存在、条目不在
- * describe 里（插件被禁用或没装）、写入被设置服务拒绝。
- *
- * 写在 Loader 落定之后：条目的设置表单要等本条目 fiber 就绪才出现在 describe 里，
- * 与基座导入同一时机；`settings` 缺席（无设置后端的部署）、组合里没有 Loader 时静默跳过。
+ * 一次性语义与落标记/不落标记各种现场的完整说明见 docs/API.md §5；这里只做执行：
+ * 读 `.imported` 里本插件那段 → 条目已有用户片段则让位 → 写入与标记，写失败只记 warn。
  * @param ctx - 服务端插件上下文。
  */
 export function recoverLegacyUsageSettings(ctx: Context): void {

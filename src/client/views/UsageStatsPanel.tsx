@@ -1,18 +1,9 @@
 /**
- * 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，采用 Tab 化布局。
+ * 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，头部 + Tab 栏 + 内容区。
  *
- * 本文件是**模态窗壳**，含 Modal、头部、Tab 栏与内容切换；每个 Tab 的
- * 内容组件独立成文件，避免一个 tsx 里塞多个组件、难以维护：
- *   - OverviewTab，概览，含汇总、热力图与 Go 额度、DeepSeek 余额、Z.ai 额度，受监控开关控制，关闭时隐藏对应卡片
- *   - DatesTab，日期，含每日趋势曲线与范围切换
- *   - SessionsTab，会话，按会话展示表格
- *   - ModelsTab，模型，按模型拆分表格（按偏好里的重定向规则归并后展示）
- *   - SettingsTab，设置，含偏好设置，涉及 Go、DeepSeek 与 Z.ai、模型统计重定向、可折叠的配置迁移与账本操作、页脚
- *
- * 数据与底部按钮共用 usageStats/snapshot、usageStats/go-quota、
- * usageStats/deepseek-balance 与 usageStats/zai-quota 的轮询结果。各 Tab 内容为条件渲染：切走即卸载，Tab 内视图状态
- * 含 DatesTab 的曲线范围、SessionsTab 的会话展开等，不跨切换保留，
- * 重新进入对应 Tab 即重置为默认值。
+ * 五个 Tab 各由独立文件承载（OverviewTab/DatesTab/SessionsTab/ModelsTab/SettingsTab），
+ * 条件渲染：切走即卸载，Tab 内视图状态（日期曲线范围、会话展开等）不跨切换保留。
+ * 数据与底部按钮共用同一份轮询结果：usageStats/snapshot 与三份额度查询。
  */
 
 import {
@@ -51,7 +42,7 @@ export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-stats'> {
   data: UsageSnapshot | null
   /** 拉取失败，服务不可达或响应非 ok。 */
   err: boolean
-  /** TODO(诊断后删除)：快照失败的真实原因，临时展示用。 */
+  /** 快照失败的真实原因，作为错误卡片第二行展示。 */
   errDetail?: string | null
   /** OpenCode Go 订阅额度，底部按钮轮询；null 表示尚未加载或抓取被禁用。 */
   go: GoQuota | null
@@ -67,7 +58,7 @@ export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-stats'> {
   onReplaceSettings: (next: UsageSettings) => void
   /** 关闭模态窗，通过关闭按钮、遮罩点击或 Escape 触发。 */
   onClose: () => void
-  /** 立即重新拉取快照、Go 额度、DeepSeek 余额与 Z.ai 额度，对应设置页“手动刷新”按钮。 */
+  /** 立即重新拉取快照、Go 额度、DeepSeek 余额与 Z.ai 额度，账本重建/清零完成后由设置页调用。 */
   onRefresh: () => void
   /** 立即重新拉取 Go 额度，对应概览 Go 磁贴标题右侧刷新按钮，不受抓取间隔控制。 */
   onRefreshGo: () => void
@@ -129,7 +120,7 @@ export function UsageStatsPanel({
   // 内容区渲染，避免嵌套三元
   function renderBody() {
     if (err) {
-      // TODO(诊断后删除)：errDetail 是真实失败原因，作为卡片第二行展示，没有则省略。
+      // errDetail 是快照失败原因，作为错误卡片第二行展示，没有则省略。
       return (
         <div className={shared.statusWrap}>
           <HintCard
