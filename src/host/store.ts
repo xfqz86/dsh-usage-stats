@@ -1,14 +1,10 @@
 /**
  * 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、模型×日、全量维度组织。
  *
- * 边界：账本即 ledger.ts 的 Ledger，持有 sqlite 事件流与会话元数据；本模块
- * 只做折叠与聚合，是快照 API 的读取面。折叠路径：
- *   - 启动/重建：从账本事件全量折叠，经由 scan.ts 的 rebuildFromEvents；
- *   - 实时：session/event 监听逐条折叠，共用 foldRecord 与账本追加路径。
- * 账本写入同步落盘，sqlite 自动提交、即写即持久。
- * 预统计：对不会再变动的历史数据做物化聚合，启动时优先从 agg_* 表加载，
- * 仅少量未密封事件需重放，显著降低冷启动时间；实时路径增量更新预统计。
- * 所有操作以 store 为首参的纯函数或接受 ledger 参数的折叠助手，可独立测试。
+ * 边界：账本（ledger.ts）持有 sqlite 事件流与会话元数据，本模块只做折叠与聚合，是快照
+ * 的读取面；启动/重建走 scan.ts 的全量折叠，实时走 session/event 逐条折叠，共用
+ * foldRecord 与账本追加路径。折叠语义、去重与 fork 继承前缀见 docs/ARCHITECTURE.md §4。
+ * 所有操作都是 store 为首参的纯函数或折叠助手，可独立测试。
  */
 import { startOfDay, errorMessage  } from '../utils.ts';
 

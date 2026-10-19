@@ -1,4 +1,4 @@
-/* 概览 Tab OverviewTab：Bento 磁贴网格 — 布局见布局图：今日/总计左列，热力图右大区，底行 DeepSeek/Go。颜色全部使用设计 token。 */
+/* 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行），颜色全部使用设计 token。 */
 /* .section* / .goHint 等跨组件基元见 UsageStatsCommon.module.css。 */
 
 /* ---- 概览 Bento 磁贴网格：4 列，命名区域仅覆盖上两行，底行卡片自动补位 ----
@@ -24,7 +24,7 @@
   display: contents;
 }
 
-/* 区域命名：今日 / 总计 / 热力图 / DeepSeek 余額 / Go 額度 */
+/* 区域命名：今日 / 总计 / 热力图 / DeepSeek 余额 / Go 额度 */
 .tileToday {
   grid-area: today;
   /* HeroTile 自带 cell 样式，外层 tile 仅作网格定位，无需二次卡片壳 */

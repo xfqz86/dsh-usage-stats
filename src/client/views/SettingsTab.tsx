@@ -1,61 +1,35 @@
 /**
- * 设置 Tab：偏好设置，含 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度监控各三项，配置迁移折叠内含导出与导入配置串，账本操作折叠内含清零与重建，底部页脚含事件数与更新时间。
- * 独立成文件，一个组件一个文件。
+ * 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
  *
- * 偏好设置持久化在服务端 profile 配置文档（`usage-stats` 条目，经 ctx.configForms 的
- * 设置表单读写，见 ../settings.ts 与 ../useUsageSettings.ts），
- * 换浏览器、换设备共用同一份；本页顶部按表单状态提示设置存放位置与是否可写。
- * 分组按 DeepSeek 余额、OpenCode Go 额度、Z.ai 额度自上而下排列：
- *   DeepSeek 余额三项：
- *     1. 启用 DeepSeek 余额监控，deepseekEnabled，关闭后不再轮询官方余额接口；
- *     2. 在侧边栏展示 DeepSeek 余额，showDeepSeekInSidebar，只影响底部芯片，不影响模态窗；
- *     3. DeepSeek 余额抓取间隔，deepseekFetchMinutes，单位分钟，下限 3 为 DEEPSEEK_FETCH_MIN_MINUTES、默认 5，关闭监控时 2、3 项置灰不可改。
- *   Go 额度三项：
- *     4. 启用 OpenCode Go 额度监控，goEnabled，关闭后不再轮询官方额度接口；
- *     5. 在侧边栏展示 OpenCode Go 剩余额度，showGoInSidebar，只影响底部芯片，不影响模态窗；
- *     6. OpenCode Go 额度抓取间隔，goFetchMinutes，单位分钟，下限 3 为 GO_FETCH_MIN_MINUTES、默认 5，关闭监控时 5、6 项置灰不可改。
- *   Z.ai 额度三项：
- *     7. 启用 Z.ai 额度监控，zaiEnabled，关闭后不再轮询官方额度接口；
- *     8. 在侧边栏展示 Z.ai 额度，showZaiInSidebar，只影响底部芯片，不影响模态窗；
- *     9. Z.ai 额度抓取间隔，zaiFetchMinutes，单位分钟，下限 3 为 ZAI_FETCH_MIN_MINUTES、默认 5，关闭监控时 8、9 项置灰不可改。
- * 模型统计重定向分组：规则表 modelRedirects，把来源供应商/模型的用量算到目标供应商/
- * 模型名下（只影响模型页统计），编辑与提交见 ModelRedirectEditor，徽标显示规则条数。
- * 会话分组一项：
- *     10. 会话标题旁展示会话 ID，showSessionId，默认开启；关闭后标题右侧
- *     工具区不再挂 session-id 徽标（`conversation.session.header.utilities`
- *     的 `dsh-usage-stats-session-id` entry 渲染空）。
- * 两个折叠区共用 CSS Modules 的 fold* 外观，自上而下为配置迁移、账本操作——前者只读写
- * 偏好设置文档，后者动的才是用量数据，危险度高的排下面。
- * 配置迁移折叠：标题为 t('settings.configTransfer')，默认折叠，导出与导入见 ConfigTransfer；
- * 账本操作折叠：标题为 t('settings.ledgerOps')，内含清零与重建两项危险操作；
- * 快照 scanning 为真（首启扫描或重建扫描进行中）时两项同时置灰并给出原因，
- * 扫描期间不允许清零/重建——两者会与扫描交错写同一账本与聚合，服务端也以
- * usageStats/busy 拒绝。
- * 底部页脚：展示事件数与更新时间，原概览页脚迁移至此。
+ * 偏好持久化在服务端 profile 配置文档的 `usage-stats` 条目（经 ctx.configForms 的表单读写，
+ * 见 ../settings.ts 与 ../useUsageSettings.ts），换浏览器、换设备共用同一份；读不到或写不了
+ * 时在额度监控表格上方挂一张状态提示卡，正常态不显示存储说明。
+ * 额度监控是一张四列表格（行 = 来源，列 = 监控项 / 启用 / 侧边栏展示 / 抓取间隔）：
+ * 启用项关掉后不再轮询该来源，展示项只影响侧边栏芯片，关闭监控时后两列置灰不可改。
+ * 其余分组为模型统计重定向规则表（ModelRedirectEditor）与会话 ID 徽标开关。
+ * 两个折叠区自上而下为配置迁移、账本操作（危险度高的在下）；快照 scanning 为真时
+ * 清零/重建置灰，展开账本操作区时给出原因——扫描会与写账本交错，服务端也以 usageStats/busy 拒绝。
  */
 
 import {
   IconAgentPresetOutlineRegular,
-  IconArchiveOutlineRegular,
   IconChevronDownOutlineRegular,
-  IconDataOutlineRegular,
   IconUserOutlineRegular,
   RiskConfirmation,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useState } from 'react';
 
-
-import { clampDeepSeekFetchMinutes, clampGoFetchMinutes, clampZaiFetchMinutes, DEEPSEEK_FETCH_MIN_MINUTES, GO_FETCH_MIN_MINUTES, ZAI_FETCH_MIN_MINUTES } from '../../utils.ts';
 import { postLedgerApi } from '../api.ts';
+import { HintCard } from '../components/HintCard.tsx';
 import { SettingsSwitch } from '../components/SettingsSwitch.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { fmtFull } from '../stats.ts';
 import { useConfirmOp, type ConfirmOpState } from '../useConfirmOp.ts';
-import { useIntervalText } from '../useIntervalText.ts';
 import { useUsageSettingsView } from '../useUsageSettings.ts';
 
 import { ConfigTransfer } from './ConfigTransfer.tsx';
 import { ModelRedirectEditor } from './ModelRedirectEditor.tsx';
+import { QuotaMonitorTable } from './QuotaMonitorTable.tsx';
 import css from './SettingsTab.module.css';
 
 import type { UsageSettings } from '../../types.ts';
@@ -88,17 +62,15 @@ export function SettingsTab({
   const [ledgerOpen, setLedgerOpen] = useState(false);
   // 配置迁移折叠：与账本操作同为危险/低频操作，默认收起
   const [configOpen, setConfigOpen] = useState(false);
-  // 三额度抓取间隔同一写法：本地文本态 + 失焦提交，逻辑收拢于 useIntervalText。
-  const goInterval = useIntervalText(settings.goFetchMinutes, clampGoFetchMinutes, (m) => onUpdateSettings({ goFetchMinutes: m }));
-  const deepseekInterval = useIntervalText(settings.deepseekFetchMinutes, clampDeepSeekFetchMinutes, (m) => onUpdateSettings({ deepseekFetchMinutes: m }));
-  const zaiInterval = useIntervalText(settings.zaiFetchMinutes, clampZaiFetchMinutes, (m) => onUpdateSettings({ zaiFetchMinutes: m }));
 
-  // 设置存放位置提示：正常态说明落在服务端配置文件，不可用/只读时明确告知改动不会保存。
+  // 存储告警：正常态不占地方，只有读不到或写不了 profile 配置时才提示改动不会保存。
+  // 只读分支必须等表单落定（status='ready'）：表单加载中同样报 writable=false，
+  // 直接用 !writable 会在每次打开设置页时闪一下并不存在的「不可写」。
   const { status: storageStatus, writable } = useUsageSettingsView();
-  const storageHint = (() => {
+  const storageWarning = (() => {
     if (storageStatus === 'unavailable') return t('settings.storageUnavailable');
-    if (!writable) return t('settings.storageReadonly');
-    return t('settings.storageHint');
+    if (storageStatus === 'ready' && !writable) return t('settings.storageReadonly');
+    return null;
   })();
 
   // 按钮样式与文案：避免嵌套三元，改用 if/else
@@ -115,176 +87,11 @@ export function SettingsTab({
 
   return (
     <div className={shared.section}>
-      {/* 偏好设置 — 按来源分组，顶部提示设置存放位置与可写状态 */}
-      <div className={shared.sectionHead}>
-        <span className={shared.sectionLabel}>{t('settings.preferences')}</span>
-      </div>
-      <span className={shared.goHint}>{storageHint}</span>
+      {/* 存储告警：只在读不到/写不了 profile 配置时出现，正常态直接从额度监控卡片开始 */}
+      {storageWarning !== null && <HintCard variant="warn" role="status" title={storageWarning} />}
 
-      {/* DeepSeek 余额分组 */}
-      <div className={css.prefGroup}>
-        <div className={css.prefGroupHead}>
-          <span className={`${css.prefGroupIcon} ${css.prefGroupIconDeepSeek}`} aria-hidden>
-            <IconDataOutlineRegular size={14} />
-          </span>
-          <span className={css.prefGroupTitle}>{t('deepseek.title')}</span>
-          <span className={css.prefGroupCount}>3</span>
-        </div>
-        {/* 1. 启用 DeepSeek 监控 */}
-        <label className={css.settingRow}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.deepseekEnabled')}</span>
-            <span className={css.settingDesc}>{t('settings.deepseekEnabledHint')}</span>
-          </span>
-          <SettingsSwitch
-            checked={settings.deepseekEnabled}
-            onToggle={() => onUpdateSettings({ deepseekEnabled: !settings.deepseekEnabled })}
-          />
-        </label>
-
-        {/* 2. DeepSeek 侧边栏展示，关闭监控时置灰 */}
-        <label className={`${css.settingRow} ${settings.deepseekEnabled ? '' : css.settingRowDisabled}`}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.showDeepSeekInSidebar')}</span>
-            <span className={css.settingDesc}>{t('settings.showDeepSeekInSidebarHint')}</span>
-          </span>
-          <SettingsSwitch
-            checked={settings.showDeepSeekInSidebar}
-            disabled={!settings.deepseekEnabled}
-            onToggle={() => onUpdateSettings({ showDeepSeekInSidebar: !settings.showDeepSeekInSidebar })}
-          />
-        </label>
-
-        {/* 3. DeepSeek 余额抓取间隔，单位分钟，下限 3，关闭监控时置灰 */}
-        <label className={`${css.settingRow} ${settings.deepseekEnabled ? '' : css.settingRowDisabled}`}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.deepseekInterval')}</span>
-            <span className={css.settingDesc}>
-              {t('settings.deepseekIntervalHint', { min: DEEPSEEK_FETCH_MIN_MINUTES })}
-            </span>
-          </span>
-          <span className={css.intervalInput}>
-            <input
-              type="number"
-              min={DEEPSEEK_FETCH_MIN_MINUTES}
-              step={1}
-              disabled={!settings.deepseekEnabled}
-              {...deepseekInterval.field}
-            />
-            <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
-          </span>
-        </label>
-      </div>
-
-      {/* OpenCode Go 额度分组 */}
-      <div className={css.prefGroup}>
-        <div className={css.prefGroupHead}>
-          <span className={css.prefGroupIcon} aria-hidden>
-            <IconArchiveOutlineRegular size={14} />
-          </span>
-          <span className={css.prefGroupTitle}>{t('go.title')}</span>
-          <span className={css.prefGroupCount}>3</span>
-        </div>
-        {/* 4. 启用 Go 监控 */}
-        <label className={css.settingRow}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.goEnabled')}</span>
-            <span className={css.settingDesc}>{t('settings.goEnabledHint')}</span>
-          </span>
-          <SettingsSwitch
-            checked={settings.goEnabled}
-            onToggle={() => onUpdateSettings({ goEnabled: !settings.goEnabled })}
-          />
-        </label>
-
-        {/* 5. Go 侧边栏展示，关闭监控时置灰 */}
-        <label className={`${css.settingRow} ${settings.goEnabled ? '' : css.settingRowDisabled}`}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.showGoInSidebar')}</span>
-            <span className={css.settingDesc}>{t('settings.showGoInSidebarHint')}</span>
-          </span>
-          <SettingsSwitch
-            checked={settings.showGoInSidebar}
-            disabled={!settings.goEnabled}
-            onToggle={() => onUpdateSettings({ showGoInSidebar: !settings.showGoInSidebar })}
-          />
-        </label>
-
-        {/* 6. OpenCode Go 额度抓取间隔，单位分钟，下限 3，关闭监控时置灰 */}
-        <label className={`${css.settingRow} ${settings.goEnabled ? '' : css.settingRowDisabled}`}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.goInterval')}</span>
-            <span className={css.settingDesc}>
-              {t('settings.goIntervalHint', { min: GO_FETCH_MIN_MINUTES })}
-            </span>
-          </span>
-          <span className={css.intervalInput}>
-            <input
-              type="number"
-              min={GO_FETCH_MIN_MINUTES}
-              step={1}
-              disabled={!settings.goEnabled}
-              {...goInterval.field}
-            />
-            <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
-          </span>
-        </label>
-      </div>
-
-      {/* Z.ai 额度分组 */}
-      <div className={css.prefGroup}>
-        <div className={css.prefGroupHead}>
-          <span className={`${css.prefGroupIcon} ${css.prefGroupIconDeepSeek}`} aria-hidden>
-            <IconDataOutlineRegular size={14} />
-          </span>
-          <span className={css.prefGroupTitle}>{t('zai.title')}</span>
-          <span className={css.prefGroupCount}>3</span>
-        </div>
-        {/* 7. 启用 Z.ai 监控 */}
-        <label className={css.settingRow}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.zaiEnabled')}</span>
-            <span className={css.settingDesc}>{t('settings.zaiEnabledHint')}</span>
-          </span>
-          <SettingsSwitch
-            checked={settings.zaiEnabled}
-            onToggle={() => onUpdateSettings({ zaiEnabled: !settings.zaiEnabled })}
-          />
-        </label>
-
-        {/* 8. Z.ai 侧边栏展示，关闭监控时置灰 */}
-        <label className={`${css.settingRow} ${settings.zaiEnabled ? '' : css.settingRowDisabled}`}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.showZaiInSidebar')}</span>
-            <span className={css.settingDesc}>{t('settings.showZaiInSidebarHint')}</span>
-          </span>
-          <SettingsSwitch
-            checked={settings.showZaiInSidebar}
-            disabled={!settings.zaiEnabled}
-            onToggle={() => onUpdateSettings({ showZaiInSidebar: !settings.showZaiInSidebar })}
-          />
-        </label>
-
-        {/* 9. Z.ai 额度抓取间隔，单位分钟，下限 3，关闭监控时置灰 */}
-        <label className={`${css.settingRow} ${settings.zaiEnabled ? '' : css.settingRowDisabled}`}>
-          <span className={css.settingText}>
-            <span className={css.settingTitle}>{t('settings.zaiInterval')}</span>
-            <span className={css.settingDesc}>
-              {t('settings.zaiIntervalHint', { min: ZAI_FETCH_MIN_MINUTES })}
-            </span>
-          </span>
-          <span className={css.intervalInput}>
-            <input
-              type="number"
-              min={ZAI_FETCH_MIN_MINUTES}
-              step={1}
-              disabled={!settings.zaiEnabled}
-              {...zaiInterval.field}
-            />
-            <span className={css.intervalUnit}>{t('settings.unitMinutes')}</span>
-          </span>
-        </label>
-      </div>
+      {/* 额度监控：三个来源压成一张四列表格，开关与间隔的读写全在子视图内 */}
+      <QuotaMonitorTable settings={settings} onUpdateSettings={onUpdateSettings} t={t} />
 
       {/* 模型统计重定向分组：规则条数即徽标，规则编辑器见 ModelRedirectEditor */}
       <div className={css.prefGroup}>
@@ -312,7 +119,7 @@ export function SettingsTab({
           <span className={css.prefGroupTitle}>{t('settings.sessionGroup')}</span>
           <span className={css.prefGroupCount}>1</span>
         </div>
-        {/* 10. 会话标题旁展示会话 ID，默认开启 */}
+        {/* 会话标题旁展示会话 ID，默认开启 */}
         <label className={css.settingRow}>
           <span className={css.settingText}>
             <span className={css.settingTitle}>{t('settings.showSessionId')}</span>
@@ -424,7 +231,7 @@ export function SettingsTab({
         onConfirm={rebuild.confirm}
       />
 
-      {/* 底部页脚：事件数与更新时间，原概览页脚迁移至此 */}
+      {/* 底部页脚：事件数与更新时间 */}
       <div className={css.footer}>
         <span>{t('events')} {fmtFull(value?.foldedEvents ?? 0)}</span>
         <span>{t('updatedAt')} {value?.time ? new Date(value.time).toTimeString().slice(0, 8) : '--'}</span>

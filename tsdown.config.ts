@@ -1,33 +1,17 @@
 /**
- * tsdown 构建配置：
- * - lib/index.js —— 服务端 Host，Node ESM。运行时只 import node 内置
- *   模块含 node:sqlite + 本地代码 + dependencies 随包安装的运行时库；
- *   DSH 服务 webServer / sessionQuery /
- *   sessionPersistence 由 cordis 注入，从不直接 import。
- * - lib/client.js —— 浏览器端 bundle，CJS 闭包工厂，以包名 id
- *   `@xfqz86/dsh-usage-stats` 通过 window.__ModuleLoader__.load({ id, factory })
- *   注册。
+ * tsdown 构建配置：双 bundle（host Node ESM + client 浏览器 CJS）。
  *
- * 浏览器端 externals 复刻 shell 的冻结模块表；bundle 运行时只 require
- * react / react/jsx-runtime / primitives，其余全部内联。样式为真正的
- * CSS Modules *.module.css，由 scripts/css-modules-inline.mjs 在构建时
- * 编译并内联注入，独立插件 bundle 无法携带 .css 资产。
- *
- * 源码结构：src/host 服务端，Node ESM 与 src/client 浏览器端 bundle
- * 分离，入口分别是 src/host/index.ts 与 src/client/index.ts。
- *
- * 装饰器降级：@Remote 等标准装饰器经 decoratorLowering()（TypeScript
- * transpileModule，与 harness typert 生成器插件的 transform 同原理）
- * 降为 __esDecorate 辅助后打包，否则产物保留原生装饰器语法、
- * Node 22 无法解析。只处理含装饰器的 TS 源文件。
- *
- * 构建区分：
- * - 本地调试 `pnpm build`，`NODE_ENV` 非 production：不压缩、保留 sourcemap，便于跟踪问题
- * - 生产发布 `NODE_ENV=production pnpm build`，CI/release 使用：浏览器端压缩且无 sourcemap，
- *   服务端恒不压缩——网关按方法源码文本（`Function.prototype.toString`）取 Remote 线路
- *   字段名，压缩重命名参数（`snapshot(request)` → `snapshot(e)`）会让请求被判
- *   `gateway/arguments-invalid` 拒收，故服务端产物必须保留方法签名。回归自检见
- *   test/smoke.mjs「SRC 线路字段」，产物形态见 docs/ARCHITECTURE.md §6。
+ * 产物形态与 CSS 内联机制见 docs/ARCHITECTURE.md §6；本文件相关的约束：
+ * - host 端 `deps.neverBundle: true`：不打包任何 npm 包，运行时值导入（基座机制值，见
+ *   AGENTS §0 依赖三段式）由本包 node_modules 解析；sessionQuery / sessionPersistence 由
+ *   cordis 注入，从不直接 import。
+ * - host 端恒不压缩（生产构建同样如此）：网关按方法源码文本取 Remote 线路字段名，压缩
+ *   重命名参数会让请求被判 gateway/arguments-invalid 拒收（回归见 test/smoke.mjs）。
+ * - client 端 `externals` 是浏览器 shell 的冻结模块表（react 系 + cordis + store / slots /
+ *   primitives / dockkit），其余全部内联；生产构建压缩且无 sourcemap。
+ * - 装饰器降级：@Remote 等标准装饰器经 decoratorLowering()（TypeScript transpileModule，
+ *   与 harness typert 生成器插件同原理）降为 __esDecorate 辅助后打包，否则产物保留原生
+ *   装饰器语法、Node 22 无法解析；只处理含装饰器的 TS 源文件。
  */
 import ts from 'typescript';
 
@@ -71,7 +55,7 @@ const isProd = process.env.NODE_ENV === 'production';
 /** bundle id = package.json `name`，必须与 package.json 的 name 完全一致，含 scope。 */
 const PLUGIN_ID = '@xfqz86/dsh-usage-stats';
 
-/** web shell 冻结模块表（复刻 PLATFORM_MODULES 九项）中的模块标识。 */
+/** 浏览器 shell 冻结模块表中的模块标识（本仓库只需这 9 项，其余全部内联）。 */
 const CLIENT_EXTERNALS = [
   'react',
   'react/jsx-runtime',
@@ -100,9 +84,9 @@ export default [
     sourcemap: !isProd,
     plugins: [decoratorLowering()],
     // 服务端仅依赖 Node 内置 + 本地代码 + DSH 基座机制值导入
-    //（typert-protocol 装饰器体系、cordis Service 符号，见 AGENTS §0 例外），
-    // 不 bundled 任何 npm 包，运行时由本包 node_modules 解析。
-    // 设 neverBundle:true 可完全禁止 node_modules 打包，避免误引入值导致 cordis/cosmokit 等被内联
+    //（typert-protocol 装饰器体系、cordis Service 符号，见 AGENTS §0 依赖三段式）；
+    // neverBundle 禁止任何 node_modules 打包，运行时由本包 node_modules 解析，
+    // 避免误引入值导致 cordis/cosmokit 等被内联
     deps: { neverBundle: true },
   },
   {

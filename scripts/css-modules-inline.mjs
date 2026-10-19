@@ -1,28 +1,20 @@
 /**
- * rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的
- * JS 模块。
+ * rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的 JS 模块。
  *
- * 为什么需要它：独立插件 bundle 只有一个 JS 文件会被插件加载器服务，
- * 无法携带单独的 .css 资产（harness 仓库内由 monorepo 构建分发 css 文件，
- * 插件做不到）。源码仍然用真正的 CSS Modules（import css from './X.module.css'，
- * 与 harness 的 ui-sidebar 等项目写法一致），构建时经本插件：
- *   1. resolveId 把 .module.css 的 import 重写为 `\0css-modules:` 前缀的虚拟
- *      id，id = 绝对路径的 base64url（确定性强哈希，后缀不含 .css，绕开
- *      tsdown 内置 css-guard 对 css 文件的拦截检查）；
- *   2. load 钩子里用 lightningcss 的 cssModules 模式生成 scoped 类名与样式；
- *   3. 生成 JS 模块：export default 类名映射，并调用共享运行时（RUNTIME_ID）
- *      的 injectPluginStyle 注入 <style>（幂等）。
+ * 为什么需要它：独立插件 bundle 只有一个 JS 文件会被插件加载器服务，无法携带单独的 .css
+ * 资产；源码仍是真正的 CSS Modules，构建期由本插件编译。机制与产物形态见
+ * docs/ARCHITECTURE.md §6，这里只列本文件的约束：
+ *   - resolveId 把 .module.css 的 import 重写为 `\0css-modules:` 虚拟 id，id 取相对路径的
+ *     sha256 短哈希——同一文件从任意处 import 解析到同一 id，rolldown 只打包一份；后缀不含
+ *     .css，绕开 tsdown 内置 css-guard 对 css 文件的拦截检查。
+ *   - load 钩子用 lightningcss 的 cssModules 模式生成 scoped 类名与样式，输出 JS 模块：
+ *     export default 类名映射，并调用共享运行时（RUNTIME_ID）的 injectPluginStyle 注入
+ *     <style>（幂等，注入助手整个 bundle 只定义一份）。
+ *   - 插件钩子可能在不同 rolldown 实例上下文中执行，模块级 Map 不可靠：虚拟 id → 真实路径
+ *     的映射挂在 globalThis，load 只按 id 查表，不依赖调用顺序。
  *
- * 两项去重，避免 bundle 里重复代码，且全部无状态（关键：tsdown/rolldown 的
- * 插件钩子可能在不同实例上下文中执行，模块级 Map 不可靠，必须纯函数）：
- *   - 共享运行时：注入逻辑（建标签 / 查重 / 挂头）只生成一次，每个 CSS 模块
- *     只是一行 import + 一行调用，不内联整段样板；
- *   - 按文件确定性 id：同一 .module.css 从任意多处 import 都会解析到同一个
- *     虚拟 id，rolldown 据此只打包一份（否则 UsageStatsCommon 这类共享样式
- *     会在 bundle 里出现 N 份）。路径从 id 反解码，load 不依赖任何共享状态。
- *
- * 用 .mjs 实现：tsdown 在 Node 22 上加载含运行时 import 的 TS 配置会触发
- * 已知 bug（需要 --config-loader tsx），原生 ESM 则无此问题。
+ * 用 .mjs 实现：tsdown 在 Node 22 上加载含运行时 import 的 TS 配置会触发已知 bug
+ * （需要 --config-loader tsx），原生 ESM 无此问题。
  */
 
 import { createHash } from 'node:crypto'

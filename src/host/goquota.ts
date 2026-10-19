@@ -2,19 +2,10 @@
  * OpenCode Go 订阅额度查询：滚动 5 小时 / 本周 / 本月三档用量百分比
  * 与重置时间，端点为 `GET https://opencode.ai/zen/go/v1/usage`。
  *
- * 机制要点：
- *   - 官方固定域名端点；Bearer key + 浏览器 UA，否则会被 opencode.ai 前置
- *     Cloudflare 以 error 1010 拦截。
- *   - key 解析：仅走 DSH 凭据中心 `OPENCODE_GO_API_KEY`，即 `ctx.credentials`，
- *     由 `~/.dsh/.credentials.yaml` 等统一托管，不直接读 `process.env`。
- *   - 语义：无 key → no-key；401/403 读响应体，`error.type` 为 EntitlementError
- *     （已配置 Key 但未开通订阅，如 403 + "OpenCode Go subscription required."）
- *     判 no-plan，其余 401/403（Key 无效等）仍判 no-key。
- *   - 结果带 TTL 缓存 5 分钟与单飞机制，并发请求只打一次官方端点。
- *
- * GoWindow / GoQuota 协议类型定义在 types.ts，与客户端 useGoQuota 统一。
- * 纯数据模块：请求失败 / 未配置 key / 未开通订阅都返回带 status 的结构化结果，
- * 由客户端按 status 本地化文案，不在服务端拼用户文案。
+ * key 仅走 DSH 凭据中心 `OPENCODE_GO_API_KEY`；401/403 读响应体，`error.type` 为
+ * EntitlementError（已配置 Key 但未开通订阅）判 no-plan，其余仍判 no-key；TTL 缓存与
+ * 单飞见 quota.ts。协议与状态语义见 docs/API.md §3.1。
+ * 纯数据模块：所有失败都返回带 status 的结构化结果，由客户端本地化文案。
  */
 import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
 

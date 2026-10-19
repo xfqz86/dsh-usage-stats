@@ -1,19 +1,14 @@
 /**
  * usageStats 命名空间的手写严格 Remote 贡献。
  *
- * 本插件是独立仓库，跑不了 harness 仓库内 Typert 生成器的
- * workspace 管线（包发现强制要求包位于 <root>/packages/ 下），
- * 因此 Client 挂载用的严格描述符与 zod 编解码在此手写，
- * Host 侧则走文档化的 SRC 分发（@Remote 装饰器标记 + 实时服务绑定，
- * 与 dev 模式同源）。两者等价性由测试锁定：
- * test/pure.mjs 断言每个方法的 zod 收发与 service 实际出入相容，
- * test/smoke.mjs 直接调用 service 方法验证业务语义。
+ * 本插件是独立仓库，跑不了 harness 仓库内 Typert 生成器的 workspace 管线（包发现强制
+ * 要求包位于 <root>/packages/ 下），因此 Client 挂载用的严格描述符与 zod 编解码在此手写，
+ * Host 侧走文档化的 SRC 分发（@Remote 标记 + 实时服务绑定）。等价性由测试锁定：
+ * test/pure.mjs 断言每个方法的 zod 收发与 service 实际出入相容，test/smoke.mjs 验证业务语义。
  *
- * 维护规则与生成产物一致：只改方法实现体不动本文件；
- * 增删方法、改命名空间、改参数/返回值形状时必须同步改这里的
- * 描述符与 schema，否则 Client 挂载或调用校验会失败。
- * 错误分支有意放宽（code 为任意字符串）：网关透传的码原样过线，
- * 未知码也不应破坏信封解析；成功分支保持精确。
+ * 维护规则：只改方法实现体不动本文件；增删方法、改命名空间、改参数/返回值形状时必须
+ * 同步这里的描述符与 schema，否则 Client 挂载或调用校验会失败。错误分支有意放宽（code
+ * 为任意字符串，未知码也不该破坏信封解析），成功分支保持精确。
  */
 
 import { z } from 'zod';

@@ -4,9 +4,8 @@
  *
  * 为什么必须验发布形态：开发态构建掩盖生产态才暴露的问题。`lib/index.js` 的方法
  * 参数名是 SRC 分发的线路字段（网关按方法源码文本读参数名），一旦被压缩改名，
- * 全部带参 Remote 调用在真实网关上被判 `gateway/arguments-invalid` 拒收——0.4.2
- * 的线上故障正是生产构建把 `snapshot(request)` 压成 `snapshot(e)`；客户端 bundle
- * 的 externals 与剪枝后的 package.json 同理只在发布形态成立。
+ * 全部带参 Remote 调用在真实网关上被判 `gateway/arguments-invalid` 拒收；客户端
+ * bundle 的 externals 与剪枝后的 package.json 同理只在发布形态成立。
  *
  * 用法：`node .agents/skills/release/scripts/verify-release.mjs`（须在仓库内运行），出包后由
  * 装机实测消费（本机流程见 AGENTS.local.md，规则见 AGENTS.md §9，流程见同目录上一级的

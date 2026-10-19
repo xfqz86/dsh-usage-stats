@@ -51,7 +51,7 @@ jobs:
           test -f lib/index.js || (echo "::error::lib/index.js missing" && exit 1)
           test -f lib/client.js || (echo "::error::lib/client.js missing" && exit 1)
           if [ -f lib/client.js.map ]; then echo "::error::lib/client.js.map should not exist (sourcemap disabled)"; exit 1; fi
-          # 验证为压缩产物（minify 后应明显小于未压缩的 35k/116k）
+          # 体量哨兵：minify 后 client.js 仍超过 80k 时告警，提示可能没压缩
           idx=$(wc -c < lib/index.js); cli=$(wc -c < lib/client.js)
           echo "lib ready — $idx bytes index, $cli bytes client (both minified, no map)"
           if [ "$cli" -gt 80000 ]; then echo "::warning::client.js >80k, may not be minified"; fi

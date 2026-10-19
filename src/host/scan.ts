@@ -1,17 +1,11 @@
 /**
- * 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id
- * 全集逐会话读取，经 foldRecord 写入账本（events、session_meta 共 9 表，
- * 含 agg_* 预统计）并折叠聚合缓存。harness 读取经 sessionQuery.readSession、
- * persistence.open+read 实现；两路都被拒绝（如旧代次会话的
- * SessionFormatUnsupportedError）或返回空事件时，回退用 rawlog 自读磁盘最高
- * 代次日志兜底，使被迁移拒绝的旧会话仍纳入统计；4 路 worker 并行。
+ * 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，
+ * 经 foldRecord 写入账本（events、session_meta 共 9 表，含 agg_* 预统计）并折叠聚合缓存；
+ * harness 两路读取被拒或返回空事件时回退 rawlog 自读原始日志。路由与四路 worker 见 docs/ARCHITECTURE.md §3。
  *
- * 语义：只在账本需要初始化，首启无事件或显式重建时运行；平时数据来自
- * 实时 session/event 监听，每次写入同步落盘，无需周期性对账。
- * 预统计：批量导入期间挂起逐条物化，完成后一次 bulk 物化 agg_* 表，
- * 后续启动可直接从预统计加载，仅重放少量未密封事件，显著加速冷启动。
- * 扫描报告，rawSessions（raw 兜底命中）、harnessSessions（harness 命中）、
- * failed 记录最近一次导入结果。
+ * 只在首启无事件或显式重建时运行，平时靠实时 session/event 监听。扫描报告 rawSessions
+ * （raw 兜底命中）、harnessSessions（harness 命中）、failed（两路都报错且 raw 无记录）
+ * 记录最近一次导入结果。
  */
 import { readFileSync } from 'node:fs';
 
@@ -149,7 +143,7 @@ export async function scanOnce(
         const snapshots = await persist.list();
         if (Array.isArray(snapshots)) {
           for (const snap of snapshots) {
-            // 新基座 list 返回快照（id 嵌于 .header），兼容旧直 header 形态。
+            // persistence.list 返回快照（id 嵌于 .header），兼容直接返回 header 的形态。
             const header = (snap as { header?: unknown }).header ?? snap;
             if (header && typeof (header as { id?: unknown }).id === 'string') {
               const hid = (header as { id: string }).id;

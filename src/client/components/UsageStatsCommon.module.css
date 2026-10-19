@@ -73,6 +73,23 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* ---- 状态提示卡容器：面板内容区（UsageStatsPanel 的 .body）与明细弹窗内容区
+   （.detailBody）都是 flex column，HintCard 放在这层里撑满并居中；卡片限宽 380px，
+   比详情面板与二级弹窗都窄，窄视口下不出横向滚动。 ---- */
+.statusWrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.statusWrap > * {
+  width: 100%;
+  max-width: 380px;
+}
+
 /* ---- 表格：会话与模型两 Tab 共用 ----
    1366x768 适配：表头 12px、行高 32，含 td 6px 垂直内边距与 20px 行高、
    单元格 12px，头部与体对齐，保持 --dsw-alias-* token 与横向滚动。 */
@@ -511,8 +528,9 @@
   border-radius: 4px;
 }
 
+/* 明细加载失败的「重试」按钮：由 HintCard 的 action 挂载，与卡片正文左对齐（间距由
+   HintCard 的 .action 给），故此处不再留外侧左边距。 */
 .detailRetry {
-  margin-left: 6px;
   padding: 2px 10px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 999px;
@@ -616,16 +634,8 @@
   line-height: 18px;
   margin-bottom: 10px;
   letter-spacing: 0.1px;
-}
-
-.tipHint {
-  font-size: 12px;
-  line-height: 16px;
-  opacity: 0.72;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  padding: 10px 12px;
-  text-align: center;
+  /* 折叠 rail 的气泡挂在居中按钮里会继承 text-align:center，标题显式左对齐与宽列一致。 */
+  text-align: left;
 }
 
 .tipPill {

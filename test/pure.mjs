@@ -1,31 +1,27 @@
 /**
- * 纯函数与额度解析的单测（node:test + 类型剥离直引源码）。
+ * 纯逻辑、账本折叠与协议/偏好逻辑的单测（node:test + 类型剥离直引源码）。
  *
- * 运行 `node --experimental-strip-types test/pure.mjs`（或 `pnpm test:pure`）；
- * 直接 import `src/*.ts` 源码：纯模块仅含可擦除类型语法（见 docs/STYLE.md §7），
- * Node ≥22 类型剥离可执行。额度查询的 fetch 经全局 mock，不产生真实外网请求；
- * 快照截断用内存 store，不碰 sqlite。
+ * 运行 `node --experimental-strip-types test/pure.mjs`（或 `pnpm test:pure`）：直接 import
+ * `src/*.ts`，纯模块仅含可擦除类型语法（见 docs/STYLE.md §7）；额度查询的 fetch 经全局 mock，
+ * 不产生真实外网请求，快照截断用内存 store、不碰 sqlite。
  *
  * 覆盖范围：
- *   - utils：日期与键（startOfDay/dateKeyOf/splitModelKey）、共享常量、
- *     effectiveQuotaTtl 按 min/max 夹取；
- *   - 额度展示与文本：goPercent/goLevelOf/goResetsAt、parseJsonLine/errorMessage/
- *     cacheTotal；
- *   - agg 口径：newAgg/ink（reasoning 不计 total、缺字段归零仍计次）、usable 收
- *     对话与压缩调用、拒 assistant/attempt；modelKeyOf 两处取源；
- *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、
- *     截断尾帧、坏帧）；
+ *   - utils：日期与键（startOfDay/dateKeyOf/splitModelKey）、共享常量、effectiveQuotaTtl 按 min/max 夹取；
+ *   - 额度展示与文本：goPercent/goLevelOf/goResetsAt、parseJsonLine/errorMessage/cacheTotal；
+ *   - agg 口径：newAgg/ink（reasoning 不计 total、缺字段归零仍计次）、usable 收对话与压缩调用、
+ *     拒 assistant/attempt；modelKeyOf 两处取源；
+ *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、截断尾帧、坏帧）；
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
- *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与
- *     单日明细的请求与结果）；
+ *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与单日明细）；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
- *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带
- *     表单身份（热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧
- *     localStorage 迁移（等表单落定、成功写入才删旧键、不可用时保留）；配置串
- *     编解码（与独立 Base64 实现互通、容错与逐码失败语义、解码归一化、改动字段
- *     清单）与整份替换写入（默认值字段 unset、改动字段 set 且夹取、同一套写入守卫）；
- *     服务端条目 schema（字段全 volatile、解析值等于共享默认值、条目 id 与浏览器端常量一致）；
- *   - stats：格式化/会话分组/最近活跃文案/时间范围/图表几何/快照截断/模型明细合并；
+ *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带表单身份
+ *     （热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧 localStorage 迁移
+ *     （等表单落定、成功写入才删旧键、不可用时保留）；配置串编解码（与独立 Base64 实现互通、
+ *     容错与逐码失败语义、解码归一化、改动字段清单）与整份替换写入（默认值字段 unset、
+ *     改动字段 set 且夹取、同一套写入守卫）；服务端条目 schema（字段全 volatile、解析值等于
+ *     共享默认值、条目 id 与浏览器端常量一致）；
+ *   - stats：格式化 / 会话分组与排序比较 / 时间范围 / 图表几何 / 模型范围与堆叠 / 最近活跃自然日 /
+ *     快照构建与截断 / 会话明细聚合 / 模型明细合并 / 模型统计重定向（归一化、归并、候选过滤）；
  *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
  */
 import { afterEach, describe, it } from 'node:test';
@@ -624,12 +620,12 @@ describe('remote句柄：经 get 取命名空间服务', () => {
       remote: { $mount: async () => { alive = true; return async () => { alive = false; }; } },
       get: (key) => (alive && key === 'remote.usageStats' ? ns : undefined),
     };
-    assert.throws(() => usageStatsRemote(), /尚未挂载/);
+    assert.throws(() => usageStatsRemote(), /not mounted yet/);
     const dispose = await mountUsageStatsRemote(fakeCtx);
     // 若实现改回暂存 ctx.remote 再读 .usageStats，这里拿到的是 undefined。
     assert.equal(usageStatsRemote(), ns);
     await dispose();
-    assert.throws(() => usageStatsRemote(), /尚未挂载/);
+    assert.throws(() => usageStatsRemote(), /not mounted yet/);
   });
 });
 

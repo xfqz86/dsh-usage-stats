@@ -6,9 +6,22 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-19
+
+### 变更
+
+- **额度监控改成一张表**：三份额度并成一张表，开关与抓取间隔一眼对齐，一屏看全，改设置不用再来回翻；关掉某项监控时，同一行里联动的两项设置直接变灰
+- **提示统一成状态卡**：额度未配置时直接列出要配的凭据名，未订阅、查询失败、暂无数据与明细加载失败也换成同一张提示卡（明细加载失败可点重试），磁贴、侧边栏悬浮气泡与设置页观感一致
+
+### 修复
+
+- **折叠侧边栏的 DeepSeek 额度标签不再被裁掉**：收起侧边栏时该行改用「余额」短名，原先「DeepSeek余额」超出一格小方块，只露出半截
+
 ### 清理
 
+- 全面校对文档与代码注释：删掉过时说法和已删除代码的引用，机制、协议、规则各归一处（无功能变化）
 - 文档整理：README 去掉统计口径与设置项赘述、补一张「添加插件」向导截图，安装步骤改为向导与 dsh CLI 两条路径（无功能变化）
+- README 的 6 张界面截图改用演示数据重拍，没数据时也能看出各页完整样子（无功能变化）
 
 ## [0.5.0] - 2026-10-13
 
@@ -173,7 +186,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.6...v0.4.7
 [0.4.6]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.5...v0.4.6

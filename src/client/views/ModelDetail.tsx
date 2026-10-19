@@ -19,6 +19,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useState } from 'react';
 
+import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 
 import css from './ModelDetail.module.css';
@@ -53,9 +54,13 @@ export function ModelDetail({
   function renderBody() {
     if (error !== null) {
       return (
-        <div className={shared.empty}>
-          {t('detail.failed')}
-          <button type="button" className={shared.detailRetry} onClick={reload}>{t('detail.retry')}</button>
+        <div className={shared.statusWrap}>
+          <HintCard
+            variant="error"
+            role="alert"
+            title={t('detail.failed')}
+            action={<button type="button" className={shared.detailRetry} onClick={reload}>{t('detail.retry')}</button>}
+          />
         </div>
       );
     }

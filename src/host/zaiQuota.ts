@@ -1,21 +1,11 @@
 /**
- * Z.ai 智谱额度查询：滚动 5 小时、每周 7 天百分比与每月 Web 搜索次数，端点为 GET https://api.z.ai/api/monitor/usage/quota/limit。
+ * Z.ai 智谱额度查询：滚动 5 小时、每周 7 天百分比与每月 Web 搜索次数，端点为
+ * `GET https://api.z.ai/api/monitor/usage/quota/limit`。
  *
- * 机制要点：
- *   - 官方固定域名端点，Bearer key 与浏览器 UA 与 GoQuota、DeepSeek 同款以防前置拦截。
- *   - key 解析：仅走 DSH 凭据中心 `ZAI_CODING_CN_API_KEY` 到 `ZAI_API_KEY`，经 `ctx.credentials`
- *     由 `~/.dsh/.credentials.yaml` 等统一托管，不直接读 `process.env`，亦不使用 `GLM_API_KEY`。
- *   - 结果带 TTL 缓存 5 分钟与单飞机制，并发请求仅打一次官方端点。
- *   - 语义：无 key / 401/403 判为 no-key；合法 key 但无 GLM Coding Plan，success 为 false 且
- *     msg 含 "coding plan" 时判为 no-plan；非 2xx、超时或结构非法判为 error；成功判为 ok。
- *   - quota 端点响应：{ code:200, success:true, data:{ level?, limits:[{type, unit, number,
- *     percentage?, nextResetTime?, usage?, currentValue?}] } }；CREDIT_LIMIT /
- *     TOKENS_LIMIT 为百分比窗口，按 unit 归类为 session 与 weekly，TIME_LIMIT 为月度 Web 搜索计数。
- *
- * ZaiQuota / ZaiWindow / ZaiWebSearchQuota 协议类型定义在 types.ts，与客户端 useZaiQuota 统一。
- * 纯数据模块：请求失败 / 未配置 key 都返回带 status 的结构化结果，由
- * 客户端按 status 本地化文案，不在服务端拼用户文案。
- * 本功能不写入 ledger，仅只读查询与内存缓存。
+ * key 仅走 DSH 凭据中心 `ZAI_CODING_CN_API_KEY` → `ZAI_API_KEY`（不用 `GLM_API_KEY`）；
+ * `limits` 按 type/rawType 与 unit 归类为 session/weekly/webSearches，无 Coding Plan 时
+ * 判 no-plan；TTL 缓存与单飞见 quota.ts。协议、归一化与状态语义见 docs/API.md §3.3。
+ * 纯数据模块，不写 ledger，只有只读查询与内存缓存。
  */
 import { createQuotaQuery, resolveFirstKey, QUOTA_UA } from './quota.ts';
 

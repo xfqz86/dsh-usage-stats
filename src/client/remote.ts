@@ -1,17 +1,13 @@
 /**
- * usageStats 命名空间的浏览器端挂载与调用入口。
+ * usageStats 命名空间的浏览器端挂载与调用入口：apply 内挂载手写贡献，hooks 经 usageStatsRemote() 取服务。
  *
- * 独立仓库自挂载：Client 程序集（api-remotes）只挂载官方选单，
- * 本插件在 apply 内把自己的严格贡献 USAGE_STATS_REMOTE 经
- * ctx.remote.$mount 挂载，返回的 disposer 由调用方经 ctx.effect 随 fiber 撤回。
- * hooks 经 usageStatsRemote 取命名空间服务，调用签名与返回信封均为手写严格类型
- * （见 src/remote/contribution.ts 的命名空间合并）。
+ * 独立仓库自挂载：Client 程序集（api-remotes）只挂载官方选单，本插件在 apply 内把自己的严格贡献
+ * 经 ctx.remote.$mount 挂上，disposer 由调用方经 ctx.effect 随 fiber 撤回。
  *
- * 取句柄必须经挂载上下文 get('remote.usageStats')（本模块由 usageStatsRemote 封装，
- * 每次调用经 get 实时解析，不缓存服务实例），不可暂存 ctx.remote 再读
- * .usageStats：插件行跑在子 scope，暂存的 remote 句柄在 hooks（fiber 之外）
- * 触发命名空间属性查找会报 without-inject（命名空间服务挂在父级）；
- * get 走 fiber 链向上查找，任意位置可用，且挂载重建后自动跟随最新实例。
+ * 取句柄必须经挂载上下文 get('remote.usageStats')（本模块封装，每次实时解析、不缓存
+ * 服务实例），不可暂存 ctx.remote 再读 .usageStats：插件行跑在子 scope，暂存的句柄在
+ * hooks（fiber 之外）触发命名空间属性查找会报 without-inject（服务挂在父级）；
+ * get 走 fiber 链向上查找，且挂载重建后自动跟随最新实例。
  */
 
 import { NAMESPACE, USAGE_STATS_REMOTE } from '../remote/contribution.ts';
@@ -56,6 +52,6 @@ export function usageStatsRemote(): TypertRemoteNamespace$75736167655374617473 {
   } catch {
     svc = undefined;
   }
-  if (svc === undefined) throw new Error('usageStats remote 尚未挂载');
+  if (svc === undefined) throw new Error('usageStats remote is not mounted yet');
   return svc;
 }

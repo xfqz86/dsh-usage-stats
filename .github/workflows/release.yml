@@ -8,7 +8,7 @@
 #     /releases/latest/download/，README 不再介绍这条安装路径）；workflow artifact 保持 npm 的版本化命名，装指定版本请用 npm
 #     （见 .agents/skills/release/SKILL.md 交付形态）
 #   - GitHub Release 正文：docs/releases/v<版本>.md（面向用户的人话版更新说明，见 .agents/skills/release/SKILL.md）
-#   - GitHub 安装：依赖 prepare + release 分支（见 release-branch.yml），此处仅校验
+#   - GitHub 安装：依赖 prepare 自构建（源码安装）或 release 分支（预构建，见 release-branch.yml）；本 workflow 不产出这两者
 #
 # npm 发布方式（择一）：
 #   1) OIDC trusted publishing（推荐，无 token）—— 在 npmjs.com 为包配置 trusted publisher：

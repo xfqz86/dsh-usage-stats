@@ -1,17 +1,9 @@
 /**
  * DeepSeek 余额查询：通过 `GET https://api.deepseek.com/user/balance` 获取当前余额。
  *
- * 机制要点：
- *   - 官方固定域名端点，使用 Bearer key 与浏览器 UA，与 GoQuota 同款以防前置拦截。
- *   - key 解析仅走 DSH 凭据中心，支持 `DEEPSEEK_API_KEY` 等，由 `ctx.credentials` 统一托管，不直接读 `process.env` 或配置文件。
- *   - 结果带 TTL 缓存与单飞，TTL 默认 5 分钟，单飞即并发请求只打一次官方端点。
- *   - is_available 归一化：仅当官方返回 boolean true 时为 true，其余按 false。
- *   - 金额字段如 total_balance 等为字符串小数，归一化保留字符串避免浮点丢失。
- *
- * DeepSeekBalance / DeepSeekBalanceInfo 协议类型定义在 types.ts，与客户端 useDeepSeekBalance 统一。
- * 纯数据模块：请求失败 / 未配置 key 都返回带 status 的结构化结果，由
- * 客户端按 status 本地化文案，不在服务端拼用户文案。
- * 本功能不写入 ledger，仅只读查询与内存缓存。
+ * key 仅走 DSH 凭据中心（`DEEPSEEK_API_KEY` 及别名）；金额保持字符串避免浮点丢失，
+ * `is_available` 仅严格 true 时为 true；TTL 缓存与单飞见 quota.ts。协议与状态语义见
+ * docs/API.md §3.2。纯数据模块，不写 ledger，只有只读查询与内存缓存。
  */
 import { QUOTA_UA, createQuotaQuery, resolveFirstKey } from './quota.ts';
 

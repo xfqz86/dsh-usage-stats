@@ -1,17 +1,12 @@
 /**
  * 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
  *
- * 本模块只放纯函数与数值常量；协议类型 GoWindow、GoQuota、UsageAgg、Agg、
- * SeriesPoint、UsageSettings 定义在 types.ts。这里是插件
- * 自有逻辑中「多文件共用」部分的单一事实来源：本地日划分、单行 JSON 解析、错误消息提取、模型键拆分、Go 额度档位、插件偏好的默认值与夹取、模型统计重定向规则的归一化等。
+ * 只放纯函数与数值常量（协议类型在 types.ts）：本地日划分、JSON 行解析、错误消息提取、
+ * 模型键拆分、额度档位、偏好默认值与夹取、重定向规则归一化。
  *
- * 设计约束：
- *   - 只允许纯 JS 运行时能力 Date、Math、JSON、String，禁止 import
- *     node 内置模块，会破坏浏览器端 bundle，或 react、harness 包，会破坏
- *     服务端 bundle（import type 例外，构建时剥离）；
- *   - 归属说明：聚合口径与折叠 agg.ts、store.ts，账本存储 ledger.ts，
- *     会话发现 logs.ts，客户端格式化、分桶、图表几何 client/stats.ts
- *     等仍留在各自模块，这里只放「多文件共用的」部分。
+ * 设计约束：只允许 Date/Math/JSON/String 等纯 JS 能力；禁止 import node 内置、react 或
+ * harness 包（会破坏另一端 bundle；import type 构建时剥离）。聚合与账本、日志发现、
+ * 客户端图表几何仍留在各自模块。
  */
 import type { ModelRedirect, GoWindow, UsageSettings } from './types.ts';
 
@@ -68,6 +63,16 @@ export function goLevelOf(pct: number): 'over' | 'warn' | 'ok' {
   if (pct >= 80) return 'warn';
   return 'ok';
 }
+
+/**
+ * 三份额度的凭据名，按用户最可能配置的顺序列出，供界面「未配置」提示逐个展示。
+ * 服务端解析另有别名回退（见 host/deepseekBalance.ts 等），此处只列主名与常见双名。
+ */
+export const QUOTA_CREDENTIAL_KEYS = {
+  deepseek: ['DEEPSEEK_API_KEY'],
+  go: ['OPENCODE_GO_API_KEY'],
+  zai: ['ZAI_API_KEY', 'ZAI_CODING_CN_API_KEY'],
+} as const;
 
 /** 额度轮询 TTL 下限：仅约束自动轮询的有效 TTL（见 effectiveQuotaTtl），手动 force 刷新不受限。 */
 export const QUOTA_MIN_FETCH_MS = 3 * 60 * 1000;

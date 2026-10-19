@@ -2,10 +2,9 @@
  * 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露
  * usageStats 命名空间的 10 个一元 Remote 方法。
  *
- * 数据流（账本为唯一事实来源、聚合为派生缓存）与原 apply 函数版一致：
- * openLedger → 先挂 session/event 实时监听 →
- * bootstrap（预统计快加载、事件重放、首启全量扫描三档回退）。信任与认证由
- * 网关载体统一处理，本服务只做业务：快照、重建、清零、密封、三路额度。
+ * 数据流（账本为唯一事实来源、聚合为派生缓存）：openLedger → 先挂 session/event 实时
+ * 监听 → bootstrap（预统计加载、事件重放、首启全量扫描三档回退）。信任与认证由网关
+ * 载体统一处理，本服务只做业务：快照、重建、清零、密封、三路额度。
  *
  * 方法签名遵守严格 Remote 约定：公开非静态实例方法、非泛型、
  * 参数为具名必填简单标识符（无 lookup、无 signal），请求与结果均为
@@ -338,8 +337,8 @@ export default class UsageStatsService extends TypertRemoteService {
     const intervalMinutes = typeof request.intervalMinutes === 'number' && Number.isFinite(request.intervalMinutes)
       ? request.intervalMinutes
       : undefined;
-    // force=true 概览 DeepSeek 磁贴"立即刷新"，绕过 TTL 缓存强制重新抓取；
-    // 默认 false 保持轮询语义，有效 TTL 内返回缓存，仍受 3 分钟强制下限保护。
+    // force=true 概览 DeepSeek 磁贴"立即刷新"，完全绕过 TTL 与下限强制重新抓取；
+    // 默认 false 保持轮询语义，有效 TTL 内返回缓存。
     const force = request.force === true;
     // 凭据中心可选：缺席时查询侧直接返回 no-key，不读 env 与文件。
     return queryDeepSeekBalance(intervalMinutes, force, credentialsOf(this.ctx));
@@ -355,8 +354,8 @@ export default class UsageStatsService extends TypertRemoteService {
     const intervalMinutes = typeof request.intervalMinutes === 'number' && Number.isFinite(request.intervalMinutes)
       ? request.intervalMinutes
       : undefined;
-    // force=true 概览 Z.ai 磁贴"立即刷新"，绕过 TTL 缓存强制重新抓取；
-    // 默认 false 保持轮询语义，有效 TTL 内返回缓存，仍受 3 分钟强制下限保护。
+    // force=true 概览 Z.ai 磁贴"立即刷新"，完全绕过 TTL 与下限强制重新抓取；
+    // 默认 false 保持轮询语义，有效 TTL 内返回缓存。
     const force = request.force === true;
     return queryZaiQuota(intervalMinutes, force, credentialsOf(this.ctx));
   }

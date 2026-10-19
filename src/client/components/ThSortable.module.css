@@ -1,5 +1,4 @@
-/* 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐。
-   规则与提取前各 Tab 模块内的同名类保持一致；颜色全部使用设计 token。 */
+/* 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐；颜色全部使用设计 token。 */
 
 .thBtn {
   display: inline-flex;

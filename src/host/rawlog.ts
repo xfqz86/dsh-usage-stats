@@ -2,13 +2,10 @@
  * 会话原始日志的物理代次识别与多帧 zstd 解码：扫描拼接 zstd 帧边界后逐帧解压为
  * NDJSON 文本，供扫描链路在 harness 读取失败时兜底读取旧代次会话。
  *
- * 背景：harness 的 JSONL 会话日志是 append-only 的多帧 zstd 拼接（首帧独立承载会话头），
- * Node 的 zstdDecompressSync/createZstdDecompress 只解第一帧，因此必须自行扫描帧边界；
- * 帧结构（magic 0xFD2FB528、frame header descriptor、window descriptor、dict id、
- * frame content size、3 字节 block header 循环至 last block、可选 4 字节 checksum）在本模块
- * 自实现，不 import harness 内部包（@deepseek-ai/dsh-session-persistence-jsonl）。
- *
- * 本模块是纯函数模块：只接收内存字节、不做文件 I/O，单测不读取 ~/.dsh。
+ * harness 的 JSONL 日志是 append-only 的多帧 zstd 拼接（首帧独立承载会话头），Node 的
+ * zstdDecompressSync 只解第一帧，故帧结构在本模块自实现（不含 block 内容解码），不
+ * import harness 内部包（@deepseek-ai/dsh-session-persistence-jsonl）。纯函数模块：
+ * 只接收内存字节、不做文件 I/O，单测不读 ~/.dsh。
  */
 import { constants, zstdDecompressSync } from 'node:zlib';
 

@@ -97,7 +97,8 @@ function verifyTarball(tgzPath) {
   const j = JSON.parse(pkgJson)
   const extra = Object.keys(j).filter(k => !ALLOW.has(k))
   if (extra.length) fail(`packed package.json has extra keys: ${extra.join(', ')} (allow: ${[...ALLOW].join(', ')})`)
-  // 运行依赖与对等依赖必须保留：前者随包安装（如 yaml/校验库），后者声明框架单例；缺了就是 0.4.4 那类线上故障
+  // 运行依赖与对等依赖必须保留：前者随包安装（如 yaml），后者声明框架单例；缺了会让装机后
+  // 运行时缺依赖或与框架单例版本错配
   if (!j.dependencies || typeof j.dependencies !== 'object') fail('packed package.json missing dependencies')
   if (!j.peerDependencies || typeof j.peerDependencies !== 'object') fail('packed package.json missing peerDependencies')
   console.log(`packed package.json pruned ok: ${Object.keys(j).join(', ')}`)

@@ -1,5 +1,4 @@
-/* 统一堆叠柱状图（StackedBar）：合并 DateStackedBar / ModelStackedBar 及原 StackedBarCommon 的公共壳样式。
-   单文件承载全部样式，通过变体类处理图例最大宽度的差异（Date 70% / Model 60%）。 */
+/* 堆叠柱状图（StackedBar）：两种模式共用外壳样式，图例最大宽度按模式用变体类区分（date 70% / model 60%）。 */
 
 .root {
   display: flex;

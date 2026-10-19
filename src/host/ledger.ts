@@ -1,26 +1,14 @@
 /**
  * 原始事件流账本 Ledger：用量事件的唯一事实来源 —— 自管理 SQLite。
  *
- * 不依赖 harness 的 storage 家族：直接用 node:sqlite 的同步 API
- * DatabaseSync，Node ≥22 内置，运行时仅打印一条 experimental 警告。
- * 数据落在 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`
- * （经基座路径能力 dsh-home-paths 解析）：
+ * 不依赖 harness 的 storage 家族：直接用 node:sqlite 的同步 API DatabaseSync
+ * （Node ≥22 内置，运行时只打印一条 experimental 警告），落在
+ * `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`（基座路径能力解析）。
+ * 九表的列语义、幂等主键、查询索引与版本迁移见 docs/ARCHITECTURE.md §2。
  *
- *   - `events` 表：一行一条用量事件，PRIMARY KEY 为 t、session_id、seq 天然
- *     幂等，同一条事件重复写入收敛，重开账本时每行只折一次，seq=-1 的未知
- *     序事件再按毫秒时间戳区分。结构化列主键，列顺序为 t、session_id、seq。
- *     无 time 的畸形事件以"当天内确定性毫秒偏移"入账：同日重放幂等，
- *     跨日重放理论上可能重复——防御路径罕见可接受。另有 (provider, model, t)
- *     普通索引，供模型明细按模型过滤后按会话聚合（modelSessions）；(session_id, t)
- *     普通索引供会话明细按会话集合聚合（sessionModels）。
- *   - `session_meta` 表：key = session_id，value = title/cwd/createdAt/lastActive/parentSession/origin/delegationDepth，初始化扫描抄录、实时 session/title 事件更新。
- *   - `agg_*` 预统计表（agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint 共 7 张）：派生聚合的物化视图，见 §5 预统计；与 events 同库但各自提交，
- *     命中时直接加载即可，无需重放全量事件。
- *   - `PRAGMA user_version` = LEDGER_VERSION：结构不兼容时清空重建
- *     ，事件表为空后下次启动全量重扫 —— 账本结构升级的安全网。
- *
- * 所有读写同步：append / setMeta 即写即持久，自动提交，崩溃后重启从 sqlite 恢复；会话元数据在内存缓存一份供快照读取。
- * 预统计表与事件表同库但独立提交，崩溃窗口的缺口由启动对账或 rebuild 修复。
+ * 所有读写同步：append / setMeta 即写即持久、自动提交，崩溃后重启从 sqlite
+ * 恢复；预统计与事件表同库但独立提交，崩溃窗口的缺口由启动对账或 rebuild 修复。
+ * 会话元数据在内存缓存一份供快照读取。
  */
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -36,8 +24,9 @@ import type { MeteredEvent } from './agg.ts';
 import type { UsageStore } from './store.ts';
 
 /**
- * 账本 schema 版本，PRAGMA user_version，不匹配时清库重建并全量重扫。
- * 统计口径变化同样要递增：历史事件只在重扫时补录，旧库不会自愈。
+ * 账本 schema 版本，PRAGMA user_version：不匹配时按版本迁移（旧库 2/3 增量补列）
+ * 或清库重建（空表触发全量重扫）。统计口径变化同样要递增——历史事件只在重扫时
+ * 补录，旧库不会自愈。
  */
 export const LEDGER_VERSION = 6;
 /** 归属目录名，位于 storages 下，与插件同名。 */
@@ -311,7 +300,7 @@ export function toLedgerEvent(sessionId: string, event: MeteredEvent): LedgerEve
   };
   const { provider, model } = splitModelKey(modelKeyOf(event));
   // TEXT 列归一：sessionId、provider、model 写入 sqlite 前清洗 NUL，与 meta
-  // 路径同款口径，AGENTS §5，在构造点统一归一，内存聚合键与账本行保持一致。
+  // 路径同款口径（见 docs/ARCHITECTURE.md §2），在构造点统一归一，内存聚合键与账本行保持一致。
   const sessionIdText = sanitizeSqlText(sessionId);
   const providerText = sanitizeSqlText(provider);
   const modelText = sanitizeSqlText(model);
@@ -347,8 +336,8 @@ export function toLedgerEvent(sessionId: string, event: MeteredEvent): LedgerEve
 /**
  * 自管理 SQLite 账本：events / session_meta / agg_* 共 9 表；读走内存缓存 + 按需
  * SELECT，写同步即持久，自动提交。测试注入 DSH_HOME 即可隔离介质。
- * 新增 agg_* 预统计表：对不会再变动的历史数据做物化聚合，启动时优先
- * 加载预统计，仅重放少量未密封账本，显著降低冷启动时间。
+ * agg_* 预统计对不会再变动的历史数据做物化聚合：启动时优先加载，仅重放少量
+ * 未密封账本，显著降低冷启动时间。
  */
 export class Ledger {
   private db!: DatabaseSync;
@@ -365,7 +354,7 @@ export class Ledger {
     this.path = path;
   }
 
-  /** 打开账本：建目录、建表、迁移，user_version 不匹配则清库，再载入 meta 缓存。 */
+  /** 打开账本：建目录、建表、迁移（2/3 增量补列，其余版本清库重建），再载入 meta 缓存。 */
   open(): void {
     mkdirSync(dirname(this.path), { recursive: true });
     this.db = new DatabaseSync(this.path);
@@ -921,7 +910,7 @@ export class Ledger {
         calls: Number(r.calls) || 0,
       });
     }
-    // 兼容旧库：若 modelDaily 为空但 models 已有数据，v4 升级，从 events 重建 modelDaily
+    // 兼容旧库：预统计只有 agg_model 而缺 agg_model_daily（v4 起才有）时，从 events 重建 modelDaily
     if (store.modelDaily.size === 0 && store.models.size > 0) {
       try {
         const events = this.allEvents();
