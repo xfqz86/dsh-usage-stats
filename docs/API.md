@@ -6,9 +6,9 @@
 
 ## 1. 通用约定
 
-- 命名空间 `usageStats`，10 个一元（一问一答，非流式）方法：
-  `snapshot/modelDetail/dateDetail/sessionDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota`；
-  `rebuild`/`clear`/`seal` 无请求参数（贡献里 `parameters: []`），其余七个各带一个具名必填 `request`。
+- 命名空间 `usageStats`，12 个一元（一问一答，非流式）方法：
+  `snapshot/modelDetail/dateDetail/sessionDetail/rebuild/clear/seal/goQuota/deepseekBalance/zaiQuota/checkUpdate/upgrade`；
+  `rebuild`/`clear`/`seal` 无请求参数（贡献里 `parameters: []`），其余九个各带一个具名必填 `request`。
 - 调用经 `ctx.get('remote.usageStats')`（本仓库 `usageStatsRemote()` 封装，每次实时解析）；线路是
   客户端 Connection 的 RPC `POST /api/usageStats/<方法>`，请求体
   `{ type:'client-request', rpcId, method, payload:{ args } }`，信任与认证由网关载体统一处理
@@ -217,3 +217,25 @@
 - **导入语义**：**整份覆盖**——与默认值相同的字段发 `unset`（继续跟随 schema 默认值），不同的发 `set`（间隔
   字段夹到下限 3），一次 `mutate` 提交；写入守卫同单字段（表单不可用或只读时不写入，导出只读）。覆盖后字段
   全为默认值时条目用户片段整段消失——那只是配置覆盖层，装载记录在 profile 的 `package.json`，插件照旧加载。
+
+## 6. usageStats/checkUpdate
+
+- 「关于」页的版本更新检查。浏览器端在面板打开时自动查一次（命中服务端缓存则直接返回），用户也可点「检查更新」手动触发；结果只驱动关于页提示，不写账本、不影响用量统计。
+- request `{ force?: boolean }`：`force: true` 是手动检查，**绕过 6 小时内存缓存**并在成功后刷新；自动检查不传，命中缓存。
+- 服务端 `GET https://registry.npmjs.org/@xfqz86%2Fdsh-usage-stats/latest`，8s 超时；只读响应体的 `version`。不读凭据、不携带用户数据（npm 侧只看到一次版本查询）、不写账本。
+- 说明来源：再查 `GET https://api.github.com/repos/xfqz86/dsh-usage-stats/releases/tags/v<latest>`（8s 超时、只读 `body`/`published_at`/`html_url`）。说明查询失败不影响更新检查：`notes`/`publishedAt` 置 `null`，`url` 回退 release tag。
+- 响应 `value` 为判别联合（`src/types.ts` 的 `UpdateCheckResult`）：
+  - 成功 `{ status: 'ok', latest, url, notes, publishedAt, install }`：`latest` 为 npm `latest` dist-tag 的版本号（去 v 前缀），`notes` 为 Release 正文 Markdown（可为 null），`publishedAt` 为发布时间毫秒（可为 null），`install` 为 `npm`/`local`/`unknown`（由 profile 依赖串识别，决定能否在弹窗内升级）；
+  - 失败 `{ status: 'error', latest: null, url, notes: null, publishedAt: null, install }`：非 2xx、超时、网络、JSON 或版本号非法一律归一为 error，`url` 退回 releases 列表。**失败不抛错、不写缓存**，已有的成功缓存保留。
+- 缓存只在内存、进程重启即失效；只缓存成功结果；缓存同时带 `install`，安装方式变化时重新查询。
+- 版本比较在浏览器端 `updateRelation`（`src/utils.ts`，双向调用 `isNewerVersion`）：`latest > current` 为更新，`current > latest` 为 `ahead`（显示「本地版本较新」，不提供更新入口），相等/非法为已是最新；只比较 major.minor.patch，忽略 v 前缀与预发布/构建后缀。发现新版本时，版本号后显示「发现新版本」，关于 Tab 图标亮蓝点；点击在面板上打开更新说明弹窗。
+- 更新说明弹窗的正文直接渲染 `notes`（Markdown），发布日期来自 `publishedAt`；`install !== 'npm'` 时弹窗底部显示本地安装或不支持提示，不提供「立即升级」。升级中/完成/失败以状态条追加在说明下方，说明正文始终保留；说明取不到时的兜底只留提示文字，GitHub 入口统一在底栏。
+
+## 7. usageStats/upgrade
+
+- 更新说明弹窗里的「立即升级」：把 profile 的依赖更新到精确的新版本，**不负责重启**。运行中的 DSH 仍加载旧版本，成功结果固定 `restartRequired: true`，客户端提示重启 DSH 生效。
+- request `{ version: string }`：`version` 为 `checkUpdate.latest`（不带 v，形如 `0.6.0`）；服务端校验版本形状，不接受安装 spec。
+- 仅支持 **npm 注册表安装**：Host 读取 `profileContext` 的 profile `package.json`，依赖为 semver/range（如 `^0.5.1`、`latest`）才执行；`link:`/`file:`/`portal:`/`workspace:`/`github:`/`git+`/http(s)/路径依赖一律返回 `link-install` 或 `unsupported`，不把 link 依赖替换成 npm 包。
+- 升级实现：用当前 Node 进程启动 `dsh plugin --profile <profile> add @xfqz86/dsh-usage-stats@<version>`（spawn，无 shell，180s 超时），CLI 走 profile 的 pnpm 链路更新依赖；并发升级返回 `busy`。原始 CLI 输出只进 Host 日志，不回客户端。不走基座 `ctx.pluginManager`：自升级的对象是运行中的自身，其 `installBundle` 对已装包返回 `already-installed`、`removeBundle` 对运行中的插件返回 `bundle-in-use`/`stop-profile`，插件页更新也只对官方目录包先卸再装；`dsh plugin` CLI 才是基座支持的自升级路径（与 pluginManager 共享同一套 pnpm operations）。
+- 响应 `value` 为判别联合（`src/types.ts` 的 `UpgradeResult`）：成功 `{ status:'ok', version, restartRequired:true, reason:null }`；失败 `{ status:'error', version, restartRequired:false, reason }`，`reason` 为 `busy`/`link-install`/`unsupported`/`timeout`/`network`/`failed` 之一，由浏览器端本地化；`unsupported`/`link-install` 再点也不会变，弹窗只给「关闭」，其余原因给「重试」。
+- 桌面端/拿不到 CLI 入口时返回 `unsupported`；无 pnpm、registry 不可达、版本未发布等由 CLI 失败归为 `network` 或 `failed`。升级失败不动现有依赖（CLI 失败时保留原 profile）。

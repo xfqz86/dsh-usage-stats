@@ -41,6 +41,9 @@
 | `QUOTA_CACHE_TTL_MS` | 5 分钟 | `utils.ts` | 额度缓存上限 |
 | `effectiveQuotaTtl()` | — | `utils.ts` | `min(上限, max(下限, 间隔))`，三额度共用 |
 | `SCAN_WORKERS` | 4 | `host/scan.ts` | 扫描并发数 |
+| `REQUEST_TIMEOUT_MS` | 8 秒 | `host/update.ts` | 版本检查网络超时 |
+| `CACHE_TTL_MS` | 6 小时 | `host/update.ts` | 版本检查成功结果缓存 |
+| `UPGRADE_TIMEOUT_MS` | 180 秒 | `host/upgrade.ts` | 一键升级命令超时 |
 | `SNAPSHOT_LIMIT` | 500 | `client/api.ts` | 快照会话明细请求上限（服务端默认 200、上限 1000） |
 | `SNAPSHOT_INTERVAL_MS` | 4000 | `client/api.ts` | 快照轮询间隔（`useSnapshot` 默认值） |
 | `PAGE_SIZE` | 20 / 15 | 各视图内 | 故意 per-file：Tab 20、明细弹窗 15 |

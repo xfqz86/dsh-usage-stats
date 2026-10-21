@@ -45,8 +45,16 @@ dsh-usage-stats/
 │   │   ├── v0.4.5.md
 │   │   ├── v0.4.6.md
 │   │   ├── v0.4.7.md
-│   │   └── v0.5.0.md
+│   │   ├── v0.5.0.md
+│   │   └── v0.5.1.md
 │   ├── screenshot/
+│   │   ├── processed/
+│   │   │   ├── 01-overview.png
+│   │   │   ├── 02-dates.png
+│   │   │   ├── 03-sessions.png
+│   │   │   ├── 04-models.png
+│   │   │   ├── 05-settings.png
+│   │   │   └── footer-wide.png
 │   │   ├── 01-overview.png
 │   │   ├── 02-dates.png
 │   │   ├── 03-sessions.png
@@ -82,6 +90,8 @@ dsh-usage-stats/
 │   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：为需要多行排版或跟随鼠标的气泡提供 `content` 插槽与 `follow` 定位。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、Tab 栏、通用提示等。
 │   │   ├── views/
+│   │   │   ├── AboutTab.module.css ← 「关于」Tab AboutTab：品牌区、数据与隐私 / 链接双栏卡片、统计口径条与页脚， 尺寸按 960x640 设计稿换算；颜色全部使用设计 token，窄视口（≤800px）双栏改单列。
+│   │   │   ├── AboutTab.tsx ← 「关于」Tab：品牌区、数据与隐私、外链入口、统计口径条与构建信息。
 │   │   │   ├── ConfigTransfer.module.css ← 配置迁移区 ConfigTransfer：导出与导入两个子块的标题、说明、文本域、 操作按钮、差异预览与内联反馈。
 │   │   │   ├── ConfigTransfer.tsx ← 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图，一个组件一个文件。
 │   │   │   ├── DateDetail.module.css ← 日期明细弹窗（DateDetail 与两个子视图）：日期页每行末尾的「明细」链接打开的二级弹窗。
@@ -112,6 +122,8 @@ dsh-usage-stats/
 │   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开； 展示快照下发的会话（最多 SNAPSHOT_LIMIT 条，默认按最近活跃倒序）。
 │   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、可折叠分区（账本操作、配置迁移） 与底部页脚。
 │   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
+│   │   │   ├── UpdateNotesModal.module.css ← 更新说明弹窗 UpdateNotesModal：叠在用量统计面板上的二级模态窗（720x500）， 头部 / 版本元信息 / 可滚动 Markdown 说明（升级时下方追加状态条）/ 底部操作栏； 颜色全部使用设计 token，窄视口（≤800px）收紧内边距、≤560px 允许底栏换行。
+│   │   │   ├── UpdateNotesModal.tsx ← 更新说明弹窗（UpdateNotesModal）：叠在用量统计面板上的二级模态窗， 头部标题 + 版本元信息 + Release 说明（Markdown）+ 底部操作栏。
 │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
 │   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层，支持宽列与 56px rail 两种形态，几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。
@@ -133,7 +145,10 @@ dsh-usage-stats/
 │   │   ├── useSessionDetail.ts ← 会话明细的浏览器端取数：会话页点主会话行的「明细」链接时，按该行的折叠会话集合 （主会话 + 展平的全部子代理）查一次 usageStats/sessionDetail；没有打开的行时不发请求。
 │   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
 │   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
-│   │   └── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
+│   │   ├── useUpdateCheck.ts ← 「关于」页的更新检查 hook：面板打开时自动查一次，手动检查带 force 绕过服务端缓存。
+│   │   ├── useUpgrade.ts ← 「立即升级」hook：调用 usageStats/upgrade 把 profile 依赖装到指定版本， 并把结果归一为 idle / upgrading / success / error 四态。
+│   │   ├── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
+│   │   └── version.ts ← 本插件版本号：tsdown 构建时把 package.json 的 version 注入 DSH_USAGE_STATS_VERSION， 「关于」页的版本展示与更新比较都读这里，避免与包版本漂移。
 │   ├── host/
 │   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、 modelKeyOf。
 │   │   ├── deepseekBalance.ts ← DeepSeek 余额查询：通过 `GET https://api.deepseek.com/user/balance` 获取当前余额。
@@ -145,10 +160,12 @@ dsh-usage-stats/
 │   │   ├── quota.ts ← 额度查询共享基元（服务端）：浏览器 UA、key 回退解析、TTL 缓存单飞工厂。
 │   │   ├── rawlog.ts ← 会话原始日志的物理代次识别与多帧 zstd 解码：扫描拼接 zstd 帧边界后逐帧解压为 NDJSON 文本，供扫描链路在 harness 读取失败时兜底读取旧代次会话。
 │   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取， 经 foldRecord 写入账本（events、session_meta 共 9 表，含 agg_* 预统计）并折叠聚合缓存； harness 两路读取被拒或返回空事件时回退 rawlog 自读原始日志。
-│   │   ├── service.ts ← 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露 usageStats 命名空间的 10 个一元 Remote 方法。
+│   │   ├── service.ts ← 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露 usageStats 命名空间的 12 个一元 Remote 方法。
 │   │   ├── settings.ts ← 服务端（Host）的插件偏好设置 schema：`usage-stats` 插件条目（cordis.patch.yml 插入的 Loader 条目，id 即 USAGE_SETTINGS_NAMESPACE）的 Config，被 harness 设置 服务（ctx.settings）投影成设置表单，偏好因此落在 profile 配置文档里、属于部署而不是某一个浏览器。
 │   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 usageStats/snapshot 的结果 value，不触碰传输层与 ctx。
 │   │   ├── store.ts ← 内存聚合缓存：由账本事件流折叠而来的派生统计，按天、会话、模型、模型×日、全量维度组织。
+│   │   ├── update.ts ← 更新检查：查询 npm registry 上本插件的最新版本号，再取对应 GitHub Release 的更新说明， 供「关于」页与更新说明弹窗提示升级。
+│   │   ├── upgrade.ts ← 插件升级：识别当前安装方式，并在 npm 安装下调用 dsh CLI 把 profile 依赖改到指定版本。
 │   │   └── zaiQuota.ts ← Z.ai 智谱额度查询：滚动 5 小时、每周 7 天百分比与每月 Web 搜索次数，端点为 `GET https://api.z.ai/api/monitor/usage/quota/limit`。
 │   ├── remote/
 │   │   └── contribution.ts ← usageStats 命名空间的手写严格 Remote 贡献。

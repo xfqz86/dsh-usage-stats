@@ -108,5 +108,7 @@
 - `lib/client.js`（浏览器 CJS 闭包 `window.__ModuleLoader__.load({id,factory})`）：`externals`
   复刻 shell 冻结表（react 系与 `@deepseek-ai/*` 的 cordis/store/slots/primitives/dockkit），
   其余内联；`production` 压缩且无 sourcemap，非 production 不压缩并保留 sourcemap。
+- 版本号：tsdown 构建时从 `package.json` 读取 `version`，以 `DSH_USAGE_STATS_VERSION` 注入
+  浏览器 bundle；「关于」页展示与更新比较共用这一常量，发版不需要手改界面数字。
 - CSS：`scripts/css-modules-inline.mjs`（lightningcss）把 `*.module.css` 编译为 scoped 映射 +
   `<style data-plugin-css>` 注入（源码仍是真实 CSS Modules）。
