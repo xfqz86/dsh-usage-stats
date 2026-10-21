@@ -90,7 +90,7 @@ node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产
 - **注释的权威边界**：注释只对两件事是权威——文件职责（头部块注释首句，`docs/STRUCTURE.md` 的数据源）与代码自身说不出的局部约束；内容标准（只写 why、不复述代码、不复制文档、不写修复历史）见 `docs/STYLE.md` §6。
 - 每份文档开头一句职责声明；用户文档（README/CHANGELOG/releases）允许用户语言概述，但不承载实现细节。本文件为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它。
 - 发版同步：`package.json version` 变更必须同批追加 `CHANGELOG.md` 条目与 `docs/releases/v<版本>.md`（面向用户的更新说明，`release.yml` 强制存在），流程见 `.agents/skills/release/SKILL.md`（发版技能）；纯重构与文档整理在 CHANGELOG 简记一行；结构变化跑 `pnpm tree` 重生成 `docs/STRUCTURE.md`。
-- **README 只用标准 Markdown**（很多站点不渲染内联 HTML）：徽章写 `[![alt](图)](链接)`；界面截图用一行缩略图表格（GitHub 正文实测 838px，5 列 ×140px 刚好满行），缩略图链到 `docs/screenshot/` 根目录原图；关于页、更新说明这类截图不进 README。
+- **README 只用标准 Markdown**（很多站点不渲染内联 HTML）：徽章写 `[![alt](图)](链接)`；界面截图用一行缩略图表格（GitHub 正文实测 838px，5 列 ×140px 刚好满行），展示用的缩略图与补白图一律链接到 `docs/screenshot/` 根目录原图；关于页、更新说明这类截图不进 README。
 - **截图资产**：原图放 `docs/screenshot/` 根目录，缩略图、补白居中图等派生图只放 `docs/screenshot/processed/`（由原图生成）；高清屏截图是 2 倍图，网页展示要按 1 倍折算（补透明画布居中），不要按原尺寸引用。
 
 | 主题 | 权威文件 |
