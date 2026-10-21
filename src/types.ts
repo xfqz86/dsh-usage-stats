@@ -263,6 +263,72 @@ export interface QuotaRequest {
 }
 
 /**
+ * usageStats/checkUpdate 请求：手动检查时传 force=true 绕过服务端缓存；
+ * 打开「关于」页的自动检查不传，落在 6 小时内存缓存内。
+ */
+export interface UpdateCheckRequest {
+  force?: boolean
+}
+
+/** 当前安装方式：npm 注册表安装可在弹窗内直接升级；本地链接/文件/git 安装只能在仓库更新。 */
+export type UpdateInstallKind = 'npm' | 'local' | 'unknown';
+
+/**
+ * usageStats/checkUpdate 结果：成功带 latest（npm registry 上本插件的最新版本号，不带 v 前缀）、
+ * Release 正文与安装方式；失败 latest 恒为 null 且不抛错（网络/响应异常由 status 表达）。
+ * 浏览器端拿 latest 与当前版本比较，决定是否提示更新；notes 用于更新说明弹窗。
+ */
+export type UpdateCheckResult =
+  | {
+    status: 'ok'
+    latest: string
+    /** 更新说明页：对应版本的 GitHub Release tag（取到 html_url 时用它）。 */
+    url: string
+    /** GitHub Release 正文（Markdown）；接口失败或无正文时为 null。 */
+    notes: string | null
+    /** Release 发布时间（毫秒）；未知为 null。 */
+    publishedAt: number | null
+    /** 当前安装方式，决定弹窗里是否提供「立即升级」。 */
+    install: UpdateInstallKind
+  }
+  | {
+    status: 'error'
+    latest: null
+    /** 查询失败时的兜底更新说明页（releases 列表）。 */
+    url: string
+    notes: null
+    publishedAt: null
+    /** 查询失败时仍能识别安装方式，供失败页说明。 */
+    install: UpdateInstallKind
+  };
+
+/** usageStats/upgrade 请求：安装指定的精确版本（来自 checkUpdate 的 latest）。 */
+export interface UpgradeRequest {
+  version: string
+}
+
+/** 升级失败原因，由浏览器端本地化成文案；升级动作本身不抛错。 */
+export type UpgradeFailureReason = 'busy' | 'link-install' | 'unsupported' | 'timeout' | 'network' | 'failed';
+
+/**
+ * usageStats/upgrade 结果：成功表示新版本已写入 profile 的依赖，但运行中的 DSH 仍加载旧版本，
+ * restartRequired 恒为 true；失败带原因，由浏览器端本地化，只有可重试的原因才给「重试」。
+ */
+export type UpgradeResult =
+  | {
+    status: 'ok'
+    version: string
+    restartRequired: true
+    reason: null
+  }
+  | {
+    status: 'error'
+    version: string
+    restartRequired: false
+    reason: UpgradeFailureReason
+  };
+
+/**
  * 一条模型统计重定向规则：把「来源供应商 + 来源模型」的用量算到
  * 「目标供应商 + 目标模型」名下（影响模型页与日期、会话明细的按模型统计，不动账本）。
  */

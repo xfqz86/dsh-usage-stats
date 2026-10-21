@@ -1,0 +1,501 @@
+/* 「关于」Tab AboutTab：品牌区、数据与隐私 / 链接双栏卡片、统计口径条与页脚，
+   尺寸按 960x640 设计稿换算；颜色全部使用设计 token，窄视口（≤800px）双栏改单列。 */
+
+.root {
+  flex: 1 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---- 品牌区 ---- */
+.hero {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, var(--dsw-alias-border-l2));
+  background:
+    radial-gradient(140% 190% at 0% 0%, color-mix(in srgb, var(--dsw-alias-state-business-primary) 11%, transparent) 0%, transparent 58%),
+    linear-gradient(180deg, color-mix(in srgb, var(--dsw-alias-state-business-primary) 3%, var(--dsw-alias-bg-layer-2)) 0%, var(--dsw-alias-bg-layer-2) 100%);
+  box-shadow: var(--dsw-shadow-lv1);
+}
+
+/* 品牌蓝渐变底在深浅主题下恒定，字形色用静态白避免被主题反色。 */
+.logo {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-static-neutral-bluish-00);
+  background: linear-gradient(145deg, var(--dsw-static-deepseek-400) 0%, var(--dsw-static-deepseek-500) 55%, var(--dsw-static-deepseek-600) 100%);
+  box-shadow:
+    0 8px 18px color-mix(in srgb, var(--dsw-static-deepseek-500) 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 35%, transparent);
+}
+
+.heroMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.name {
+  margin: 0;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.version {
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-button-ghost-active-fill);
+  font-family: var(--ds-font-family-code);
+  font-size: 10.5px;
+  line-height: 17px;
+  letter-spacing: 0.2px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+/* 检查更新控件：按钮与进行中提示共用同一行高与字号。 */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-link);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.check:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.check:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.checkBusy {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: progress;
+}
+
+/* 状态只给图标着色，文字保持次级文字色：11px 的绿/琥珀字在浅色底上对比度不足。 */
+.checkDone {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.checkDoneIcon {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.checkFailed {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.checkFailedIcon {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 2.4s;
+  }
+}
+
+/* 更新提示 chip：品牌蓝描边浅底，链接到服务端返回的更新说明页。 */
+.updateChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  font-weight: 500;
+  line-height: 18px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.updateChip:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 16%, transparent);
+}
+
+.updateChip:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.pkg {
+  margin-top: 2px;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tagline {
+  margin: 8px 0 0;
+  max-width: 585px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.heroActions {
+  margin-left: auto;
+  flex: none;
+}
+
+.heroBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9px;
+  text-decoration: none;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--dsw-alias-state-business-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 9%, var(--dsw-alias-bg-layer-2));
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 24%, transparent);
+}
+
+.heroBtn:hover {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, var(--dsw-alias-bg-layer-2));
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 32%, transparent);
+}
+
+.heroBtnUpdate {
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, var(--dsw-alias-bg-layer-2));
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 32%, transparent);
+}
+
+.heroBtn:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+/* ---- 双栏卡片 ---- */
+.grid {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(0, 0.94fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-shadow-lv1);
+  overflow: hidden;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.cardIcon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-state-business-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 12%, transparent);
+}
+
+.cardTitle {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.cardExtra {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.privacyDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+}
+
+/* ---- 数据与隐私行 ---- */
+.rows {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 12px;
+}
+
+.infoRow {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.infoRow:last-child {
+  border-bottom: none;
+}
+
+.rowIcon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rowBody {
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.rowDesc {
+  margin-top: 1px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* ---- 链接卡片 ---- */
+.links {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.linkRow:last-child {
+  border-bottom: none;
+}
+
+.linkRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.linkRow:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: -2px;
+}
+
+.linkMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.linkLabel {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.linkDesc {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.linkArrow {
+  margin-left: auto;
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* ---- 统计口径条 ---- */
+.note {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.noteIcon {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.noteText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.noteTitle {
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.noteLink {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--dsw-alias-link);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.noteLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.noteLink:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ---- 页脚 ---- */
+.footer {
+  flex: none;
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sep {
+  color: var(--dsw-alias-label-dimmed);
+}
+
+/* ---- 窄视口：双栏改单列，卡片与品牌区允许换行 ---- */
+@media (max-width: 800px) {
+  .hero {
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .heroMain {
+    flex: 1 1 220px;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .note {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .noteText {
+    flex-basis: 220px;
+  }
+
+  .noteLink {
+    margin-left: 22px;
+  }
+
+  .footer {
+    flex-wrap: wrap;
+  }
+}

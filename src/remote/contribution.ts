@@ -27,6 +27,12 @@ import type {
   SessionDetail,
   SessionDetailRequest,
   SnapshotRequest,
+  UpdateCheckRequest,
+  UpdateCheckResult,
+  UpdateInstallKind,
+  UpgradeFailureReason,
+  UpgradeRequest,
+  UpgradeResult,
   UsageSnapshot,
   ZaiQuota,
 } from '../types.ts';
@@ -198,6 +204,10 @@ const quotaRequestSchema = z.object({
   force: z.boolean().optional(),
 });
 
+const updateCheckRequestSchema = z.object({
+  force: z.boolean().optional(),
+});
+
 const rebuildResultSchema = z.object({ rebuilt: z.boolean(), foldedEvents: z.number() });
 const clearResultSchema = z.object({ cleared: z.boolean(), foldedEvents: z.number() });
 const sealResultSchema = z.object({
@@ -205,6 +215,42 @@ const sealResultSchema = z.object({
   sealedUntil: z.number(),
   foldedEvents: z.number(),
 });
+
+const installKindSchema = z.union([z.literal('npm'), z.literal('local'), z.literal('unknown')]);
+
+/** 更新检查结果：成功必须带版本号与安装方式，失败 latest 恒为 null；错误不抛、走 status。 */
+const updateCheckResultSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('ok'),
+    latest: z.string(),
+    url: z.string(),
+    notes: z.string().nullable(),
+    publishedAt: z.number().nullable(),
+    install: installKindSchema,
+  }),
+  z.object({
+    status: z.literal('error'),
+    latest: z.null(),
+    url: z.string(),
+    notes: z.null(),
+    publishedAt: z.null(),
+    install: installKindSchema,
+  }),
+]);
+
+const upgradeRequestSchema = z.object({ version: z.string() });
+const upgradeReasonSchema = z.union([
+  z.literal('busy'),
+  z.literal('link-install'),
+  z.literal('unsupported'),
+  z.literal('timeout'),
+  z.literal('network'),
+  z.literal('failed'),
+]);
+const upgradeResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('ok'), version: z.string(), restartRequired: z.literal(true), reason: z.null() }),
+  z.object({ status: z.literal('error'), version: z.string(), restartRequired: z.literal(false), reason: upgradeReasonSchema }),
+]);
 
 /** 错误分支：码与消息透传，details 为任意 JSON 对象。 */
 const errorSchema = z.object({
@@ -248,7 +294,7 @@ function requestParam(typeSymbol: string, schema: z.ZodTypeAny): {
   return { name: 'request', wire: 'request', source: 'json', codec: strictCodec(typeSymbol, schema) };
 }
 
-/** 可挂载的严格贡献：10 个一元方法，无 lookup、无取消。 */
+/** 可挂载的严格贡献：12 个一元方法，无 lookup、无取消。 */
 export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
   package: PACKAGE,
   descriptors: [
@@ -342,6 +388,24 @@ export const USAGE_STATS_REMOTE: TypertRemoteContribution = {
       parameters: [requestParam(`${PACKAGE}/types#QuotaRequest`, quotaRequestSchema)],
       result: strictCodec(`${PACKAGE}/types#ZaiQuota`, envelope(zaiQuotaSchema)),
     },
+    {
+      id: `${PACKAGE}#${NAMESPACE}/checkUpdate`,
+      service: NAMESPACE,
+      namespace: NAMESPACE,
+      method: 'checkUpdate',
+      invocation: { kind: 'direct' },
+      parameters: [requestParam(`${PACKAGE}/types#UpdateCheckRequest`, updateCheckRequestSchema)],
+      result: strictCodec(`${PACKAGE}/types#UpdateCheckResult`, envelope(updateCheckResultSchema)),
+    },
+    {
+      id: `${PACKAGE}#${NAMESPACE}/upgrade`,
+      service: NAMESPACE,
+      namespace: NAMESPACE,
+      method: 'upgrade',
+      invocation: { kind: 'direct' },
+      parameters: [requestParam(`${PACKAGE}/types#UpgradeRequest`, upgradeRequestSchema)],
+      result: strictCodec(`${PACKAGE}/types#UpgradeResult`, envelope(upgradeResultSchema)),
+    },
   ],
 };
 
@@ -357,6 +421,8 @@ export const METHOD_NAMES = [
   'goQuota',
   'deepseekBalance',
   'zaiQuota',
+  'checkUpdate',
+  'upgrade',
 ] as const;
 
 /** Client 类型合并：引入本模块即挂上 ctx.remote.usageStats 的完整签名。 */
@@ -372,6 +438,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     goQuota: (request: QuotaRequest) => Promise<RemoteResult<GoQuota>>
     deepseekBalance: (request: QuotaRequest) => Promise<RemoteResult<DeepSeekBalance>>
     zaiQuota: (request: QuotaRequest) => Promise<RemoteResult<ZaiQuota>>
+    checkUpdate: (request: UpdateCheckRequest) => Promise<RemoteResult<UpdateCheckResult>>
+    upgrade: (request: UpgradeRequest) => Promise<RemoteResult<UpgradeResult>>
   }
   interface TypertRemoteMap {
     'usageStats/snapshot': (request: SnapshotRequest) => Promise<RemoteResult<UsageSnapshot>>
@@ -384,6 +452,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'usageStats/goQuota': (request: QuotaRequest) => Promise<RemoteResult<GoQuota>>
     'usageStats/deepseekBalance': (request: QuotaRequest) => Promise<RemoteResult<DeepSeekBalance>>
     'usageStats/zaiQuota': (request: QuotaRequest) => Promise<RemoteResult<ZaiQuota>>
+    'usageStats/checkUpdate': (request: UpdateCheckRequest) => Promise<RemoteResult<UpdateCheckResult>>
+    'usageStats/upgrade': (request: UpgradeRequest) => Promise<RemoteResult<UpgradeResult>>
   }
   interface TypertRemoteNamespaceMap {
     'usageStats': TypertRemoteNamespace$75736167655374617473
@@ -405,6 +475,12 @@ export type {
   SessionDetail,
   SessionDetailRequest,
   SnapshotRequest,
+  UpdateCheckRequest,
+  UpdateCheckResult,
+  UpdateInstallKind,
+  UpgradeFailureReason,
+  UpgradeRequest,
+  UpgradeResult,
   UsageSnapshot,
   ZaiQuota,
 };

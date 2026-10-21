@@ -2,17 +2,11 @@
 
 DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 token 用量与调用次数，挂载于侧边栏底部展示今日用量，点击打开详情面板。
 
-<div align="center">
-  <a href="https://github.com/deepseek-ai/deepseek-harness"><img alt="Powered by DSH" src="https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white" /></a>
-  &nbsp;
-  <a href="https://www.npmjs.com/package/@xfqz86/dsh-usage-stats"><img alt="NPM Downloads" src="https://img.shields.io/npm/d18m/%40xfqz86%2Fdsh-usage-stats?style=flat-square&logo=npm&logoColor=white&label=NPM%20%E4%B8%8B%E8%BD%BD%E9%87%8F" /></a>
-  &nbsp;
-  <a href="https://github.com/xfqz86/dsh-usage-stats/releases/latest/"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/xfqz86/dsh-usage-stats/xfqz86-dsh-usage-stats.tgz?displayAssetName=false&style=flat-square&logo=github&logoColor=white&label=Github%20%E4%B8%8B%E8%BD%BD%E9%87%8F" /></a>
-  &nbsp;
-  <a href="https://github.com/xfqz86/dsh-usage-stats"><img alt="GitHub stars" src="https://img.shields.io/github/stars/xfqz86/dsh-usage-stats" /></a>
-  &nbsp;
-  <a href="https://github.com/xfqz86/dsh-usage-stats/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/xfqz86/dsh-usage-stats?style=flat-square&logoColor=white" /></a>
-</div>
+[![Powered by DSH](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+[![NPM Downloads](https://img.shields.io/npm/d18m/%40xfqz86%2Fdsh-usage-stats?style=flat-square&logo=npm&logoColor=white&label=NPM%20%E4%B8%8B%E8%BD%BD%E9%87%8F)](https://www.npmjs.com/package/@xfqz86/dsh-usage-stats)
+[![GitHub Downloads](https://img.shields.io/github/downloads/xfqz86/dsh-usage-stats/xfqz86-dsh-usage-stats.tgz?displayAssetName=false&style=flat-square&logo=github&logoColor=white&label=Github%20%E4%B8%8B%E8%BD%BD%E9%87%8F)](https://github.com/xfqz86/dsh-usage-stats/releases/latest/)
+[![GitHub stars](https://img.shields.io/github/stars/xfqz86/dsh-usage-stats)](https://github.com/xfqz86/dsh-usage-stats)
+[![License](https://img.shields.io/github/license/xfqz86/dsh-usage-stats?style=flat-square&logoColor=white)](https://github.com/xfqz86/dsh-usage-stats/blob/main/LICENSE)
 
 ## 功能
 
@@ -26,43 +20,18 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 - DeepSeek 余额，展示多币种余额
 - OpenCode Go 额度，展示滚动 5 小时、本周、本月三档已使用额度
 - Z.ai 额度，展示滚动 5 小时、本周已使用额度，以及每月 Web 搜索次数
+- 关于页：版本、数据与隐私说明、常用链接，以及检查更新；发现新版本可查看更新说明并一键升级，当前版本领先线上时显示「本地版本较新」
 - 会话标题旁 session-id 徽标，支持一键复制
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/footer.png" alt="侧边栏底部" width="320" />
-  <br>
-  <em>侧边栏底部</em>
-</p>
+## 界面截图
 
-<table>
-  <tr>
-    <td align="center" width="20%">
-      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/01-overview.png" alt="概览" />
-      <br>
-      <sub>概览</sub>
-    </td>
-    <td align="center" width="20%">
-      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/02-dates.png" alt="日期" />
-      <br>
-      <sub>日期</sub>
-    </td>
-    <td align="center" width="20%">
-      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/03-sessions.png" alt="会话" />
-      <br>
-      <sub>会话</sub>
-    </td>
-    <td align="center" width="20%">
-      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/04-models.png" alt="模型" />
-      <br>
-      <sub>模型</sub>
-    </td>
-    <td align="center" width="20%">
-      <img src="https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/05-settings.png" alt="设置" />
-      <br>
-      <sub>设置</sub>
-    </td>
-  </tr>
-</table>
+侧边栏底部：
+
+![侧边栏底部](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/footer-wide.png)
+
+| [![概览](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/01-overview.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/01-overview.png) | [![日期](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/02-dates.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/02-dates.png) | [![会话](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/03-sessions.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/03-sessions.png) | [![模型](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/04-models.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/04-models.png) | [![设置](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/05-settings.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/05-settings.png) |
+| :---: | :---: | :---: | :---: | :---: |
+| *概览* | *日期* | *会话* | *模型* | *设置* |
 
 ## 安装与卸载
 
@@ -95,6 +64,8 @@ dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release
 ```sh
 dsh plugin --profile web update @xfqz86/dsh-usage-stats
 ```
+
+也可以打开面板的「关于」页点「检查更新」：发现新版本会直接提示，点开能看到这一版的更新说明；点「立即升级」会在后台装上最新版，装好后重启一次 DSH 生效。
 
 ---
 
@@ -134,6 +105,8 @@ dsh plugin --profile web remove @xfqz86/dsh-usage-stats
 ## 数据存储
 
 账本位于 `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`。首次启动自动扫描历史会话并导入，之后随事件增量更新，重启后从账本恢复。
+
+「关于」页的检查更新只向 npm registry 查询最新版本、向 GitHub 读取这一版的更新说明，不上传用量、会话内容或任何账号信息；「立即升级」会调用 DSH 的插件安装链路下载新版，同样不涉及用量数据。
 
 ## 开发者
 

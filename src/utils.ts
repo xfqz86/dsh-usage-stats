@@ -34,6 +34,40 @@ export function errorMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * 判断 latest 是否比 current 新：只比较 major.minor.patch，忽略 v 前缀与预发布/构建后缀。
+ * 用于「关于」页的更新提示；任一版本非法时返回 false，宁可漏报也不误报。
+ * npm 的 latest dist-tag 是稳定版，同核心的预发布不视为更新。
+ */
+export function isNewerVersion(latest: string, current: string): boolean {
+  const parse = (value: string): [number, number, number] | null => {
+    const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(value.trim());
+    if (match === null) return null;
+    return [Number(match[1]), Number(match[2]), Number(match[3])];
+  };
+  const next = parse(latest);
+  const base = parse(current);
+  if (next === null || base === null) return false;
+  for (let i = 0; i < 3; i += 1) {
+    if (next[i] !== base[i]) return next[i] > base[i];
+  }
+  return false;
+}
+
+/** 更新检查的三态：线上有更新、已是最新、当前安装版本高于线上。 */
+export type UpdateRelation = 'update' | 'latest' | 'ahead';
+
+/**
+ * 比较线上最新版本与当前安装版本：latest 更高为 update，current 更高为 ahead，其余为 latest。
+ * 不能只用 isNewerVersion 的布尔结果——当前版本领先线上时它同样为 false，会误报「已是最新」；
+ * 非法输入两个方向都不成立，按 latest 处理，宁可漏报也不误报更新。
+ */
+export function updateRelation(latest: string, current: string): UpdateRelation {
+  if (isNewerVersion(latest, current)) return 'update';
+  if (isNewerVersion(current, latest)) return 'ahead';
+  return 'latest';
+}
+
 /** 解析一行 NDJSON：修剪空白后 JSON.parse；空行、坏行返回 null，不中断调用方读取。 */
 export function parseJsonLine(line: string): unknown {
   const trimmed = line.trim();

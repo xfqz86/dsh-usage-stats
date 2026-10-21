@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-22
+
+### 功能
+
+- **关于页与一键升级**：面板新增「关于」Tab，集中展示版本、数据与隐私说明和常用链接；版本号后可检查更新，发现新版本时在弹窗里查看更新说明并直接升级（装好需重启一次 DSH 生效）；当前版本高于线上时显示「本地版本较新」，不再误报「已是最新」
+
+### 清理
+
+- 文档整理：README 的徽章与界面截图改用标准 Markdown，不再依赖内联 HTML，截图排成一行缩略图、点开看大图；去掉关于页与更新说明两张截图（无功能变化）
+
 ## [0.5.1] - 2026-10-19
 
 ### 变更
@@ -186,7 +196,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.7...v0.5.0
 [0.4.7]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.6...v0.4.7
