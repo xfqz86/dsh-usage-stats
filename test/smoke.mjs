@@ -2,7 +2,7 @@
  * 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
  *
  * 以真实 cordis Context 挂载 UsageStatsService（存储不 mock：账本直接写 node:sqlite 文件），
- * 直接调用 10 个 @Remote 方法，验证：
+ * 直接调用 10 个业务 @Remote 方法（checkUpdate/upgrade 只校验标记与贡献，不发起外网/CLI），验证：
  *   - 首启初始化：账本 sqlite 文件落盘（$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite），快照从聚合缓存读出；
  *   - 绝对基线：快照 foldedEvents 锚定 fixture 的 394 条可折叠事件（锚点就在本文件，期望值运行时推导），
  *     初始扫描 / 实时去重 / rebuild / 重开介质四处一致；
@@ -140,9 +140,9 @@ async function mount(query, persist, options = {}) {
       await new Promise((r) => setTimeout(r, 50))
     }
   }
-  // 10 个 @Remote 标记全部存活：网关 SRC 分发的前提。
+  // 12 个 @Remote 标记全部存活：网关 SRC 分发的前提。
   const markers = remoteMethods(svc).map((m) => m.exportName ?? m.method)
-  for (const name of ['snapshot', 'modelDetail', 'dateDetail', 'sessionDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota']) {
+  for (const name of ['snapshot', 'modelDetail', 'dateDetail', 'sessionDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota', 'checkUpdate', 'upgrade']) {
     if (!markers.includes(name)) {
       console.error(`FAIL: 缺 @Remote 标记 ${name}`)
       process.exit(1)

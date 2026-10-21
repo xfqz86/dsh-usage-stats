@@ -1,0 +1,475 @@
+/* 更新说明弹窗 UpdateNotesModal：叠在用量统计面板上的二级模态窗（720x500），
+   头部 / 版本元信息 / 可滚动 Markdown 说明（升级时下方追加状态条）/ 底部操作栏；
+   颜色全部使用设计 token，窄视口（≤800px）收紧内边距、≤560px 允许底栏换行。 */
+
+/* 二级卡片尺寸：设计稿 720x500，视口不足时各边留 16px；gap 必须显式归零，
+   基座 dialog 自带 20px flex gap。 */
+.modal {
+  width: min(720px, calc(100vw - 32px));
+  height: min(500px, calc(100vh - 32px));
+  max-width: 92vw;
+  max-height: 92vh;
+  padding: 0;
+  gap: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--dsw-shadow-lv2);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+/* ---- 头部：标题 + 版本标签 + 关闭按钮 ---- */
+.head {
+  flex: none;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.tag {
+  flex: none;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-business-primary) 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
+  font-family: var(--ds-font-family-code);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: 0.2px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+/* ---- 版本元信息：v当前 → v最新 + 发布日期 ---- */
+.meta {
+  flex: none;
+  box-sizing: border-box;
+  min-height: 46px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 5%, transparent);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.v,
+.vNew {
+  box-sizing: border-box;
+  padding: 1px 7px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: var(--dsw-alias-button-ghost-active-fill);
+  font-family: var(--ds-font-family-code);
+  font-size: 10.5px;
+  line-height: 16px;
+  letter-spacing: 0.2px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.vNew {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 24%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.metaArrow {
+  flex: none;
+  display: block;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.date {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ---- 正文：说明滚动区 + 升级状态条 ---- */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.notesScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 20px 10px;
+}
+
+.notes {
+  min-width: 0;
+}
+
+/* MarkdownText compact 变体默认 13px 三级文字；说明正文按设计稿改为 12px / 20px 二级文字。 */
+.notes > [data-markdown-variant='compact'] {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* 小节标题：蓝色竖条 + 11px 半粗次级文字，与设计稿的「新增 / 改进 / 修复」一致。 */
+.notes [data-markdown-variant='compact'] :is(h1, h2, h3) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.notes [data-markdown-variant='compact'] :is(h1, h2, h3):first-child {
+  margin-top: 2px;
+}
+
+.notes [data-markdown-variant='compact'] :is(h1, h2, h3)::before {
+  content: '';
+  flex: none;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--dsw-alias-state-business-primary);
+}
+
+/* 无序列表改为设计稿的蓝色圆点，段落间距比库默认更紧。 */
+.notes [data-markdown-variant='compact'] ul {
+  margin: 4px 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.notes [data-markdown-variant='compact'] ul li {
+  position: relative;
+  margin-top: 0;
+  padding: 2px 0 2px 14px;
+}
+
+.notes [data-markdown-variant='compact'] ul li::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.notes [data-markdown-variant='compact'] a {
+  color: var(--dsw-alias-link);
+}
+
+/* ---- 没有 Release 正文时的兜底：说明文字 + GitHub 发布页入口 ---- */
+.fallback {
+  padding: 8px 0 4px;
+}
+
+.fallbackText {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* ---- 升级状态条：进行中 / 完成 / 失败贴在说明下方、底栏之上 ---- */
+.status {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 20px 12px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.stateRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lead {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.stateIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.stateIconOk {
+  background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.stateIconBad {
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent);
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.stateTitle {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 19px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.stateDesc {
+  margin: 0;
+  max-width: 560px;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.progress {
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.bar {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-primary);
+  animation: updateProgress 1.4s ease-in-out infinite;
+}
+
+@keyframes updateProgress {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar {
+    animation: none;
+  }
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation-duration: 2.4s;
+  }
+}
+
+/* ---- 底栏：GitHub 链接居左，操作按钮居右 ---- */
+.foot {
+  flex: none;
+  box-sizing: border-box;
+  min-height: 60px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
+.full {
+  margin-right: auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-link);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.full:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.full:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.localHint {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: right;
+}
+
+.ghost,
+.primary {
+  box-sizing: border-box;
+  flex: none;
+  height: 32px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ghost {
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.primary {
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--dsw-alias-button-primary-hover);
+}
+
+.ghost:focus-visible,
+.primary:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.ghost:disabled,
+.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- 窄视口：卡片边距收紧，底栏允许换行避免按钮溢出 ---- */
+@media (max-width: 800px) {
+  .modal {
+    width: min(720px, calc(100vw - 24px));
+    height: min(500px, calc(100vh - 24px));
+  }
+
+  .head {
+    padding: 0 12px;
+  }
+
+  .meta {
+    padding: 0 12px;
+  }
+
+  .notesScroll {
+    padding: 12px 14px 10px;
+  }
+
+  .status {
+    padding: 10px 14px 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .foot {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding: 10px 12px;
+    row-gap: 8px;
+  }
+
+  .full {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+
+  .localHint {
+    flex-basis: 100%;
+    text-align: left;
+  }
+}

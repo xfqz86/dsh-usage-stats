@@ -13,6 +13,8 @@
  *   与 harness typert 生成器插件同原理）降为 __esDecorate 辅助后打包，否则产物保留原生
  *   装饰器语法、Node 22 无法解析；只处理含装饰器的 TS 源文件。
  */
+import { readFileSync } from 'node:fs';
+
 import ts from 'typescript';
 
 import { cssModulesInline } from './scripts/css-modules-inline.mjs';
@@ -54,6 +56,9 @@ const isProd = process.env.NODE_ENV === 'production';
 
 /** bundle id = package.json `name`，必须与 package.json 的 name 完全一致，含 scope。 */
 const PLUGIN_ID = '@xfqz86/dsh-usage-stats';
+
+/** 包版本号：构建时注入浏览器 bundle，「关于」页与更新比较不手写版本，避免与 package.json 漂移。 */
+const PLUGIN_VERSION = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
 /** 浏览器 shell 冻结模块表中的模块标识（本仓库只需这 9 项，其余全部内联）。 */
 const CLIENT_EXTERNALS = [
@@ -105,6 +110,7 @@ export default [
     },
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
+      DSH_USAGE_STATS_VERSION: JSON.stringify(PLUGIN_VERSION),
     },
     inputOptions: {
       resolve: {

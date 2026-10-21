@@ -1,10 +1,10 @@
 /**
  * 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露
- * usageStats 命名空间的 10 个一元 Remote 方法。
+ * usageStats 命名空间的 12 个一元 Remote 方法。
  *
  * 数据流（账本为唯一事实来源、聚合为派生缓存）：openLedger → 先挂 session/event 实时
  * 监听 → bootstrap（预统计加载、事件重放、首启全量扫描三档回退）。信任与认证由网关
- * 载体统一处理，本服务只做业务：快照、重建、清零、密封、三路额度。
+ * 载体统一处理，本服务只做业务：快照、重建、清零、密封、三路额度、更新检查与升级。
  *
  * 方法签名遵守严格 Remote 约定：公开非静态实例方法、非泛型、
  * 参数为具名必填简单标识符（无 lookup、无 signal），请求与结果均为
@@ -24,6 +24,8 @@ import { scanOnce, rebuildFromEvents, rebuildWithDelta, resetStore, sealAggregat
 import { recoverLegacyUsageSettings, UsageSettingsSchema } from './settings.ts';
 import { snapshot } from './snapshot.ts';
 import { createStore, foldRecord, inheritedCountOf } from './store.ts';
+import { queryUpdateCheck } from './update.ts';
+import { detectInstallKind, runPluginUpgrade } from './upgrade.ts';
 import { queryZaiQuota } from './zaiQuota.ts';
 
 // 仅类型导入：把注入服务合并进 Context、把 session/title 事件合并进
@@ -42,6 +44,10 @@ import type {
   SessionDetail,
   SessionDetailRequest,
   SnapshotRequest,
+  UpdateCheckRequest,
+  UpdateCheckResult,
+  UpgradeRequest,
+  UpgradeResult,
   UsageSnapshot,
   ZaiQuota,
 } from '../types.ts';
@@ -358,5 +364,30 @@ export default class UsageStatsService extends TypertRemoteService {
     // 默认 false 保持轮询语义，有效 TTL 内返回缓存。
     const force = request.force === true;
     return queryZaiQuota(intervalMinutes, force, credentialsOf(this.ctx));
+  }
+
+  /**
+   * usageStats/checkUpdate：查询 npm registry 上本插件的最新版本与对应 Release 说明，
+   * 服务端 6 小时内存缓存；安装方式随结果返回，供弹窗决定是否提供「立即升级」。
+   * 失败不抛错，由 status 表达；force=true 为用户手动检查，绕过缓存并在成功后刷新它。
+   * @param request - 强制刷新标记。
+   * @returns 更新检查 value（失败时 latest 为 null、url 退回 releases 列表）。
+   */
+  @Remote('checkUpdate')
+  async checkUpdate(request: UpdateCheckRequest): Promise<UpdateCheckResult> {
+    const install = await detectInstallKind(this.ctx);
+    return queryUpdateCheck(request.force === true, install);
+  }
+
+  /**
+   * usageStats/upgrade：把 profile 里的本插件依赖升级到指定版本，成功后需重启 DSH 生效。
+   * 失败不抛错，由 status/reason 表达（并发、本地安装、桌面端、超时、网络、命令失败）。
+   * @param request - 目标版本号（来自 checkUpdate 的 latest）。
+   * @returns 升级 value（成功 restartRequired 恒为 true）。
+   */
+  @Remote('upgrade')
+  async upgrade(request: UpgradeRequest): Promise<UpgradeResult> {
+    const version = typeof request.version === 'string' ? request.version : '';
+    return runPluginUpgrade(this.ctx, version);
   }
 }

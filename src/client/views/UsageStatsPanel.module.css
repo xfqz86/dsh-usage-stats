@@ -92,6 +92,25 @@
 
 /* ---- Tab 栏（tabbar/tab/tabOn）与模型明细弹窗共用的基元见 UsageStatsCommon ---- */
 
+/* 关于 Tab 的图标容器：蓝点相对图标定位，不参与 Tab 的横向排布。 */
+.tabIcon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 更新提示蓝点：压在图标右上角，用卡片底色描边与图标分开。 */
+.tabDot {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-2);
+}
+
 .body {
   flex: 1;
   min-height: 0;
@@ -109,4 +128,9 @@
   overflow: hidden;
   padding: 8px 16px 12px;
   gap: 0;
+}
+
+/* 关于 Tab：960x640 下整页刚好放下，间距与设计稿一致；窄视口内容变高，交给外层纵向滚动。 */
+.bodyAbout {
+  gap: 16px;
 }

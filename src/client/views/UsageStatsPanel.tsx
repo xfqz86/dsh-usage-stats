@@ -1,15 +1,17 @@
 /**
  * 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，头部 + Tab 栏 + 内容区。
  *
- * 五个 Tab 各由独立文件承载（OverviewTab/DatesTab/SessionsTab/ModelsTab/SettingsTab），
+ * 六个 Tab 各由独立文件承载（OverviewTab/DatesTab/SessionsTab/ModelsTab/SettingsTab/AboutTab），
  * 条件渲染：切走即卸载，Tab 内视图状态（日期曲线范围、会话展开等）不跨切换保留。
- * 数据与底部按钮共用同一份轮询结果：usageStats/snapshot 与三份额度查询。
+ * 数据与底部按钮共用同一份轮询结果：usageStats/snapshot 与三份额度查询；
+ * 关于页不依赖快照，更新检查状态在这里持有，供页面与 Tab 栏蓝点共用。
  */
 
 import {
   IconAgentPresetOutlineRegular,
   IconCloseOutlineRegular,
   IconDataOutlineRegular,
+  IconInfoOutlineRegular,
   IconQueueOutlineRegular,
   IconRightUpOutlineRegular,
   IconSettingsOutlineRegular,
@@ -20,7 +22,9 @@ import { useState, useMemo, type ComponentType } from 'react';
 import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { redirectModels } from '../stats.ts';
+import { useUpdateCheck } from '../useUpdateCheck.ts';
 
+import { AboutTab } from './AboutTab.tsx';
 import { DatesTab } from './DatesTab.tsx';
 import { ModelsTab } from './ModelsTab.tsx';
 import { OverviewTab } from './OverviewTab.tsx';
@@ -69,7 +73,7 @@ export interface UsageStatsPanelProps extends PropsLocale<'dsh-usage-stats'> {
 }
 
 /** Tab 键：与面板内视图一一对应。 */
-type TabKey = 'overview' | 'dates' | 'sessions' | 'models' | 'settings';
+type TabKey = 'overview' | 'dates' | 'sessions' | 'models' | 'settings' | 'about';
 
 /** Tab 定义：键 + 文案键 + 图标组件。 */
 const TABS: { key: TabKey; labelKey: UsageStatsKey; Icon: ComponentType<IconProps> }[] = [
@@ -78,10 +82,12 @@ const TABS: { key: TabKey; labelKey: UsageStatsKey; Icon: ComponentType<IconProp
   { key: 'sessions', labelKey: 'tab.sessions', Icon: IconQueueOutlineRegular },
   { key: 'models', labelKey: 'tab.models', Icon: IconAgentPresetOutlineRegular },
   { key: 'settings', labelKey: 'tab.settings', Icon: IconSettingsOutlineRegular },
+  { key: 'about', labelKey: 'tab.about', Icon: IconInfoOutlineRegular },
 ];
 
 /** 根据当前激活的 Tab 返回对应的 body 额外类名，避免嵌套三元。 */
 function getBodyClass(active: TabKey): string {
+  if (active === 'about') return css.bodyAbout;
   if (active === 'dates') return css.bodyDates;
   if (active === 'sessions') return css.bodySessions;
   if (active === 'models') return css.bodyModels;
@@ -107,6 +113,9 @@ export function UsageStatsPanel({
   t,
 }: UsageStatsPanelProps) {
   const [active, setActive] = useState<TabKey>('overview');
+  // 更新检查在面板层持有：关于页与 Tab 栏蓝点共用同一份状态，打开面板时自动查一次。
+  const update = useUpdateCheck(open);
+  const updateVersion = update.state.status === 'update' ? update.state.latest : null;
 
   const value = data;
 
@@ -119,6 +128,10 @@ export function UsageStatsPanel({
 
   // 内容区渲染，避免嵌套三元
   function renderBody() {
+    // 关于页不依赖快照：必须先于 err/!value 分支返回，数据不可用或加载中也能打开。
+    if (active === 'about') {
+      return <AboutTab update={update.state} onCheck={() => update.check(true)} t={t} />;
+    }
     if (err) {
       // errDetail 是快照失败原因，作为错误卡片第二行展示，没有则省略。
       return (
@@ -219,7 +232,16 @@ export function UsageStatsPanel({
             className={active === key ? `${shared.tab} ${shared.tabOn}` : shared.tab}
             onClick={() => setActive(key)}
           >
-            <Icon size={14} />
+            <span className={css.tabIcon}>
+              <Icon size={14} />
+              {key === 'about' && updateVersion !== null && (
+                <span
+                  className={css.tabDot}
+                  role="img"
+                  aria-label={t('about.updateDotAria', { version: updateVersion })}
+                />
+              )}
+            </span>
             <span>{t(labelKey)}</span>
           </button>
         ))}

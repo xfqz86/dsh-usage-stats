@@ -35,6 +35,8 @@ import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
 import { legacySettingsPatch, UsageSettingsSchema } from '../src/host/settings.ts';
 import { decodeSessionLog, parseGenerationName, parseSessionLogName, scanZstdFrames } from '../src/host/rawlog.ts';
+import { queryUpdateCheck } from '../src/host/update.ts';
+import { classifyDependencySpec } from '../src/host/upgrade.ts';
 import { METHOD_NAMES, USAGE_STATS_REMOTE } from '../src/remote/contribution.ts';
 import {
   CONFIG_TRANSFER_FORMAT,
@@ -118,11 +120,13 @@ import {
   goPercent,
   goResetsAt,
   isCompleteRedirect,
+  isNewerVersion,
   normalizeModelRedirects,
   normalizeUsageSettings,
   parseJsonLine,
   splitModelKey,
   startOfDay,
+  updateRelation,
 } from '../src/utils.ts';
 
 /** 恢复被 mock 的全局 fetch，避免用例间污染。 */
@@ -481,9 +485,9 @@ describe('fork 继承前缀：只折本会话自有事件', () => {
 });
 
 describe('remote：手写严格贡献', () => {
-  it('10 个一元方法与服务一致', () => {
+  it('12 个一元方法与服务一致', () => {
     assert.deepEqual([...METHOD_NAMES], [
-      'snapshot', 'modelDetail', 'dateDetail', 'sessionDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota',
+      'snapshot', 'modelDetail', 'dateDetail', 'sessionDetail', 'rebuild', 'clear', 'seal', 'goQuota', 'deepseekBalance', 'zaiQuota', 'checkUpdate', 'upgrade',
     ]);
     assert.equal(USAGE_STATS_REMOTE.package, '@xfqz86/dsh-usage-stats');
     assert.deepEqual(
@@ -498,6 +502,42 @@ describe('remote：手写严格贡献', () => {
       for (const p of d.parameters) assert.equal(p.codec.mode, 'strict');
       assert.equal(d.result.mode, 'strict');
     }
+  });
+
+  it('更新检查请求与结果 schema 收发合法、拒非法', () => {
+    const check = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'checkUpdate');
+    assert.ok(check && check.parameters.length === 1);
+    const codec = check.parameters[0].codec;
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    schema.parse({});
+    schema.parse({ force: true });
+    assert.throws(() => schema.parse({ force: 'yes' }));
+    const result = check.result.create();
+    const ok = { status: 'ok', latest: '0.6.0', url: 'https://example.com/v0.6.0', notes: '## 新增\n- 一键升级', publishedAt: 1_790_000_000_000, install: 'npm' };
+    result.parse({ ok: true, value: ok });
+    result.parse({ ok: true, value: { status: 'error', latest: null, url: 'https://example.com/releases', notes: null, publishedAt: null, install: 'local' } });
+    // 判别联合收紧：ok 必须带版本号，error 的 latest 必须为 null；新增字段必须齐全。
+    assert.throws(() => result.parse({ ok: true, value: { ...ok, latest: null } }));
+    assert.throws(() => result.parse({ ok: true, value: { ...ok, install: 'other' } }));
+    assert.throws(() => result.parse({ ok: true, value: { ...ok, notes: 1 } }));
+    assert.throws(() => result.parse({ ok: true, value: { status: 'error', latest: null, url: 'https://example.com' } }));
+  });
+
+  it('升级请求与结果 schema 收发合法、拒非法', () => {
+    const upgrade = USAGE_STATS_REMOTE.descriptors.find((d) => d.method === 'upgrade');
+    assert.ok(upgrade && upgrade.parameters.length === 1);
+    const codec = upgrade.parameters[0].codec;
+    if (codec.mode !== 'strict') throw new Error('unreachable');
+    const schema = codec.create();
+    schema.parse({ version: '0.6.0' });
+    assert.throws(() => schema.parse({}));
+    assert.throws(() => schema.parse({ version: 1 }));
+    const result = upgrade.result.create();
+    result.parse({ ok: true, value: { status: 'ok', version: '0.6.0', restartRequired: true, reason: null } });
+    result.parse({ ok: true, value: { status: 'error', version: '0.6.0', restartRequired: false, reason: 'network' } });
+    assert.throws(() => result.parse({ ok: true, value: { status: 'ok', version: '0.6.0', restartRequired: false, reason: null } }));
+    assert.throws(() => result.parse({ ok: true, value: { status: 'error', version: '0.6.0', restartRequired: false, reason: 'other' } }));
   });
 
   it('请求 schema 收发合法、拒非法', () => {
@@ -2042,5 +2082,135 @@ describe('偏好设置：服务端条目 schema', () => {
     assert.ok(entry, 'cordis.patch.yml 必须声明插件条目 id');
     assert.equal(entry[1], USAGE_SETTINGS_NAMESPACE);
     assert.match(patch, /^\s*name: '@xfqz86\/dsh-usage-stats'$/m);
+  });
+});
+
+// ---- 更新检查：版本比较、npm/GitHub 查询与缓存 ----
+
+describe('更新检查', () => {
+  const RELEASES = 'https://github.com/xfqz86/dsh-usage-stats/releases';
+  const NOTES = '## 新增\n- 一键升级';
+  const PUBLISHED = Date.parse('2026-10-21T08:00:00Z');
+
+  it('isNewerVersion 只比较核心版本，忽略 v 前缀与预发布后缀', () => {
+    assert.equal(isNewerVersion('0.6.0', '0.5.1'), true);
+    assert.equal(isNewerVersion('v0.6.0', '0.5.1'), true);
+    assert.equal(isNewerVersion('0.5.2-beta.1', '0.5.1'), true);
+    assert.equal(isNewerVersion('0.5.1', '0.5.1'), false);
+    assert.equal(isNewerVersion('0.5.1-beta.2', '0.5.1'), false);
+    assert.equal(isNewerVersion('0.5.0', '0.5.1'), false);
+    // 非法输入宁可漏报，不误报
+    assert.equal(isNewerVersion('bad', '0.5.1'), false);
+    assert.equal(isNewerVersion('0.6.0', 'bad'), false);
+    assert.equal(isNewerVersion('', ''), false);
+  });
+
+  it('updateRelation 区分线上更新、已是最新与本地版本领先', () => {
+    // 线上更高 → update
+    assert.equal(updateRelation('0.6.0', '0.5.1'), 'update');
+    assert.equal(updateRelation('v0.6.0', 'v0.5.1'), 'update');
+    // 相等（含 v 前缀差异）→ latest
+    assert.equal(updateRelation('0.5.1', '0.5.1'), 'latest');
+    assert.equal(updateRelation('v0.5.1', '0.5.1'), 'latest');
+    // 当前更高 → ahead，不能误报「已是最新」
+    assert.equal(updateRelation('0.5.0', '0.5.1'), 'ahead');
+    assert.equal(updateRelation('0.4.9', 'v0.5.1'), 'ahead');
+    // 非法输入两个方向都不成立，按 latest 处理
+    assert.equal(updateRelation('bad', '0.5.1'), 'latest');
+    assert.equal(updateRelation('0.6.0', 'bad'), 'latest');
+    assert.equal(updateRelation('', ''), 'latest');
+  });
+
+  it('classifyDependencySpec 区分 npm、本地与未知安装', () => {
+    assert.equal(classifyDependencySpec('0.5.1'), 'npm');
+    assert.equal(classifyDependencySpec('^0.5.1'), 'npm');
+    assert.equal(classifyDependencySpec('~0.5.1'), 'npm');
+    assert.equal(classifyDependencySpec('>=0.5.1'), 'npm');
+    assert.equal(classifyDependencySpec('latest'), 'npm');
+    assert.equal(classifyDependencySpec('*'), 'npm');
+    assert.equal(classifyDependencySpec('link:/Users/x/dsh-usage-stats'), 'local');
+    assert.equal(classifyDependencySpec('file:../pkg.tgz'), 'local');
+    assert.equal(classifyDependencySpec('portal:../pkg'), 'local');
+    assert.equal(classifyDependencySpec('workspace:*'), 'local');
+    assert.equal(classifyDependencySpec('github:xfqz86/dsh-usage-stats'), 'local');
+    assert.equal(classifyDependencySpec('git+https://example.com/x.git'), 'local');
+    assert.equal(classifyDependencySpec('https://example.com/x.tgz'), 'local');
+    assert.equal(classifyDependencySpec('./local-pkg'), 'local');
+    assert.equal(classifyDependencySpec('/abs/local-pkg'), 'local');
+    assert.equal(classifyDependencySpec('next'), 'unknown');
+    assert.equal(classifyDependencySpec(undefined), 'unknown');
+  });
+
+  it('查询成功带说明与安装方式，缓存命中、install 变化与 force 都绕过', async () => {
+    let calls = 0;
+    mockFetch(async (url) => {
+      calls += 1;
+      if (String(url).includes('api.github.com')) {
+        return jsonResponse(200, { body: NOTES, published_at: '2026-10-21T08:00:00Z', html_url: RELEASES + '/tag/v0.6.0' });
+      }
+      assert.match(String(url), /registry\.npmjs\.org/);
+      return jsonResponse(200, { version: '0.6.0' });
+    });
+    const first = await queryUpdateCheck(true, 'npm');
+    assert.deepEqual(first, {
+      status: 'ok', latest: '0.6.0', url: RELEASES + '/tag/v0.6.0', notes: NOTES, publishedAt: PUBLISHED, install: 'npm',
+    });
+    assert.equal(calls, 2);
+    // 缓存命中：同一安装方式不再发起 fetch
+    const cached = await queryUpdateCheck(false, 'npm');
+    assert.deepEqual(cached, first);
+    assert.equal(calls, 2);
+    // install 变化时缓存失效，重新查询；结果携带新的安装方式
+    const local = await queryUpdateCheck(false, 'local');
+    assert.deepEqual(local, { ...first, install: 'local' });
+    assert.equal(calls, 4);
+    // force 绕过缓存并刷新
+    mockFetch(async (url) => {
+      calls += 1;
+      if (String(url).includes('api.github.com')) return jsonResponse(500, {});
+      return jsonResponse(200, { version: 'v0.6.1' });
+    });
+    const forced = await queryUpdateCheck(true, 'npm');
+    assert.deepEqual(forced, {
+      status: 'ok', latest: '0.6.1', url: RELEASES + '/tag/v0.6.1', notes: null, publishedAt: null, install: 'npm',
+    });
+    assert.equal(calls, 6);
+    // 失败不抛错、不覆盖成功缓存
+    mockFetch(async () => {
+      calls += 1;
+      return jsonResponse(500, {});
+    });
+    const failed = await queryUpdateCheck(true, 'npm');
+    assert.deepEqual(failed, { status: 'error', latest: null, url: RELEASES, notes: null, publishedAt: null, install: 'npm' });
+    assert.equal(calls, 7);
+    const stillCached = await queryUpdateCheck(false, 'npm');
+    assert.deepEqual(stillCached, forced);
+    assert.equal(calls, 7);
+  });
+
+  it('GitHub 说明失败不影响更新检查；非法版本与非 2xx 都归为 error', async () => {
+    // npm 成功 + GitHub 失败：仍返回更新，notes/publishedAt 置 null
+    mockFetch(async (url) => {
+      if (String(url).includes('api.github.com')) return jsonResponse(500, {});
+      return jsonResponse(200, { version: '0.6.0' });
+    });
+    assert.deepEqual(await queryUpdateCheck(true, 'npm'), {
+      status: 'ok', latest: '0.6.0', url: RELEASES + '/tag/v0.6.0', notes: null, publishedAt: null, install: 'npm',
+    });
+    // 非法版本：只打 npm 一次
+    mockFetch(async () => jsonResponse(200, { version: 'not-a-version' }));
+    assert.deepEqual(await queryUpdateCheck(true, 'npm'), {
+      status: 'error', latest: null, url: RELEASES, notes: null, publishedAt: null, install: 'npm',
+    });
+    mockFetch(async () => jsonResponse(200, {}));
+    assert.deepEqual(await queryUpdateCheck(true, 'npm'), {
+      status: 'error', latest: null, url: RELEASES, notes: null, publishedAt: null, install: 'npm',
+    });
+    mockFetch(async () => {
+      throw new Error('offline');
+    });
+    assert.deepEqual(await queryUpdateCheck(true, 'npm'), {
+      status: 'error', latest: null, url: RELEASES, notes: null, publishedAt: null, install: 'npm',
+    });
   });
 });
