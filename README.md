@@ -27,7 +27,7 @@ DSH 的 Web 用量统计插件，按模型、会话、日期三个维度统计 t
 
 侧边栏底部：
 
-![侧边栏底部](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/footer-wide.png)
+[![侧边栏底部](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/footer-wide.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/footer.png)
 
 | [![概览](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/01-overview.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/01-overview.png) | [![日期](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/02-dates.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/02-dates.png) | [![会话](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/03-sessions.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/03-sessions.png) | [![模型](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/04-models.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/04-models.png) | [![设置](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/processed/05-settings.png)](https://raw.githubusercontent.com/xfqz86/dsh-usage-stats/main/docs/screenshot/05-settings.png) |
 | :---: | :---: | :---: | :---: | :---: |
