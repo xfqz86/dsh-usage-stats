@@ -69,7 +69,8 @@ dsh-usage-stats/
 │   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）
 ├── scripts/
 │   ├── css-modules-inline.mjs ← rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的 JS 模块。
-│   └── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
+│   ├── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
+│   └── svg-raw.mjs ← rolldown 插件：把带 raw 后缀的 SVG import 编译成「导出 SVG 文本」的 JS 模块。
 ├── src/
 │   ├── client/
 │   │   ├── components/
@@ -171,6 +172,7 @@ dsh-usage-stats/
 │   ├── remote/
 │   │   └── contribution.ts ← usageStats 命名空间的手写严格 Remote 贡献。
 │   ├── css-modules.d.ts ← CSS Modules 的类型声明（与 harness 的 ui-primitives 同款）： `import css from './X.module.css'` 得到 scoped 类名映射。
+│   ├── svg.d.ts ← 构建期资源导入的类型声明：带 raw 后缀的 SVG 得到文件文本（由 scripts/svg-raw.mjs 编译）。
 │   ├── types.ts ← 跨端共用的协议类型，host 与 client 两个 bundle 各自内联所需子集。
 │   └── utils.ts ← 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
 ├── test/

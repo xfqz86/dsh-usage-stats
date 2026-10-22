@@ -112,3 +112,5 @@
   浏览器 bundle；「关于」页展示与更新比较共用这一常量，发版不需要手改界面数字。
 - CSS：`scripts/css-modules-inline.mjs`（lightningcss）把 `*.module.css` 编译为 scoped 映射 +
   `<style data-plugin-css>` 注入（源码仍是真实 CSS Modules）。
+- 品牌图：`scripts/svg-raw.mjs` 把 `icon.svg?raw` 编译成导出 SVG 文本的模块，「关于」页在构建期
+  内联包根 `icon.svg`，与插件列表共用同一文件；改图标后重建客户端即可同步（列表侧由 Host 实时读文件）。
