@@ -56,6 +56,7 @@
     "watch": "tsdown --watch",
     "prepare": "tsdown",
     "tree": "node scripts/gen-tree.mjs",
+    "tree:check": "node scripts/gen-tree.mjs --check",
     "test:pure": "node --experimental-strip-types test/pure.mjs",
     "test:styles": "node --experimental-strip-types test/styles.mjs",
     "lint": "eslint .",

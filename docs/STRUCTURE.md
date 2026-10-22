@@ -10,7 +10,7 @@ dsh-usage-stats/
 │   └── skills/
 │       └── release/
 │           ├── scripts/
-│           │   ├── release-preflight.mjs ← 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否已同批就位。
+│           │   ├── release-preflight.mjs ← 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否同批就位、docs/STRUCTURE.md 是否与目录结构一致。
 │           │   └── verify-release.mjs ← 发布形态验证：生产构建 → 打真 tarball → 校验包内容与 Remote 方法签名 → 还原开发态构建。
 │           └── SKILL.md ← 发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）
 ├── .github/
@@ -27,27 +27,11 @@ dsh-usage-stats/
 │   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
 │   │       └── verify.mjs ← 校验交付物仅含 8 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
-│       ├── ci.yml ← CI：类型检查 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）
+│       ├── ci.yml ← CI：类型检查 / 目录结构新鲜度 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）
 ├── docs/
-│   ├── releases/
-│   │   ├── v0.1.0.md
-│   │   ├── v0.1.1.md
-│   │   ├── v0.2.0.md
-│   │   ├── v0.2.1.md
-│   │   ├── v0.3.0.md
-│   │   ├── v0.4.0.md
-│   │   ├── v0.4.1.md
-│   │   ├── v0.4.2.md
-│   │   ├── v0.4.3.md
-│   │   ├── v0.4.4.md
-│   │   ├── v0.4.5.md
-│   │   ├── v0.4.6.md
-│   │   ├── v0.4.7.md
-│   │   ├── v0.5.0.md
-│   │   ├── v0.5.1.md
-│   │   └── v0.5.2.md
+│   ├── releases/ ← 各版本更新说明（按版本累积，不逐文件列出）
 │   ├── screenshot/
 │   │   ├── processed/
 │   │   │   ├── 01-overview.png

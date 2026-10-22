@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否已同批就位。
+ * 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否同批就位、docs/STRUCTURE.md 是否与目录结构一致。
  *
- * 三处缺一，要么 CI 挂、要么拖到推 tag 时才被 release.yml 的校验拦下，而 tag 推送后
+ * 任一项缺位，要么 CI 挂、要么拖到推 tag 时才被 release.yml 的校验拦下，而 tag 推送后
  * 再改要删 tag 重发；故把一致性检查提前到本地。流程与门禁见同目录上一级的 SKILL.md。
  *
  * 用法：node .agents/skills/release/scripts/release-preflight.mjs [版本号]
@@ -124,6 +124,24 @@ if (changelog === null) {
     report('PASS', `[Unreleased] 链接已指向 v${target}`)
   } else {
     report('WARN', `[Unreleased] 链接未指向 v${target}`, `当前为 ${unreleasedLink[1]}`)
+  }
+}
+
+// ——— docs/STRUCTURE.md 新鲜度（复用 gen-tree 的 --check，只读不写盘） ———
+try {
+  execFileSync(process.execPath, [join(ROOT, 'scripts', 'gen-tree.mjs'), '--check'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  report('PASS', 'docs/STRUCTURE.md 与目录结构一致')
+} catch (error) {
+  // gen-tree --check 的「过期 / 缺失」与 node 层崩溃都退 1，靠输出区分，避免把「检查跑不起来」误报成「文档过期」
+  const output = String((error && error.stdout) || '')
+  if (error && error.status === 1 && /已过期|不存在或不可读/.test(output)) {
+    report('FAIL', 'docs/STRUCTURE.md 已过期或缺失', '跑 `pnpm tree` 重新生成并同批提交')
+  } else {
+    report('FAIL', 'docs/STRUCTURE.md 新鲜度检查无法执行', '先手动运行 `node scripts/gen-tree.mjs --check` 排查')
   }
 }
 

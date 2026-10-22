@@ -69,11 +69,12 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - **偏好设置走 harness 用户设置体系，禁止 localStorage**：Host 以插件条目 Config 声明 `usage-stats` schema（`src/host/settings.ts`，字段须 `.volatile()`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `configForms` 按条目 id 绑定读写（`src/client/settings.ts`）；字段语义与旧版迁移（含基座导入失败后的 settings.yaml.imported 回收）见 `docs/API.md` §5。
 
 ## 9. 验证
-- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上跑类型检查、生产构建、样式契约与冒烟测试、`prepare` 与打包校验，交给 CI 兜底；纯文档/注释改动不必跑检查。
+- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上跑类型检查、目录结构新鲜度、生产构建、样式契约与冒烟测试、`prepare` 与打包校验，交给 CI 兜底；纯文档/注释改动不必跑检查。
 - **发版前（打 tag 前）必须本地全量跑通**，这是发版硬门槛：
 ```bash
 npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
+pnpm tree:check           # docs/STRUCTURE.md 与真实结构一致（CI 同款门禁）
 pnpm build
 node --experimental-strip-types test/pure.mjs
 node --experimental-strip-types test/smoke.mjs

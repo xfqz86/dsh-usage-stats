@@ -4,6 +4,8 @@
  *
  * 每个文件的一行职责 = 其头部块注释的首句；无头注 / 非代码文件写固定备注。
  * 改动代码结构后运行 `pnpm tree` 重新生成，生成文件勿手改。
+ * 加 --check 只比对不写盘，供 CI 与发版前置检查使用。
+ * docs/releases 只列目录不逐文件：发版必然新增 v<版本>.md，逐文件列出会让本文件每次发版都过期，且这些行没有文件级职责信息。
  *
  * 为什么有这个脚本：AGENTS.md 是被注入的规则文件，目录树这类随代码频繁变化
  * 的现状快照不能放进去（会频繁失效注入前缀缓存），需要一份可再生成、可维护
@@ -39,7 +41,7 @@ const NOTES = {
   '.github/actions/prune-package/action.yml': '剪枝复合动作：把 package.json 剪到发布所需最小字段白名单',
   '.github/actions/setup/action.yml': '统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装',
   '.github/actions/verify-pack/action.yml': '校验复合动作：交付物仅含白名单文件且 package.json 已剪枝',
-  '.github/workflows/ci.yml': 'CI：类型检查 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）',
+  '.github/workflows/ci.yml': 'CI：类型检查 / 目录结构新鲜度 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）',
   '.github/workflows/release-branch.yml': '同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）',
   '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）',
   '.agents/skills/release/SKILL.md': '发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）',
@@ -58,6 +60,11 @@ const NOTES = {
   'pnpm-workspace.yaml': 'pnpm 工作区（含版本保鲜期白名单）',
   'tsconfig.json': 'TS 编译配置（严格模式）',
   'tsdown.config.ts': '双 bundle 构建配置（host ESM + client CJS）',
+}
+
+/** 目录级剪枝：目录路径 → 一行说明；命中的目录只输出目录行，不递归列子项（原因见头部注释）。 */
+const DIR_NOTES = {
+  'docs/releases': '各版本更新说明（按版本累积，不逐文件列出）',
 }
 
 // ——— .gitignore 尊重逻辑（优先 git check-ignore，无依赖；失败回退到解析 .gitignore） ———
@@ -313,9 +320,115 @@ function renderTree(abs, prefix) {
       const ann = annotationOf(rel, full)
       return [line + (ann ? ` ← ${ann}` : '')]
     }
+    const rel = toPosix(join(abs, name).slice(ROOT.length + 1))
+    if (DIR_NOTES[rel]) return [line + ` ← ${DIR_NOTES[rel]}`]
     const childPrefix = prefix + (isLast ? '    ' : '│   ')
     return [line, ...renderTree(full, childPrefix)]
   })
+}
+
+/** 差异摘要最多打印的行数（含上下文），避免 CI 日志被整份文档刷屏。 */
+const DIFF_MAX_LINES = 60
+
+/** 每个变化段前后保留的上下文行数。 */
+const DIFF_CONTEXT = 2
+
+/** 按行拆分并去掉末尾换行产生的空串（末尾换行在比对时单独判断）。 */
+function splitLines(text) {
+  const lines = text.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop()
+  return lines
+}
+
+/**
+ * 行级 LCS 对齐：返回从磁盘内容到生成结果的操作序列（same / del / add），
+ * 每项带各自行号，供差异摘要定位。行数很小（数百行），二维表足够。
+ */
+function alignLines(oldLines, newLines) {
+  const n = oldLines.length
+  const m = newLines.length
+  // dp[i][j] = oldLines[i:] 与 newLines[j:] 的最长公共子序列长度
+  const dp = Array.from({length: n + 1}, () => new Uint32Array(m + 1))
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      dp[i][j] = oldLines[i] === newLines[j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1])
+    }
+  }
+  const ops = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (oldLines[i] === newLines[j]) {
+      ops.push({kind: 'same', oldLine: i + 1, text: oldLines[i]})
+      i += 1
+      j += 1
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      ops.push({kind: 'del', oldLine: i + 1, text: oldLines[i]})
+      i += 1
+    } else {
+      ops.push({kind: 'add', newLine: j + 1, text: newLines[j]})
+      j += 1
+    }
+  }
+  while (i < n) {
+    ops.push({kind: 'del', oldLine: i + 1, text: oldLines[i]})
+    i += 1
+  }
+  while (j < m) {
+    ops.push({kind: 'add', newLine: j + 1, text: newLines[j]})
+    j += 1
+  }
+  return ops
+}
+
+/**
+ * 打印 --check 的差异摘要：按变化段聚合并带行号，只给少量上下文；
+ * 超出上限即折叠，避免把整份 STRUCTURE.md 刷进日志。
+ */
+function reportStale(actual, expected) {
+  const oldLines = splitLines(actual)
+  const newLines = splitLines(expected)
+  const ops = alignLines(oldLines, newLines)
+  const removed = ops.filter((op) => op.kind === 'del').length
+  const added = ops.filter((op) => op.kind === 'add').length
+  console.log(
+    `docs/STRUCTURE.md 已过期：磁盘 ${oldLines.length} 行，生成结果 ${newLines.length} 行` +
+    `（磁盘独有 ${removed} 行 / 生成结果独有 ${added} 行）。`,
+  )
+  if (actual.endsWith('\n') !== expected.endsWith('\n')) {
+    console.log(`  末尾换行不同：磁盘${actual.endsWith('\n') ? '有' : '无'}，生成结果${expected.endsWith('\n') ? '有' : '无'}。`)
+  }
+  // 每个变化行向外扩出上下文，重叠窗口合并成段
+  const windows = []
+  ops.forEach((op, index) => {
+    if (op.kind === 'same') return
+    const start = Math.max(0, index - DIFF_CONTEXT)
+    const end = Math.min(ops.length - 1, index + DIFF_CONTEXT)
+    const last = windows[windows.length - 1]
+    if (last && start <= last.end + 1) last.end = Math.max(last.end, end)
+    else windows.push({start, end})
+  })
+  let budget = DIFF_MAX_LINES
+  let truncated = false
+  for (const {start, end} of windows) {
+    if (budget <= 0) {
+      truncated = true
+      break
+    }
+    const stop = Math.min(end, start + budget - 1)
+    for (let k = start; k <= stop; k += 1) {
+      const op = ops[k]
+      const mark = op.kind === 'same' ? ' ' : (op.kind === 'del' ? '-' : '+')
+      const lineNo = op.kind === 'add' ? op.newLine : op.oldLine
+      console.log(`${mark} ${String(lineNo).padStart(4, ' ')}: ${op.text}`)
+    }
+    budget -= stop - start + 1
+    if (stop < end) truncated = true
+  }
+  if (truncated) console.log(`  …差异超过 ${DIFF_MAX_LINES} 行，仅显示前段；其余以生成结果为准。`)
+  console.log('修复：运行 `pnpm tree` 重新生成并同批提交。')
 }
 
 const body = ['# 项目结构（自动生成）', '',
@@ -325,6 +438,25 @@ const body = ['# 项目结构（自动生成）', '',
   '```', 'dsh-usage-stats/', ...renderTree(ROOT, ''), '```', ''].join('\n')
 
 const out = join(ROOT, 'docs', 'STRUCTURE.md')
-writeFileSync(out, body)
- 
-console.log(`written ${out.replace(ROOT + '/', '')}`)
+
+if (!process.argv.includes('--check')) {
+  writeFileSync(out, body)
+  console.log(`written ${out.replace(ROOT + '/', '')}`)
+} else {
+  // 只读比对：与生成逻辑同源，不写盘，供 CI 与发版前置检查复用
+  let actual = null
+  try {
+    actual = readFileSync(out, 'utf8')
+  } catch {
+    // 缺失按过期处理，与内容不一致同一出口
+  }
+  if (actual === null) {
+    console.log('docs/STRUCTURE.md 不存在或不可读；运行 `pnpm tree` 生成后同批提交。')
+    process.exitCode = 1
+  } else if (actual === body) {
+    console.log('docs/STRUCTURE.md 与当前目录结构一致')
+  } else {
+    reportStale(actual, body)
+    process.exitCode = 1
+  }
+}
