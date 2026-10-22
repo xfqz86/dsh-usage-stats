@@ -51,6 +51,7 @@ const NOTES = {
   'README.md': '面向普通用户的功能说明',
   'CHANGELOG.md': '更新日志（每次发版同步记录功能更新与 Bug 修复）',
   'cordis.patch.yml': '组合包 patch（dsh.bundle.patch）：插入插件条目',
+  'icon.svg': '插件图标（package.json icon）：dsh 插件列表展示用',
   'package.json': '组合包元数据 / exports / 构建脚本',
   'screenshots.json': '插件市场展示用的截图清单',
   'pnpm-lock.yaml': '锁文件（不手改）',

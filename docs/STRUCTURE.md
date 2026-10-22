@@ -25,7 +25,7 @@ dsh-usage-stats/
 │   │   │   └── action.yml ← 统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装
 │   │   └── verify-pack/
 │   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
-│   │       └── verify.mjs ← 校验交付物仅含 7 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
+│   │       └── verify.mjs ← 校验交付物仅含 8 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
 │       ├── ci.yml ← CI：类型检查 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
@@ -46,7 +46,8 @@ dsh-usage-stats/
 │   │   ├── v0.4.6.md
 │   │   ├── v0.4.7.md
 │   │   ├── v0.5.0.md
-│   │   └── v0.5.1.md
+│   │   ├── v0.5.1.md
+│   │   └── v0.5.2.md
 │   ├── screenshot/
 │   │   ├── processed/
 │   │   │   ├── 01-overview.png
@@ -183,6 +184,7 @@ dsh-usage-stats/
 ├── CHANGELOG.md ← 更新日志（每次发版同步记录功能更新与 Bug 修复）
 ├── cordis.patch.yml ← 组合包 patch（dsh.bundle.patch）：插入插件条目
 ├── eslint.config.mjs ← @fileoverview ESLint flat config — Google TypeScript Style Guide 落地 覆盖 host（Node ESM）/ client（Browser CJS）/ scripts（Node ESM mjs）三类环境， 基于 eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic。
+├── icon.svg ← 插件图标（package.json icon）：dsh 插件列表展示用
 ├── LICENSE
 ├── package.json ← 组合包元数据 / exports / 构建脚本
 ├── pnpm-lock.yaml ← 锁文件（不手改）
