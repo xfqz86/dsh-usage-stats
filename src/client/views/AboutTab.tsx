@@ -173,10 +173,23 @@ export function AboutTab({ update, onCheck, t }: AboutTabProps) {
     <div className={css.root}>
       <section className={css.hero}>
         <div className={css.logo} aria-hidden="true">
-          <svg viewBox="0 0 28 28" width="28" height="28" fill="none">
-            <rect x="4" y="15" width="5" height="9" rx="1.8" fill="currentColor" opacity=".55" />
-            <rect x="11.5" y="10" width="5" height="14" rx="1.8" fill="currentColor" opacity=".8" />
-            <rect x="19" y="5" width="5" height="19" rx="1.8" fill="currentColor" />
+          {/* 与包根 icon.svg 同源（插件列表图标）：改图形或配色时两处同步。 */}
+          <svg viewBox="0 0 36 36" width="56" height="56" fill="none">
+            <rect x="7" y="22" width="4.6" height="7.2" rx="2.3" fill="url(#aboutMarkBlue)" />
+            <rect x="15.5" y="19" width="4.6" height="10.2" rx="2.3" fill="url(#aboutMarkBlue)" />
+            <rect x="24" y="16.6" width="4.6" height="12.6" rx="2.3" fill="url(#aboutMarkBlue)" />
+            <path d="M9.3 17.6L16 13.6L21.6 14.8L27.2 8.6" stroke="url(#aboutMarkTeal)" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="27.2" cy="8.6" r="2.25" fill="#05909D" />
+            <defs>
+              <linearGradient id="aboutMarkBlue" x1="18" y1="11" x2="18" y2="30" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#69B9FF" />
+                <stop offset="1" stopColor="#324DE2" />
+              </linearGradient>
+              <linearGradient id="aboutMarkTeal" x1="9" y1="17" x2="27" y2="8" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#45E7A4" />
+                <stop offset="1" stopColor="#05909D" />
+              </linearGradient>
+            </defs>
           </svg>
         </div>
         <div className={css.heroMain}>

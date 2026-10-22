@@ -24,20 +24,15 @@
   box-shadow: var(--dsw-shadow-lv1);
 }
 
-/* 品牌蓝渐变底在深浅主题下恒定，字形色用静态白避免被主题反色。 */
+/* 品牌区直接展示插件图形本身，不加底色/描边：图形自带蓝青两色，
+   任何底色都会抢色；深浅主题只影响背后的品牌卡片。 */
 .logo {
   flex: none;
   width: 56px;
   height: 56px;
-  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--dsw-static-neutral-bluish-00);
-  background: linear-gradient(145deg, var(--dsw-static-deepseek-400) 0%, var(--dsw-static-deepseek-500) 55%, var(--dsw-static-deepseek-600) 100%);
-  box-shadow:
-    0 8px 18px color-mix(in srgb, var(--dsw-static-deepseek-500) 28%, transparent),
-    inset 0 1px 0 color-mix(in srgb, var(--dsw-static-neutral-bluish-00) 35%, transparent);
 }
 
 .heroMain {
