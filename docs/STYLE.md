@@ -114,4 +114,4 @@
 - **确认操作/间隔输入**：走 `useConfirmOp`/`useIntervalText`，接口调用走 `postLedgerApi`。
 - **判空**：可空类型全是 `T | null`，用 `=== null`/`!== null`；`!= null` 只留给运行时可能
   undefined 的防御位（如 `p?.t`）；`== null` 不出现。
-- **新文件归属**：可复用 hook 进 `src/client/use*.ts`，跨端常量进 `utils.ts`。
+- **新文件归属**：可复用 hook 进 `src/client/hooks/use*.ts`，跨端常量进 `utils.ts`。

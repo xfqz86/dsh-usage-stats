@@ -9,8 +9,8 @@
 import { useCallback, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 
 import { ModelSpeedPill, type SpeedEntryProps, type SpeedInjected } from '../components/ModelSpeedPill.tsx';
+import { useUsageSettingsView } from '../hooks/useUsageSettings.ts';
 import { createSpeedStore, EMPTY_SPEED_SNAPSHOT, type SpeedSnapshot, type SpeedStore, type SpeedStoreHandle } from '../modelSpeed.ts';
-import { useUsageSettingsView } from '../useUsageSettings.ts';
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';

@@ -22,21 +22,21 @@ import { useState, useMemo, type ComponentType } from 'react';
 
 import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
+import { useUpdateCheck } from '../hooks/useUpdateCheck.ts';
 import { redirectModels, type ModelGroupMode, type TimeRange } from '../stats.ts';
-import { useUpdateCheck } from '../useUpdateCheck.ts';
 
-import { AboutTab } from './AboutTab.tsx';
-import { DatesTab } from './DatesTab.tsx';
-import { ModelsTab } from './ModelsTab.tsx';
-import { OverviewTab } from './OverviewTab.tsx';
-import { SessionsTab } from './SessionsTab.tsx';
-import { SettingsTab } from './SettingsTab.tsx';
+import { AboutTab } from './about/AboutTab.tsx';
+import { DatesTab } from './dates/DatesTab.tsx';
+import { ModelsTab } from './models/ModelsTab.tsx';
+import { OverviewTab } from './overview/OverviewTab.tsx';
+import { SessionsTab } from './sessions/SessionsTab.tsx';
+import { SettingsTab } from './settings/SettingsTab.tsx';
 import css from './UsageStatsPanel.module.css';
 
 import type { DeepSeekBalance, UsageSettings, ZaiQuota } from '../../types.ts';
+import type { GoQuota } from '../hooks/useQuota.ts';
+import type { UsageSnapshot } from '../hooks/useSnapshot.ts';
 import type { UsageStatsKey } from '../locales.ts';
-import type { GoQuota } from '../useQuota.ts';
-import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 

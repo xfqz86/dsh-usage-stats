@@ -14,8 +14,8 @@ import { HIT_RATE_COLOR, buildDateStack, buildModelStack, fmtFull, getDateTokenM
 import css from './StackedBar.module.css';
 
 import type { SeriesPoint } from '../../types.ts';
+import type { ModelStat } from '../hooks/useSnapshot.ts';
 import type { LocaleFn } from '../locales.ts';
-import type { ModelStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 /** 统一堆叠柱：discriminated union，date 模式按 token 类型堆叠，model 模式按模型堆叠。 */

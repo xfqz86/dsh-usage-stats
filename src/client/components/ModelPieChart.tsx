@@ -11,7 +11,7 @@ import { fmtFull, pctOf, pieSlicesOf, pieFullCircleOf  } from '../stats.ts';
 
 import css from './ModelPieChart.module.css';
 
-import type { ModelStat } from '../useSnapshot.ts';
+import type { ModelStat } from '../hooks/useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
 /** 模型饼图：按过滤后模型的占比饼图，悬停 tooltip 显示明细。 */

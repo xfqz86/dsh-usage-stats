@@ -9,7 +9,7 @@ import { IconCheckOutlineRegular, IconCopyOutlineRegular, writeClipboard } from 
 import { useEffect, useRef, useState } from 'react';
 
 
-import { useUsageSettings } from '../useUsageSettings.ts';
+import { useUsageSettings } from '../hooks/useUsageSettings.ts';
 
 import css from './SessionIdBadge.module.css';
 

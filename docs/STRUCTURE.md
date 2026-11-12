@@ -85,44 +85,63 @@ dsh-usage-stats/
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
 │   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：为需要多行排版或跟随鼠标的气泡提供 `content` 插槽与 `follow` 定位。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、Tab 栏、通用提示等。
+│   │   ├── hooks/
+│   │   │   ├── useCollapsedGroups.ts ← 模型分组折叠状态：默认全部展开，记住用户收起的行。
+│   │   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
+│   │   │   ├── useDateDetail.ts ← 单日明细的浏览器端取数：日期页点某行的「明细」链接时，按该行的本地日零点查一次 usageStats/dateDetail；没有打开的日期时不发请求。
+│   │   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
+│   │   │   ├── useModelDetail.ts ← 模型明细的浏览器端取数：点某行的「明细」链接时按「目标 + 归并来源」各查一次 usageStats/modelDetail，用 mergeModelDetails 合成一行；没有打开的行时不发请求。
+│   │   │   ├── useQuota.ts ← 额度轮询 hooks（浏览器端）：共享轮询骨架 useQuota + Go/DeepSeek/Z.ai 三路薄包装。
+│   │   │   ├── useSessionDetail.ts ← 会话明细的浏览器端取数：会话页点主会话行的「明细」链接时，按该行的折叠会话集合 （主会话 + 展平的全部子代理）查一次 usageStats/sessionDetail；没有打开的行时不发请求。
+│   │   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
+│   │   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
+│   │   │   ├── useUpdateCheck.ts ← 「关于」页的更新检查 hook：面板打开时自动查一次，手动检查带 force 绕过服务端缓存。
+│   │   │   ├── useUpgrade.ts ← 「立即升级」hook：调用 usageStats/upgrade 把 profile 依赖装到指定版本， 并把结果归一为 idle / upgrading / success / error 四态。
+│   │   │   └── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
 │   │   ├── views/
-│   │   │   ├── AboutTab.module.css ← 「关于」Tab AboutTab：品牌区、数据与隐私 / 链接双栏卡片、统计口径条与页脚， 尺寸按 960x640 设计稿换算；颜色全部使用设计 token，窄视口（≤800px）双栏改单列。
-│   │   │   ├── AboutTab.tsx ← 「关于」Tab：品牌区、数据与隐私、外链入口、统计口径条与构建信息。
-│   │   │   ├── ConfigTransfer.module.css ← 配置迁移区 ConfigTransfer：导出与导入两个子块的标题、说明、文本域、 操作按钮、差异预览与内联反馈。
-│   │   │   ├── ConfigTransfer.tsx ← 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图，一个组件一个文件。
-│   │   │   ├── DateDetail.module.css ← 日期明细弹窗（DateDetail 与两个子视图）：日期页每行末尾的「明细」链接打开的二级弹窗。
-│   │   │   ├── DateDetail.tsx ← 日期明细弹窗（DateDetail）：日期页每行末尾的「明细」链接打开的二级弹窗， 含标题（日期 + 当天合计）、按会话 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落偏好设置、下次打开保持。
-│   │   │   ├── DateDetailModels.tsx ← 日期明细弹窗的「按模型」子视图：这一天有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择落偏好设置、下次打开保持。
-│   │   │   ├── DateDetailSessions.tsx ← 日期明细弹窗的「按会话」子视图：这一天有用量的会话表，与面板会话 Tab 同一套展示—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）、子代理折叠到主会话 并带 + 展开、默认按「总计」降序、可排序、每页 15 条；分组与排序比较走 stats.ts 的 共用实现（groupSessions / compareSessionGroup），与面板会话 Tab 同一份。
-│   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
-│   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
-│   │   │   ├── HeroTile.module.css ← 英雄磁贴 HeroTile：今日与总 tokens 共用的合并磁贴样式。
-│   │   │   ├── HeroTile.tsx ← 英雄磁贴 HeroTile，今日与总 tokens 共用的合并磁贴。
-│   │   │   ├── ModelDetail.module.css ← 模型明细（ModelDetail 与两个子视图）：模型页每行末尾的「明细」链接打开的二级弹窗。
-│   │   │   ├── ModelDetail.tsx ← 模型明细弹窗（ModelDetail）：模型页每行末尾的「明细」链接打开的二级弹窗， 含标题、按日期 / 按会话两个子标签、加载 / 失败 / 空态与关闭按钮。
-│   │   │   ├── ModelDetailDates.tsx ← 模型明细弹窗的「按日期」子视图：该模型在范围内的每日用量——顶部每日趋势图、 下方用量表，构成与日期 Tab 一致（图由 StackedBar 补齐范围内每一天，表格只列 真正有量的日子）；列与日期 Tab 对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
-│   │   │   ├── ModelDetailSessions.tsx ← 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，表与会话 Tab 完全同款—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃）、 子代理折叠到主会话并带 + 展开、默认按「最近活跃」降序、可排序、每页 15 条； 分组与排序比较走 stats.ts 的共用实现（groupSessions / compareSessionGroup）。
-│   │   │   ├── ModelRedirectEditor.module.css ← 模型统计重定向规则编辑器 ModelRedirectEditor：规则行（来源 → 目标）、 删除按钮、添加按钮与提示文字。
-│   │   │   ├── ModelRedirectEditor.tsx ← 模型统计重定向规则编辑器：设置 Tab 的专属子视图。
+│   │   │   ├── about/
+│   │   │   │   ├── AboutTab.module.css ← 「关于」Tab AboutTab：品牌区、数据与隐私 / 链接双栏卡片、统计口径条与页脚， 尺寸按 960x640 设计稿换算；颜色全部使用设计 token，窄视口（≤800px）双栏改单列。
+│   │   │   │   ├── AboutTab.tsx ← 「关于」Tab：品牌区、数据与隐私、外链入口、统计口径条与构建信息。
+│   │   │   │   ├── UpdateNotesModal.module.css ← 更新说明弹窗 UpdateNotesModal：叠在用量统计面板上的二级模态窗（720x500）， 头部 / 版本元信息 / 可滚动 Markdown 说明（升级时下方追加状态条）/ 底部操作栏； 颜色全部使用设计 token，窄视口（≤800px）收紧内边距、≤560px 允许底栏换行。
+│   │   │   │   └── UpdateNotesModal.tsx ← 更新说明弹窗（UpdateNotesModal）：叠在用量统计面板上的二级模态窗， 头部标题 + 版本元信息 + Release 说明（Markdown）+ 底部操作栏。
+│   │   │   ├── dates/
+│   │   │   │   ├── DateDetail.module.css ← 日期明细弹窗（DateDetail 与两个子视图）：日期页每行末尾的「明细」链接打开的二级弹窗。
+│   │   │   │   ├── DateDetail.tsx ← 日期明细弹窗（DateDetail）：日期页每行末尾的「明细」链接打开的二级弹窗， 含标题（日期 + 当天合计）、按会话 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落偏好设置、下次打开保持。
+│   │   │   │   ├── DateDetailModels.tsx ← 日期明细弹窗的「按模型」子视图：这一天有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择落偏好设置、下次打开保持。
+│   │   │   │   ├── DateDetailSessions.tsx ← 日期明细弹窗的「按会话」子视图：这一天有用量的会话表，与面板会话 Tab 同一套展示—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）、子代理折叠到主会话 并带 + 展开、默认按「总计」降序、可排序、每页 15 条；分组与排序比较走 stats.ts 的 共用实现（groupSessions / compareSessionGroup），与面板会话 Tab 同一份。
+│   │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
+│   │   │   │   └── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
+│   │   │   ├── models/
+│   │   │   │   ├── ModelDetail.module.css ← 模型明细（ModelDetail 与两个子视图）：模型页每行末尾的「明细」链接打开的二级弹窗。
+│   │   │   │   ├── ModelDetail.tsx ← 模型明细弹窗（ModelDetail）：模型页每行末尾的「明细」链接打开的二级弹窗， 含标题、按日期 / 按会话两个子标签、加载 / 失败 / 空态与关闭按钮。
+│   │   │   │   ├── ModelDetailDates.tsx ← 模型明细弹窗的「按日期」子视图：该模型在范围内的每日用量——顶部每日趋势图、 下方用量表，构成与日期 Tab 一致（图由 StackedBar 补齐范围内每一天，表格只列 真正有量的日子）；列与日期 Tab 对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
+│   │   │   │   ├── ModelDetailSessions.tsx ← 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，表与会话 Tab 完全同款—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃）、 子代理折叠到主会话并带 + 展开、默认按「最近活跃」降序、可排序、每页 15 条； 分组与排序比较走 stats.ts 的共用实现（groupSessions / compareSessionGroup）。
+│   │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
+│   │   │   │   └── ModelsTab.tsx ← 模型 Tab：模型/Provider 拆分表 + 顶部饼图与堆叠柱 + 靠右的时间范围筛选（默认 1 年）。
+│   │   │   ├── overview/
+│   │   │   │   ├── HeroTile.module.css ← 英雄磁贴 HeroTile：今日与总 tokens 共用的合并磁贴样式。
+│   │   │   │   ├── HeroTile.tsx ← 英雄磁贴 HeroTile，今日与总 tokens 共用的合并磁贴。
+│   │   │   │   ├── OverviewTab.module.css ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行），颜色全部使用设计 token。
+│   │   │   │   ├── OverviewTab.tsx ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行）， 布局用 grid-template-areas 分区；三张额度卡片受监控开关控制，未启用时隐藏且底行自动补位。
+│   │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
+│   │   │   │   └── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮。
+│   │   │   ├── sessions/
+│   │   │   │   ├── SessionDetail.module.css ← 会话明细弹窗（SessionDetail 与两个子视图）：会话页主会话行末尾的「明细」链接打开的 二级弹窗。
+│   │   │   │   ├── SessionDetail.tsx ← 会话明细弹窗（SessionDetail）：会话页主会话行末尾的「明细」链接打开的二级弹窗， 含标题（会话标题 + 合计）、按日期 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落偏好设置、下次打开保持。
+│   │   │   │   ├── SessionDetailDates.tsx ← 会话明细弹窗的「按日期」子视图：该会话集合的每日用量——顶部每日趋势图、下方用量表， 与日期 Tab 同一套展示（图由 StackedBar 补齐每一天，表格只列真正有量的日子）； 列与日期 Tab / 模型明细的按日期表对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
+│   │   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择落偏好设置、下次打开保持。
+│   │   │   │   ├── SessionsTab.module.css ← 会话 Tab SessionsTab：仅保留首列最小宽度。
+│   │   │   │   └── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开； 明细里模型表分组的选择落偏好设置、下次打开保持。
+│   │   │   ├── settings/
+│   │   │   │   ├── ConfigTransfer.module.css ← 配置迁移区 ConfigTransfer：导出与导入两个子块的标题、说明、文本域、 操作按钮、差异预览与内联反馈。
+│   │   │   │   ├── ConfigTransfer.tsx ← 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图，一个组件一个文件。
+│   │   │   │   ├── ModelRedirectEditor.module.css ← 模型统计重定向规则编辑器 ModelRedirectEditor：规则行（来源 → 目标）、 删除按钮、添加按钮与提示文字。
+│   │   │   │   ├── ModelRedirectEditor.tsx ← 模型统计重定向规则编辑器：设置 Tab 的专属子视图。
+│   │   │   │   ├── QuotaMonitorTable.module.css ← 额度监控表格 QuotaMonitorTable：设置 Tab 的专属子视图样式， 一张四列表格承载三个额度来源的启用 / 侧边栏展示 / 抓取间隔。
+│   │   │   │   ├── QuotaMonitorTable.tsx ← 额度监控表格：设置 Tab 的专属子视图，把 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度压成 一张四列表格（监控项 / 启用监控 / 在侧边栏展示 / 抓取间隔），一行一个额度来源。
+│   │   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、可折叠分区（账本操作、配置迁移） 与底部页脚。
+│   │   │   │   └── SettingsTab.tsx ← 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
 │   │   │   ├── ModelSpeedDock.tsx ← 输入区状态行读数条目的入口：按设置门控，并在挂载期间维护一个会话速度存储。
-│   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
-│   │   │   ├── ModelsTab.tsx ← 模型 Tab：模型/Provider 拆分表 + 顶部饼图与堆叠柱 + 靠右的时间范围筛选（默认 1 年）。
-│   │   │   ├── OverviewTab.module.css ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行），颜色全部使用设计 token。
-│   │   │   ├── OverviewTab.tsx ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行）， 布局用 grid-template-areas 分区；三张额度卡片受监控开关控制，未启用时隐藏且底行自动补位。
-│   │   │   ├── QuotaMonitorTable.module.css ← 额度监控表格 QuotaMonitorTable：设置 Tab 的专属子视图样式， 一张四列表格承载三个额度来源的启用 / 侧边栏展示 / 抓取间隔。
-│   │   │   ├── QuotaMonitorTable.tsx ← 额度监控表格：设置 Tab 的专属子视图，把 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度压成 一张四列表格（监控项 / 启用监控 / 在侧边栏展示 / 抓取间隔），一行一个额度来源。
-│   │   │   ├── SessionDetail.module.css ← 会话明细弹窗（SessionDetail 与两个子视图）：会话页主会话行末尾的「明细」链接打开的 二级弹窗。
-│   │   │   ├── SessionDetail.tsx ← 会话明细弹窗（SessionDetail）：会话页主会话行末尾的「明细」链接打开的二级弹窗， 含标题（会话标题 + 合计）、按日期 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落偏好设置、下次打开保持。
-│   │   │   ├── SessionDetailDates.tsx ← 会话明细弹窗的「按日期」子视图：该会话集合的每日用量——顶部每日趋势图、下方用量表， 与日期 Tab 同一套展示（图由 StackedBar 补齐每一天，表格只列真正有量的日子）； 列与日期 Tab / 模型明细的按日期表对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
-│   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择落偏好设置、下次打开保持。
-│   │   │   ├── SessionsTab.module.css ← 会话 Tab SessionsTab：仅保留首列最小宽度。
-│   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开； 明细里模型表分组的选择落偏好设置、下次打开保持。
-│   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、可折叠分区（账本操作、配置迁移） 与底部页脚。
-│   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
-│   │   │   ├── UpdateNotesModal.module.css ← 更新说明弹窗 UpdateNotesModal：叠在用量统计面板上的二级模态窗（720x500）， 头部 / 版本元信息 / 可滚动 Markdown 说明（升级时下方追加状态条）/ 底部操作栏； 颜色全部使用设计 token，窄视口（≤800px）收紧内边距、≤560px 允许底栏换行。
-│   │   │   ├── UpdateNotesModal.tsx ← 更新说明弹窗（UpdateNotesModal）：叠在用量统计面板上的二级模态窗， 头部标题 + 版本元信息 + Release 说明（Markdown）+ 底部操作栏。
-│   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
-│   │   │   ├── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层，支持宽列与 56px rail 两种形态，几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。
 │   │   │   ├── UsageStatsFooter.tsx ← 用量统计的侧边栏底部动作：注册在 `sidebar.footer.action` 插槽的今日统计触发器。
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。
@@ -135,18 +154,6 @@ dsh-usage-stats/
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口：apply 内挂载手写贡献，hooks 经 usageStatsRemote() 取服务。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何、模型统计重定向归并。
-│   │   ├── useCollapsedGroups.ts ← 模型分组折叠状态：默认全部展开，记住用户收起的行。
-│   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
-│   │   ├── useDateDetail.ts ← 单日明细的浏览器端取数：日期页点某行的「明细」链接时，按该行的本地日零点查一次 usageStats/dateDetail；没有打开的日期时不发请求。
-│   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
-│   │   ├── useModelDetail.ts ← 模型明细的浏览器端取数：点某行的「明细」链接时按「目标 + 归并来源」各查一次 usageStats/modelDetail，用 mergeModelDetails 合成一行；没有打开的行时不发请求。
-│   │   ├── useQuota.ts ← 额度轮询 hooks（浏览器端）：共享轮询骨架 useQuota + Go/DeepSeek/Z.ai 三路薄包装。
-│   │   ├── useSessionDetail.ts ← 会话明细的浏览器端取数：会话页点主会话行的「明细」链接时，按该行的折叠会话集合 （主会话 + 展平的全部子代理）查一次 usageStats/sessionDetail；没有打开的行时不发请求。
-│   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
-│   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
-│   │   ├── useUpdateCheck.ts ← 「关于」页的更新检查 hook：面板打开时自动查一次，手动检查带 force 绕过服务端缓存。
-│   │   ├── useUpgrade.ts ← 「立即升级」hook：调用 usageStats/upgrade 把 profile 依赖装到指定版本， 并把结果归一为 idle / upgrading / success / error 四态。
-│   │   ├── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
 │   │   └── version.ts ← 本插件版本号：tsdown 构建时把 package.json 的 version 注入 DSH_USAGE_STATS_VERSION， 「关于」页的版本展示与更新比较都读这里，避免与包版本漂移。
 │   ├── host/
 │   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、 hasUsage 与 modelKeyOf。
