@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-13
+
 ### 功能
 
 - **模型表可以分组看**：模型页与日期、会话明细里的模型表都能按厂商或按模型分组，同名模型跨厂商合并成一行、点加号展开看明细；分组与时间范围的选择会被记住（日期页与模型页共用同一个时间记忆），下次打开保持，点选即时生效
@@ -209,7 +211,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.4.7...v0.5.0

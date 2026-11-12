@@ -1,6 +1,6 @@
 {
   "name": "@xfqz86/dsh-usage-stats",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "DSH web plugin: token usage stats in the sidebar footer — today badge opening a tabbed panel (overview, daily trend + heatmap, per-model and per-session breakdowns with drill-down) plus DeepSeek / OpenCode Go / Z.ai quota monitoring; per-session TTFT/ATPS readings in the composer",
   "icon": "icon.svg",
   "type": "module",
