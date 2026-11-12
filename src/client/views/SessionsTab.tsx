@@ -1,5 +1,6 @@
 /**
  * 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开；
+ * 明细里模型表分组的选择落偏好设置、下次打开保持。
  * 展示快照下发的会话（最多 SNAPSHOT_LIMIT 条，默认按最近活跃倒序）。
  * 独立成文件，一个组件一个文件。
  * 列顺序：会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃 | 明细；
@@ -14,7 +15,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Pagination } from '../components/Pagination.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { avgPerCall, compareSessionGroup, fmt, fmtFull, formatLastActive, hitRateOfDay, pctOf, shortId, usageTotal, groupSessions, sessionGroupIds, type SessionSortKey } from '../stats.ts';
+import { avgPerCall, compareSessionGroup, fmt, fmtFull, formatLastActive, hitRateOfDay, pctOf, shortId, usageTotal, groupSessions, sessionGroupIds, type ModelGroupMode, type SessionSortKey } from '../stats.ts';
 import { useSessionDetail } from '../useSessionDetail.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
@@ -30,11 +31,15 @@ const PAGE_SIZE = 20;
 
 /** 会话 Tab：分页每页 20 条，子代理折叠，主会话前显示 + / −，子项不占页位，数据完整展示全分量。 */
 export function SessionsTab({
-  sessionsList, rules, t,
+  sessionsList, rules, groupMode, onGroupModeChange, t,
 }: {
   sessionsList: SessionStat[]
   /** 模型统计重定向规则，透传给会话明细弹窗的按模型子视图。 */
   rules: readonly ModelRedirect[]
+  /** 模型表分组模式，来自偏好设置，三处模型表共用。 */
+  groupMode: ModelGroupMode
+  /** 分组模式切换，写回偏好设置。 */
+  onGroupModeChange: (m: ModelGroupMode) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   // 本地化函数单点转换：纯函数要的无命名空间形态，组件内统一用 tFn。
@@ -206,6 +211,8 @@ export function SessionsTab({
           id={detail.id}
           title={openGroup.main.title || shortId(openGroup.main.id)}
           rules={rules}
+          groupMode={groupMode}
+          onGroupModeChange={onGroupModeChange}
           state={detailState}
           onClose={() => setDetail(null)}
           t={t}

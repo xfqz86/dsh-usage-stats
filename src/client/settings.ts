@@ -6,6 +6,7 @@
  * subscribeUsageSettings 订阅、经 updateUsageSettings 路径写入显式改过的字段
  * （未改的字段继续跟随 schema 默认值）；取值经 normalizeUsageSettings 归一化并夹取，
  * 表单未就绪（加载中、条目未挂载或部署不支持写入）时回退 USAGE_SETTINGS_DEFAULTS。
+ * 点下去先按本地猜测渲染（乐观更新），不等服务端一整圈往返，落盘后对账消掉。
  * 规则表整表写入，不做数组下标级增删，避免并发写时错位。
  *
  * 配置串导入走整份覆盖（replaceUsageSettings）：与默认值相等的字段 unset，其余逐字段 set。
@@ -42,9 +43,25 @@ let scope: ConfigForm<UsageSettings> | undefined;
 /** 未绑定表单时的视图：默认值、状态 unavailable、不可写。 */
 const UNBOUND_VIEW: UsageSettingsView = { settings: USAGE_SETTINGS_DEFAULTS, status: 'unavailable', writable: false };
 
-/** 最近一次表单快照与由它派生的视图，保证同一快照只派生一次（引用稳定）。 */
+/** 已发出、尚未被服务端快照确认的字段：点下去先按它渲染，不等服务端往返。 */
+let pending: Partial<UsageSettings> = {};
+
+/** 本地订阅者集合：热重载解绑时订阅不断，等下次绑定自动恢复转发。 */
+const localListeners = new Set<() => void>();
+
+/** 已包转发的那层表单：换绑时重包，保证任何时刻最多包一层。 */
+let forwardedScope: ConfigForm<UsageSettings> | undefined;
+
+/** 当前转发层的取消订阅：换绑、无本地订阅者时释放，不占着旧表单不放。 */
+let stopForward: (() => void) | undefined;
+
+/** 最近一次表单快照、挂起写入与由它俩派生的视图：任一引用没变就返回同一对象。 */
 let viewFrom: ConfigFormSnapshot<UsageSettings> | undefined;
+let viewPending: Partial<UsageSettings> = pending;
 let view: UsageSettingsView = UNBOUND_VIEW;
+
+/** 上次通知过本地订阅者的视图：服务端回声与本地猜测一致时不再打扰界面。 */
+let deliveredView: UsageSettingsView = UNBOUND_VIEW;
 
 /** 偏好视图：取值（已归一化）与存储状态，组件渲染与提示共用。 */
 export interface UsageSettingsView {
@@ -64,6 +81,7 @@ function noop(): void {
 /** 绑定设置表单（浏览器端 apply 调用一次），随后可用 hook 读写偏好。 */
 export function attachUsageSettings(bound: ConfigForm<UsageSettings>): void {
   scope = bound;
+  rebindForward();
 }
 
 /**
@@ -75,6 +93,7 @@ export function attachUsageSettings(bound: ConfigForm<UsageSettings>): void {
  */
 export function detachUsageSettings(bound?: ConfigForm<UsageSettings>): void {
   if (bound === undefined || bound === scope) scope = undefined;
+  rebindForward();
 }
 
 /** 读取旧版本 localStorage 里的偏好；无键、非 JSON 或坏形状时返回 null。 */
@@ -205,6 +224,64 @@ export async function migrateLegacySettings(
   return true;
 }
 
+/** 通知本地订阅者：退订发生在通知中途也不影响其余订阅者。 */
+function notifyLocalListeners(): void {
+  for (const listener of Array.from(localListeners)) {
+    listener();
+  }
+}
+
+/** 两份视图内容是否一致：字段逐个按值比，数组引用每次都变故不能直接比。 */
+function sameSettingsView(first: UsageSettingsView, second: UsageSettingsView): boolean {
+  if (first.status !== second.status || first.writable !== second.writable) return false;
+  for (const field of Object.keys(USAGE_SETTINGS_DEFAULTS) as (keyof UsageSettings)[]) {
+    if (!settingsValueEqual(first.settings[field], second.settings[field])) return false;
+  }
+  return true;
+}
+
+/** 视图内容变化才通知：服务端回声与本地猜测一致时省一次重渲染。 */
+function publishIfChanged(): void {
+  const next = usageSettingsView();
+  if (sameSettingsView(next, deliveredView)) return;
+  deliveredView = next;
+  notifyLocalListeners();
+}
+
+/** 快照到达即对账：与服务端一致的猜测视为落盘，不再覆盖显示。 */
+function reconcilePending(form: ConfigForm<UsageSettings>): void {
+  const confirmed = normalizeUsageSettings(form.getSnapshot().value);
+  const rest: Partial<UsageSettings> = { ...pending };
+  let changed = false;
+  for (const field of Object.keys(rest) as (keyof UsageSettings)[]) {
+    const guess = rest[field];
+    if (guess !== undefined && settingsValueEqual(guess, confirmed[field])) {
+      delete rest[field];
+      changed = true;
+    }
+  }
+  if (changed) pending = rest;
+}
+
+/** 对齐转发层与当前绑定：换绑重包，保证任何时刻最多包一层。 */
+function rebindForward(): void {
+  if (forwardedScope !== undefined && (forwardedScope !== scope || localListeners.size === 0)) {
+    if (stopForward !== undefined) {
+      stopForward();
+      stopForward = undefined;
+    }
+    forwardedScope = undefined;
+  }
+  if (scope !== undefined && forwardedScope === undefined && localListeners.size > 0) {
+    const form = scope;
+    forwardedScope = form;
+    stopForward = form.subscribe(() => {
+      reconcilePending(form);
+      publishIfChanged();
+    });
+  }
+}
+
 /**
  * 当前偏好视图：表单未就绪时回退默认值，同一份表单快照返回同一对象
  * （useSyncExternalStore 依赖引用稳定判断是否变化）。
@@ -212,10 +289,12 @@ export async function migrateLegacySettings(
 export function usageSettingsView(): UsageSettingsView {
   const snapshot = scope?.getSnapshot();
   if (snapshot === undefined) return UNBOUND_VIEW;
-  if (snapshot !== viewFrom) {
+  if (snapshot !== viewFrom || pending !== viewPending) {
     viewFrom = snapshot;
+    viewPending = pending;
+    const base = normalizeUsageSettings(snapshot.value);
     view = {
-      settings: normalizeUsageSettings(snapshot.value),
+      settings: Object.keys(pending).length === 0 ? base : { ...base, ...pending },
       status: snapshot.status,
       writable: snapshot.writable,
     };
@@ -223,22 +302,57 @@ export function usageSettingsView(): UsageSettingsView {
   return view;
 }
 
-/** 订阅偏好变化，返回取消订阅函数；未绑定表单时订阅为空操作。 */
+/** 订阅偏好变化，返回取消订阅函数；未绑定表单时沿旧语义不跟踪。 */
 export function subscribeUsageSettings(listener: () => void): () => void {
-  return scope?.subscribe(listener) ?? noop;
+  if (scope === undefined) return noop;
+  localListeners.add(listener);
+  rebindForward();
+  return () => {
+    localListeners.delete(listener);
+    rebindForward();
+  };
+}
+
+/** 把路径写入换算成写后服务端应有的取值：set 按写入值，unset 按默认值回落。 */
+function optimisticPatch(ops: SettingsPathOpView[]): Partial<UsageSettings> {
+  const patch: Partial<UsageSettings> = {};
+  for (const op of ops) {
+    const field = op.path[0] as keyof UsageSettings;
+    (patch as Record<string, unknown>)[field] =
+      op.op === 'set' ? op.value : USAGE_SETTINGS_DEFAULTS[field];
+  }
+  return patch;
 }
 
 /**
  * 公共提交：无操作或无表单时不发；表单已落定为不可用（条目未挂载、连接非本机
  * 回环）或明确只读时直接返回，不发注定被拒的请求；仍在加载中则照发——服务端
- * 可能接受，表单自己会以最新一次读取兜底。写入失败不打断界面：表单会以最新
- * 一次读取恢复显示值。
+ * 可能接受，表单自己会以最新一次读取兜底。真发时先同步挂起本地猜测让界面当拍
+ * 变，写入失败只回滚本次字段、界面退回服务端值。
  */
 function commitOps(ops: SettingsPathOpView[]): void {
   if (ops.length === 0 || scope === undefined) return;
   const { status, writable } = scope.getSnapshot();
   if (status === 'unavailable' || (status === 'ready' && !writable)) return;
-  void scope.mutate(ops).catch((error: unknown) => {
+  const target = scope;
+  const written = optimisticPatch(ops);
+  pending = { ...pending, ...written };
+  publishIfChanged();
+  void target.mutate(ops).catch((error: unknown) => {
+    const rolled: Partial<UsageSettings> = { ...pending };
+    let changed = false;
+    for (const field of Object.keys(written) as (keyof UsageSettings)[]) {
+      const mine = written[field];
+      const latest = rolled[field];
+      if (mine !== undefined && latest !== undefined && settingsValueEqual(latest, mine)) {
+        delete rolled[field];
+        changed = true;
+      }
+    }
+    if (changed) {
+      pending = rolled;
+      publishIfChanged();
+    }
     console.warn('[usage-stats] 偏好写入失败，界面回退到服务端设置', error);
   });
 }

@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { HIT_RATE_COLOR, buildDateStack, buildModelStack, fmtFull, getDateTokenMeta, hitRateOfDay, modelColorAt, pctOf, type DateRange, type ModelRange } from '../stats.ts';
+import { HIT_RATE_COLOR, buildDateStack, buildModelStack, fmtFull, getDateTokenMeta, hitRateOfDay, modelColorAt, pctOf, type DateRange, type TimeRange } from '../stats.ts';
 
 import css from './StackedBar.module.css';
 
@@ -29,7 +29,7 @@ export type StackedBarProps =
   | {
     mode: 'model'
     models: ModelStat[]
-    range: ModelRange
+    range: TimeRange
     t: PropsLocale<'dsh-usage-stats'>['t']
   };
 

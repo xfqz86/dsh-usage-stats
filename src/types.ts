@@ -343,6 +343,12 @@ export interface ModelRedirect {
   toModel: string
 }
 
+/** 模型表分组模式：三处模型表共用同一记忆，不分组/按厂商/按模型名。 */
+export type ModelGroupMode = 'none' | 'provider' | 'model';
+
+/** 时间范围：模型页与日期页共用同一记忆，与日期范围同档，默认 1 年。 */
+export type TimeRange = '7d' | '14d' | '30d' | '90d' | '180d' | '365d' | 'all';
+
 /**
  * 插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控各三项，
  * 会话标题 session-id 徽标开关，加模型统计重定向规则表；字段与 host 侧
@@ -375,4 +381,8 @@ export interface UsageSettings {
    * 由浏览器端在模型页与日期、会话明细的按模型表归并，见 `src/client/stats.ts` 的 redirectModels。
    */
   modelRedirects: ModelRedirect[]
+  /** 模型表分组记忆：三处模型表（模型页与日期、会话明细）共用同一分组选择。 */
+  modelGroupMode: ModelGroupMode
+  /** 时间范围记忆：模型页与日期页共用同一选择。 */
+  timeRange: TimeRange
 }

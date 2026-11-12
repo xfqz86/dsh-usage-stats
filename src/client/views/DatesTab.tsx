@@ -1,5 +1,6 @@
 /**
  * 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
+ * 明细里模型表分组与时间范围（与模型页共用）的选择落偏好设置、下次打开保持。
  * 顶部为按输入、输出、缓存三段堆叠的每日柱状图并叠加缓存命中率折线，使用 StackedBar mode="date" 横向滚动；
  * 柱高仅按展示三段求和（不含缓存写入与推理），tooltip 与表格的 total 仍为全口径 dayTotal；
  * 中间为靠右的范围 chips，含 7d、14d、30d、90d、180d、365d 与全部，默认1年，位于图表与表格之间；
@@ -16,7 +17,7 @@ import { Pagination } from '../components/Pagination.tsx';
 import { StackedBar } from '../components/StackedBar.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { avgPerCall, buildDateStack, fmt, fmtFull, fullDayLabel, hitRateOfDay, pctOf, type DateRange } from '../stats.ts';
+import { avgPerCall, buildDateStack, fmt, fmtFull, fullDayLabel, hitRateOfDay, pctOf, type ModelGroupMode, type TimeRange } from '../stats.ts';
 import { useDateDetail } from '../useDateDetail.ts';
 import { stableSort, useSortTable } from '../useSortTable.ts';
 
@@ -33,7 +34,7 @@ const PAGE_SIZE = 20;
 type SortKey = 'date' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg';
 
 /** 时间范围选项：值与文案键，与 locales 的 range.* 对齐，默认1年。 */
-const DATE_RANGES: [DateRange, UsageStatsKey][] = [
+const DATE_RANGES: [TimeRange, UsageStatsKey][] = [
   ['7d', 'range.7d'],
   ['14d', 'range.14d'],
   ['30d', 'range.30d'],
@@ -45,16 +46,23 @@ const DATE_RANGES: [DateRange, UsageStatsKey][] = [
 
 /** 日期 Tab：堆叠柱、范围切换与排序分页表格，范围切换位于图表与表格之间且右对齐，容器与会话、模型 Tab 对齐。 */
 export function DatesTab({
-  series, rules, t,
+  series, rules, groupMode, onGroupModeChange, range, onRangeChange, t,
 }: {
   series: SeriesPoint[]
   /** 模型统计重定向规则，原样转给日期明细的按模型标签；服务端明细始终是原始行，归并只在浏览器端做。 */
   rules: readonly ModelRedirect[]
+  /** 模型表分组模式，来自偏好设置，三处模型表共用。 */
+  groupMode: ModelGroupMode
+  /** 分组模式切换，写回偏好设置。 */
+  onGroupModeChange: (m: ModelGroupMode) => void
+  /** 时间范围，来自偏好设置，模型页与日期页共用。 */
+  range: TimeRange
+  /** 时间范围切换，写回偏好设置。 */
+  onRangeChange: (r: TimeRange) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
   // 本地化函数单点转换：纯函数要的无命名空间形态，组件内统一用 tFn。
   const tFn = t as unknown as LocaleFn;
-  const [range, setRange] = useState<DateRange>('365d');
 
   // 按范围构建堆叠数据，固定窗口按日历推进，all 时从最早日到今日、最多 366 天
   const stack = useMemo(() => buildDateStack(series, range, tFn), [series, range, tFn]);
@@ -117,7 +125,7 @@ export function DatesTab({
               key={value}
               type="button"
               className={range === value ? `${shared.chip} ${shared.chipOn}` : shared.chip}
-              onClick={() => setRange(value)}
+              onClick={() => onRangeChange(value)}
             >
               {t(labelKey)}
             </button>
@@ -178,7 +186,7 @@ export function DatesTab({
       )}
       {/* 明细弹窗：叠在详情面板之上，基座 Modal 的层级栈保证 Esc 只关这一层 */}
       {detailDay !== null && (
-        <DateDetail day={detailDay} rules={rules} state={detailState} onClose={() => setDetailDay(null)} t={t} />
+        <DateDetail day={detailDay} rules={rules} groupMode={groupMode} onGroupModeChange={onGroupModeChange} state={detailState} onClose={() => setDetailDay(null)} t={t} />
       )}
     </div>
   );

@@ -568,6 +568,39 @@
   display: none;
 }
 
+/* ---- 分组条：ModelsTab 左右双 chips（分组切换 + 时间范围）与明细表单组左对齐，与 .rangeBar 同层 ---- */
+.rangeBarBetween {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.rangeBarBetween::-webkit-scrollbar {
+  display: none;
+}
+
+.rangeBarStart {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.rangeBarStart::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---- 图表卡片与横向滚动容器：DatesTab、ModelsTab 与模型明细共用 ---- */
 .chartCard {
   min-width: 0;

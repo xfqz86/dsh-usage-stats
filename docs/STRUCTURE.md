@@ -60,6 +60,7 @@ dsh-usage-stats/
 │   │   ├── components/
 │   │   │   ├── HintCard.module.css ← 状态提示卡：图标徽标 + 状态标题 + 说明 / 凭据名 / 操作，磁贴浅底与 tooltip 深底共用同一版式。
 │   │   │   ├── HintCard.tsx ← 状态提示卡：图标徽标 + 状态标题 + 可选说明、凭据名与操作，概览磁贴、侧边栏 tooltip 与各报错区共用，所有非正常态走同一版式，不再各处手写纯文本提示。
+│   │   │   ├── ModelGroupBar.tsx ← 模型表分组切换条：不分组 / 按厂商 / 按模型三段 chips。
 │   │   │   ├── ModelPieChart.module.css ← 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
@@ -81,8 +82,8 @@ dsh-usage-stats/
 │   │   │   ├── ConfigTransfer.module.css ← 配置迁移区 ConfigTransfer：导出与导入两个子块的标题、说明、文本域、 操作按钮、差异预览与内联反馈。
 │   │   │   ├── ConfigTransfer.tsx ← 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图，一个组件一个文件。
 │   │   │   ├── DateDetail.module.css ← 日期明细弹窗（DateDetail 与两个子视图）：日期页每行末尾的「明细」链接打开的二级弹窗。
-│   │   │   ├── DateDetail.tsx ← 日期明细弹窗（DateDetail）：日期页每行末尾的「明细」链接打开的二级弹窗， 含标题（日期 + 当天合计）、按会话 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮。
-│   │   │   ├── DateDetailModels.tsx ← 日期明细弹窗的「按模型」子视图：这一天有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 默认按「总计」降序、可排序、每页 15 条；占比以当天这张表的总和为分母， 用 stats.largestRemainderPcts 配分（与模型页同一口径，1 位小数总和恰为 100）。
+│   │   │   ├── DateDetail.tsx ← 日期明细弹窗（DateDetail）：日期页每行末尾的「明细」链接打开的二级弹窗， 含标题（日期 + 当天合计）、按会话 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落偏好设置、下次打开保持。
+│   │   │   ├── DateDetailModels.tsx ← 日期明细弹窗的「按模型」子视图：这一天有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择落偏好设置、下次打开保持。
 │   │   │   ├── DateDetailSessions.tsx ← 日期明细弹窗的「按会话」子视图：这一天有用量的会话表，与面板会话 Tab 同一套展示—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）、子代理折叠到主会话 并带 + 展开、默认按「总计」降序、可排序、每页 15 条；分组与排序比较走 stats.ts 的 共用实现（groupSessions / compareSessionGroup），与面板会话 Tab 同一份。
 │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
 │   │   │   ├── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
@@ -101,11 +102,11 @@ dsh-usage-stats/
 │   │   │   ├── QuotaMonitorTable.module.css ← 额度监控表格 QuotaMonitorTable：设置 Tab 的专属子视图样式， 一张四列表格承载三个额度来源的启用 / 侧边栏展示 / 抓取间隔。
 │   │   │   ├── QuotaMonitorTable.tsx ← 额度监控表格：设置 Tab 的专属子视图，把 DeepSeek 余额、OpenCode Go 额度与 Z.ai 额度压成 一张四列表格（监控项 / 启用监控 / 在侧边栏展示 / 抓取间隔），一行一个额度来源。
 │   │   │   ├── SessionDetail.module.css ← 会话明细弹窗（SessionDetail 与两个子视图）：会话页主会话行末尾的「明细」链接打开的 二级弹窗。
-│   │   │   ├── SessionDetail.tsx ← 会话明细弹窗（SessionDetail）：会话页主会话行末尾的「明细」链接打开的二级弹窗， 含标题（会话标题 + 合计）、按日期 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮。
+│   │   │   ├── SessionDetail.tsx ← 会话明细弹窗（SessionDetail）：会话页主会话行末尾的「明细」链接打开的二级弹窗， 含标题（会话标题 + 合计）、按日期 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落偏好设置、下次打开保持。
 │   │   │   ├── SessionDetailDates.tsx ← 会话明细弹窗的「按日期」子视图：该会话集合的每日用量——顶部每日趋势图、下方用量表， 与日期 Tab 同一套展示（图由 StackedBar 补齐每一天，表格只列真正有量的日子）； 列与日期 Tab / 模型明细的按日期表对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
-│   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 默认按「总计」降序、可排序、每页 15 条；占比以集合这张表的总和为分母， 用 stats.largestRemainderPcts 配分（与模型页同一口径，1 位小数总和恰为 100）。
+│   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择落偏好设置、下次打开保持。
 │   │   │   ├── SessionsTab.module.css ← 会话 Tab SessionsTab：仅保留首列最小宽度。
-│   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开； 展示快照下发的会话（最多 SNAPSHOT_LIMIT 条，默认按最近活跃倒序）。
+│   │   │   ├── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开； 明细里模型表分组的选择落偏好设置、下次打开保持。
 │   │   │   ├── SettingsTab.module.css ← 设置 Tab SettingsTab：操作按钮含重建账本状态、偏好设置行、可折叠分区（账本操作、配置迁移） 与底部页脚。
 │   │   │   ├── SettingsTab.tsx ← 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
 │   │   │   ├── UpdateNotesModal.module.css ← 更新说明弹窗 UpdateNotesModal：叠在用量统计面板上的二级模态窗（720x500）， 头部 / 版本元信息 / 可滚动 Markdown 说明（升级时下方追加状态条）/ 底部操作栏； 颜色全部使用设计 token，窄视口（≤800px）收紧内边距、≤560px 允许底栏换行。
@@ -123,6 +124,7 @@ dsh-usage-stats/
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口：apply 内挂载手写贡献，hooks 经 usageStatsRemote() 取服务。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何、模型统计重定向归并。
+│   │   ├── useCollapsedGroups.ts ← 模型分组折叠状态：默认全部展开，记住用户收起的行。
 │   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
 │   │   ├── useDateDetail.ts ← 单日明细的浏览器端取数：日期页点某行的「明细」链接时，按该行的本地日零点查一次 usageStats/dateDetail；没有打开的日期时不发请求。
 │   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。

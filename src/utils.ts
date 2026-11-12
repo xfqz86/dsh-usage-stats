@@ -8,7 +8,7 @@
  * harness 包（会破坏另一端 bundle；import type 构建时剥离）。聚合与账本、日志发现、
  * 客户端图表几何仍留在各自模块。
  */
-import type { ModelRedirect, GoWindow, UsageSettings } from './types.ts';
+import type { ModelGroupMode, ModelRedirect, GoWindow, TimeRange, UsageSettings } from './types.ts';
 
 /** 时间戳对应的本地零点，避免 UTC 漂移，host 折叠与会话图共用同一套日划分。 */
 export function startOfDay(timeMs: number): number {
@@ -180,6 +180,8 @@ export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
   zaiFetchMinutes: ZAI_FETCH_DEFAULT_MINUTES,
   showSessionId: true,
   modelRedirects: [],
+  modelGroupMode: 'none',
+  timeRange: '365d',
 };
 
 /**
@@ -265,6 +267,14 @@ export function normalizeUsageSettings(raw: Partial<UsageSettings> | null | unde
   const bool = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback);
   const minutes = (v: unknown, clamp: (n: number) => number, fallback: number): number =>
     (typeof v === 'number' && Number.isFinite(v) ? clamp(v) : fallback);
+  // 模型表分组记忆：只收三值之一，非法回落 'none'，与间隔夹取同式的字段级校验。
+  const groupMode = (v: unknown): ModelGroupMode =>
+    (v === 'none' || v === 'provider' || v === 'model' ? v : USAGE_SETTINGS_DEFAULTS.modelGroupMode);
+  // 时间范围记忆：只收七值之一，非法回落 '365d'，与间隔夹取同式的字段级校验。
+  const range = (v: unknown): TimeRange =>
+    (v === '7d' || v === '14d' || v === '30d' || v === '90d' || v === '180d' || v === '365d' || v === 'all'
+      ? v
+      : USAGE_SETTINGS_DEFAULTS.timeRange);
   return {
     goEnabled: bool(src.goEnabled, USAGE_SETTINGS_DEFAULTS.goEnabled),
     showGoInSidebar: bool(src.showGoInSidebar, USAGE_SETTINGS_DEFAULTS.showGoInSidebar),
@@ -277,5 +287,7 @@ export function normalizeUsageSettings(raw: Partial<UsageSettings> | null | unde
     zaiFetchMinutes: minutes(src.zaiFetchMinutes, clampZaiFetchMinutes, USAGE_SETTINGS_DEFAULTS.zaiFetchMinutes),
     showSessionId: bool(src.showSessionId, USAGE_SETTINGS_DEFAULTS.showSessionId),
     modelRedirects: normalizeModelRedirects(src.modelRedirects),
+    modelGroupMode: groupMode(src.modelGroupMode),
+    timeRange: range(src.timeRange),
   };
 }

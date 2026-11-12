@@ -9,7 +9,9 @@
 import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, isCompleteRedirect, splitModelKey, startOfDay } from '../utils.ts';
 
 import type { LocaleFn } from './locales.ts';
-import type { ModelDetail, ModelRedirect, ModelStat, SeriesPoint, SessionStat, UsageAgg } from '../types.ts';
+import type { ModelDetail, ModelGroupMode, ModelRedirect, ModelStat, SeriesPoint, SessionStat, TimeRange, UsageAgg } from '../types.ts';
+
+export type { ModelGroupMode, TimeRange };
 
 /** 判断是否为英文环境：支持传入 locale 字符串或翻译函数 t。 */
 function isEnglishLocale(localeOrT?: string | LocaleFn): boolean {
@@ -339,11 +341,8 @@ export function formatLastActive(lastActive: number, t: LocaleFn): string {
   return fullDayLabel(lastActive);
 }
 
-/** 模型汇总时间范围：全部、1年、半年、3个月、1个月、14天、7天，默认 1 年。 */
-export type ModelRange = '7d' | '14d' | '30d' | '90d' | '180d' | '365d' | 'all';
-
 /** 模型范围对应的天数，all 返回 null。 */
-export function modelRangeToDays(range: ModelRange): number | null {
+export function modelRangeToDays(range: TimeRange): number | null {
   switch (range) {
     case '7d': return 7;
     case '14d': return 14;
@@ -357,7 +356,7 @@ export function modelRangeToDays(range: ModelRange): number | null {
 }
 
 /** 模型范围的起始零点，all 返回 null。 */
-export function modelRangeCutoff(range: ModelRange): number | null {
+export function modelRangeCutoff(range: TimeRange): number | null {
   const days = modelRangeToDays(range);
   if (days == null) return null;
   const todayStart = startOfDay(Date.now());
@@ -615,7 +614,7 @@ export function unusedRedirectSources(
 }
 
 /** 按时间范围过滤模型：基于各模型的 series 按日聚合，返回排序后的切片。 */
-export function filterModelsByRange(models: ModelStat[], range: ModelRange): ModelStat[] {
+export function filterModelsByRange(models: ModelStat[], range: TimeRange): ModelStat[] {
   if (range === 'all') {
     return [...models].sort((a, b) => usageTotal(b.usage) - usageTotal(a.usage));
   }
@@ -665,7 +664,7 @@ export interface ModelStack {
   maxTotal: number
   models: { provider: string; model: string }[]
 }
-export function buildModelStack(models: ModelStat[], range: ModelRange): ModelStack {
+export function buildModelStack(models: ModelStat[], range: TimeRange): ModelStack {
   const filtered = filterModelsByRange(models, range);
   // 维持与饼图一致的模型顺序，按过滤后 total 降序，堆叠自底向上按此顺序
   const modelOrder = filtered.map((m) => ({ provider: m.provider, model: m.model }));
@@ -1021,4 +1020,97 @@ export function pieSlicesOf(models: ModelStat[]): PieSlice[] {
     angle = endAngle;
   }
   return slices;
+}
+
+/** 模型行排序键：与模型页及两处明细按模型表头一一对应。 */
+export type ModelSortKey = 'model' | 'input' | 'output' | 'cacheRead' | 'total' | 'hitRate' | 'calls' | 'avg' | 'share';
+
+/** 模型分组：同一供应商或同一模型名下多行的聚合行。 */
+export interface ModelGroup {
+  /** 分组键：provider 模式为供应商，model 模式为模型名（原始值，空也不改写）。 */
+  key: string
+  /** 展示名：空键回落 '--'。 */
+  label: string
+  /** 组内行：保持传入顺序，排序由调用方做。 */
+  leaves: { m: ModelStat; share: number }[]
+  /** 组内用量：四段 + reasoning + total 求和。 */
+  usage: UsageAgg
+  /** 组内调用数求和。 */
+  calls: number
+  /** 组内占比：leaves 的 share 求和再到 0.1 精度。 */
+  share: number
+}
+
+/** 带占比的模型行：分母为 0 或空数组时全 0，与三处明细表行内逻辑一致。 */
+export function withModelShares(models: ModelStat[]): { m: ModelStat; share: number }[] {
+  const sum = models.reduce((s, m) => s + usageTotal(m.usage), 0);
+  const shares = sum > 0
+    ? largestRemainderPcts(models.map((m) => (usageTotal(m.usage) / sum) * 100))
+    : models.map(() => 0);
+  return models.map((m, i) => ({ m, share: shares[i] ?? 0 }));
+}
+
+/** 按供应商或模型名分组聚合：usage 各段与 calls 求和，share 为组内和再取 0.1 精度。 */
+export function groupModels(rows: { m: ModelStat; share: number }[], mode: 'provider' | 'model'): ModelGroup[] {
+  const groups = new Map<string, ModelGroup>();
+  for (const row of rows) {
+    const key = mode === 'provider' ? row.m.provider : row.m.model;
+    let group = groups.get(key);
+    if (group === undefined) {
+      group = {
+        key,
+        label: key || '--',
+        leaves: [],
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 },
+        calls: 0,
+        share: 0,
+      };
+      groups.set(key, group);
+    }
+    group.leaves.push(row);
+    group.usage.input += row.m.usage.input || 0;
+    group.usage.output += row.m.usage.output || 0;
+    group.usage.cacheRead += row.m.usage.cacheRead || 0;
+    group.usage.cacheWrite += row.m.usage.cacheWrite || 0;
+    group.usage.reasoning += row.m.usage.reasoning || 0;
+    group.usage.total += row.m.usage.total || 0;
+    group.calls += row.m.calls || 0;
+  }
+  for (const group of groups.values()) {
+    const sum = group.leaves.reduce((s, leaf) => s + (leaf.share || 0), 0);
+    group.share = Math.round(sum * 10) / 10;
+  }
+  return [...groups.values()];
+}
+
+/** 模型行排序比较：与三处明细表 switch 同口径，方向由调用方经 stableSort 应用。 */
+export function compareModelRow(key: ModelSortKey, a: { m: ModelStat; share: number }, b: { m: ModelStat; share: number }): number {
+  switch (key) {
+    case 'model': return `${a.m.model || ''} ${a.m.provider || ''}`.localeCompare(`${b.m.model || ''} ${b.m.provider || ''}`, 'zh-Hans-CN');
+    case 'input': return (a.m.usage.input || 0) - (b.m.usage.input || 0);
+    case 'output': return (a.m.usage.output || 0) - (b.m.usage.output || 0);
+    case 'cacheRead': return (a.m.usage.cacheRead || 0) - (b.m.usage.cacheRead || 0);
+    case 'total': return usageTotal(a.m.usage) - usageTotal(b.m.usage);
+    case 'hitRate': return (hitRateOfDay(a.m.usage) ?? -1) - (hitRateOfDay(b.m.usage) ?? -1);
+    case 'calls': return (a.m.calls || 0) - (b.m.calls || 0);
+    case 'avg': return (avgPerCall(usageTotal(a.m.usage), a.m.calls) ?? -1) - (avgPerCall(usageTotal(b.m.usage), b.m.calls) ?? -1);
+    case 'share': return (a.share || 0) - (b.share || 0);
+    default: return 0;
+  }
+}
+
+/** 模型分组排序比较：文本按展示名，其余按分组合计与行比较同口径。 */
+export function compareModelGroup(key: ModelSortKey, a: ModelGroup, b: ModelGroup): number {
+  switch (key) {
+    case 'model': return a.label.localeCompare(b.label, 'zh-Hans-CN');
+    case 'input': return (a.usage.input || 0) - (b.usage.input || 0);
+    case 'output': return (a.usage.output || 0) - (b.usage.output || 0);
+    case 'cacheRead': return (a.usage.cacheRead || 0) - (b.usage.cacheRead || 0);
+    case 'total': return usageTotal(a.usage) - usageTotal(b.usage);
+    case 'hitRate': return (hitRateOfDay(a.usage) ?? -1) - (hitRateOfDay(b.usage) ?? -1);
+    case 'calls': return (a.calls || 0) - (b.calls || 0);
+    case 'avg': return (avgPerCall(usageTotal(a.usage), a.calls) ?? -1) - (avgPerCall(usageTotal(b.usage), b.calls) ?? -1);
+    case 'share': return (a.share || 0) - (b.share || 0);
+    default: return 0;
+  }
 }
