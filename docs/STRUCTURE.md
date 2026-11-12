@@ -25,7 +25,7 @@ dsh-usage-stats/
 │   │   │   └── action.yml ← 统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装
 │   │   └── verify-pack/
 │   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
-│   │       └── verify.mjs ← 校验交付物仅含 8 文件且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
+│   │       └── verify.mjs ← 校验交付物仅含白名单文件（lib、locale、详情文档与截图等）且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
 │       ├── ci.yml ← CI：类型检查 / 目录结构新鲜度 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
@@ -49,8 +49,13 @@ dsh-usage-stats/
 │   │   └── install-help.png
 │   ├── API.md ← Remote 协议与偏好设置约定（随接口演进维护）
 │   ├── ARCHITECTURE.md ← 架构与统计口径唯一权威（账本/数据流/折叠/墓碑/口径；AGENTS.md 只留规则与指针）
+│   ├── DETAIL.en.md ← 插件页英文详细介绍（locale/en.json 的 meta.detail 指向）
+│   ├── DETAIL.md ← 插件页中文详细介绍（locale/zh.json 的 meta.detail 指向）
 │   ├── STRUCTURE.md ← 生成文件：由 `pnpm tree` 重新生成，勿手改
 │   └── STYLE.md ← 风格经验沉淀（lint 之外的统一约定，新会话先读）
+├── locale/
+│   ├── en.json ← 插件页英文元信息（标题 / 简介 / 详情文档路径），package.json exports 暴露
+│   └── zh.json ← 插件页中文元信息（标题 / 简介 / 详情文档路径），package.json exports 暴露
 ├── scripts/
 │   ├── css-modules-inline.mjs ← rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的 JS 模块。
 │   ├── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
@@ -169,6 +174,7 @@ dsh-usage-stats/
 │   └── utils.ts ← 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
 ├── test/
 │   ├── client-bundle.mjs ← 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
+│   ├── plugin-page.mjs ← 插件页资源单测：locale 元信息、分语言详情文档、文档图片与发布清单保持一致。
 │   ├── pure.mjs ← 纯逻辑、账本折叠与协议/偏好逻辑的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
 │   ├── smoke.mjs ← 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。

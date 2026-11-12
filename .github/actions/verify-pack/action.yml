@@ -1,5 +1,5 @@
 name: verify-pack
-description: Verify distribution contains only 8 files and pruned package.json
+description: Verify distribution contains only the whitelisted files (lib, locale, detail docs, screenshots) and pruned package.json
 author: xfqz86
 
 branding:

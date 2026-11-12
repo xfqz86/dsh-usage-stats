@@ -32,11 +32,14 @@ function findRoot() {
 const ROOT = findRoot()
 /** 出包目录：固定路径，装机实测脚本按同一条路径取包，不猜时间戳。 */
 const OUT_DIR = join(tmpdir(), 'dsh-usage-stats-release')
-/** 交付物清单（8 文件），与 .github/actions/verify-pack 的期望一致。 */
+/** 交付物清单（14 文件），与 .github/actions/verify-pack 的期望一致。 */
 const EXPECTED_FILES = [
   'package/lib/index.js', 'package/lib/client.js', 'package/package.json',
   'package/cordis.patch.yml', 'package/icon.svg', 'package/README.md',
   'package/CHANGELOG.md', 'package/LICENSE',
+  'package/locale/en.json', 'package/locale/zh.json',
+  'package/docs/DETAIL.md', 'package/docs/DETAIL.en.md',
+  'package/docs/screenshot/01-overview.png', 'package/docs/screenshot/04-models.png',
 ]
 
 const failures = []
@@ -131,6 +134,12 @@ async function main() {
   for (const file of ['cordis.patch.yml', 'icon.svg', 'README.md', 'CHANGELOG.md', 'LICENSE']) {
     cpSync(join(ROOT, file), join(staging, file))
   }
+  // 插件页资源：locale 元信息、分语言详情文档与文档内图片
+  cpSync(join(ROOT, 'locale'), join(staging, 'locale'), { recursive: true })
+  cpSync(join(ROOT, 'docs/DETAIL.md'), join(staging, 'docs/DETAIL.md'))
+  cpSync(join(ROOT, 'docs/DETAIL.en.md'), join(staging, 'docs/DETAIL.en.md'))
+  cpSync(join(ROOT, 'docs/screenshot/01-overview.png'), join(staging, 'docs/screenshot/01-overview.png'))
+  cpSync(join(ROOT, 'docs/screenshot/04-models.png'), join(staging, 'docs/screenshot/04-models.png'))
   const manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
   const pruned = {}
   for (const key of pruneAllowlist()) if (key in manifest) pruned[key] = manifest[key]
@@ -144,7 +153,7 @@ async function main() {
   pass(`${tgz}（${(readFileSync(tgz).length / 1024).toFixed(1)} kB）`)
   pass(`装机实测用固定副本：${stable}`)
 
-  // 4) 包内容：8 文件、无 map、剪枝后的 manifest、包内服务端产物与刚验证过的一致
+  // 4) 包内容：交付物清单齐备、无 map、剪枝后的 manifest、包内服务端产物与刚验证过的一致
   console.log('4/5 校验包内容 …')
   const listed = run('tar', ['-tzf', tgz]).out.split('\n')
     .filter((f) => f !== '' && !f.endsWith('/')).sort()

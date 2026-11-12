@@ -41,7 +41,7 @@ node .agents/skills/release/scripts/release-preflight.mjs <版本号>
 | `docs/releases/v<版本>.md` | 面向用户的更新说明，**文件名即 tag**；缺失时 `release.yml` 直接失败，不会发布 |
 
 ### 3. 过验证门禁
-先跑 `AGENTS.md` §9 的全部命令（`tsc` / `eslint` / `pnpm tree:check` / `pnpm build` / `test/pure.mjs`、`test/speed.mjs`、`test/smoke.mjs`、`test/styles.mjs`、`test/client-bundle.mjs` / 发布形态验证），再补装机实测——CI 与发布都走生产态，开发态看不出压缩与剪枝问题：
+先跑 `AGENTS.md` §9 的全部命令（`tsc` / `eslint` / `pnpm tree:check` / `pnpm build` / `test/pure.mjs`、`test/speed.mjs`、`test/smoke.mjs`、`test/styles.mjs`、`test/plugin-page.mjs`、`test/client-bundle.mjs` / 发布形态验证），再补装机实测——CI 与发布都走生产态，开发态看不出压缩与剪枝问题：
 
 ```bash
 node .agents/skills/release/scripts/verify-release.mjs   # 生产构建 → 出真 tarball → 包内容 / Remote 方法签名校验 → 还原开发态 lib/
@@ -78,7 +78,7 @@ git tag v<版本> && git push origin v<版本>
 
 - `release.yml`（tag 推送）先过三道校验：tag 与 `package.json` 版本一致、`docs/releases/v<tag>.md` 存在、该提交的 CI `verify` job 成功（`.github/actions/gate`）。任一不过即失败，npm 与 Release 都不产出；手动 `workflow_dispatch` 只构建不发布。
 - `ci.yml`（推 dev/main、PR）：`tsc` → `pnpm tree:check` → 生产态构建 → styles → smoke → client-bundle → 校验 `prepare` 为 `tsdown` → 剪枝 → `pack` → `verify-pack`。
-- 交付物 7 项（`lib/` 内 2 个文件，合计 8 文件）：`lib/`、剪枝后 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`；字段白名单见 `.github/actions/prune-package/action.yml` 的 `allow`，改它要同步 `.github/actions/verify-pack`。
+- 交付物 14 文件：`lib/` 内 2 个、剪枝后 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`，以及插件页资源 `locale/{en,zh}.json`、`docs/DETAIL{,.en}.md`、`docs/screenshot/{01-overview,04-models}.png`；字段白名单见 `.github/actions/prune-package/action.yml` 的 `allow`，改它要同步 `.github/actions/verify-pack`。
 - 构建形态：`NODE_ENV=production pnpm build` 只压缩浏览器端 bundle 并去掉 sourcemap（CI 与发布用）；服务端 `lib/index.js` 恒不压缩以保 Remote 参数名。本地 `pnpm build` 是开发态（可读 + `*.map`）。
 
 ## 一次性配置

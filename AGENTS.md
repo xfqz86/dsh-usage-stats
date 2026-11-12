@@ -80,6 +80,7 @@ node --experimental-strip-types test/pure.mjs
 node --experimental-strip-types test/speed.mjs
 node --experimental-strip-types test/smoke.mjs
 node --experimental-strip-types test/styles.mjs
+node test/plugin-page.mjs
 node test/client-bundle.mjs
 node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产构建 + 出 tarball + 包内容与 Remote 签名校验
 ```

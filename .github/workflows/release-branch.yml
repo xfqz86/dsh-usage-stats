@@ -63,7 +63,7 @@ jobs:
 
       - name: Assemble payload (only deliverables)
         run: |
-          rm -rf /tmp/payload && mkdir -p /tmp/payload/lib
+          rm -rf /tmp/payload && mkdir -p /tmp/payload/lib /tmp/payload/locale /tmp/payload/docs/screenshot
           cp -r lib/* /tmp/payload/lib/
           cp package.json /tmp/payload/package.json
           cp cordis.patch.yml /tmp/payload/cordis.patch.yml
@@ -71,8 +71,11 @@ jobs:
           cp README.md /tmp/payload/README.md
           cp CHANGELOG.md /tmp/payload/CHANGELOG.md
           cp LICENSE /tmp/payload/LICENSE
+          cp locale/*.json /tmp/payload/locale/
+          cp docs/DETAIL.md docs/DETAIL.en.md /tmp/payload/docs/
+          cp docs/screenshot/01-overview.png docs/screenshot/04-models.png /tmp/payload/docs/screenshot/
 
-      - name: Verify payload (8 files, pruned package.json)
+      - name: Verify payload (14 files, pruned package.json)
         uses: ./.github/actions/verify-pack
         with:
           path: /tmp/payload

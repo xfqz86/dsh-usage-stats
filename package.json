@@ -12,6 +12,7 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
@@ -19,7 +20,12 @@
     "cordis.patch.yml",
     "icon.svg",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "locale",
+    "docs/DETAIL.md",
+    "docs/DETAIL.en.md",
+    "docs/screenshot/01-overview.png",
+    "docs/screenshot/04-models.png"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -62,6 +68,7 @@
     "test:pure": "node --experimental-strip-types test/pure.mjs",
     "test:styles": "node --experimental-strip-types test/styles.mjs",
     "test:speed": "node --experimental-strip-types test/speed.mjs",
+    "test:page": "node test/plugin-page.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
