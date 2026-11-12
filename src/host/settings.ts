@@ -57,6 +57,7 @@ export const UsageSettingsSchema = Schema.object({
   showZaiInSidebar: Schema.boolean().default(USAGE_SETTINGS_DEFAULTS.showZaiInSidebar).volatile(),
   zaiFetchMinutes: Schema.number().default(ZAI_FETCH_DEFAULT_MINUTES).volatile(),
   showSessionId: Schema.boolean().default(USAGE_SETTINGS_DEFAULTS.showSessionId).volatile(),
+  modelSpeedEnabled: Schema.boolean().default(USAGE_SETTINGS_DEFAULTS.modelSpeedEnabled).volatile(),
   modelRedirects: Schema.array(Schema.object({
     fromProvider: Schema.string().default(''),
     fromModel: Schema.string().default(''),

@@ -351,7 +351,7 @@ export type TimeRange = '7d' | '14d' | '30d' | '90d' | '180d' | '365d' | 'all';
 
 /**
  * 插件偏好设置：OpenCode Go 额度、DeepSeek 余额与 Z.ai 额度监控各三项，
- * 会话标题 session-id 徽标开关，加模型统计重定向规则表；字段与 host 侧
+ * 会话标题 session-id 徽标与输入区模型速度开关，加模型统计重定向规则表；字段与 host 侧
  * `usage-stats` 条目的 schemastery schema（src/host/settings.ts）一一对应，
  * client 侧经 ctx.configForms 取得同一形状的解析值。
  */
@@ -376,6 +376,8 @@ export interface UsageSettings {
   zaiFetchMinutes: number
   /** 是否在会话标题右侧展示 session-id 徽标（含悬停复制），默认开启。 */
   showSessionId: boolean
+  /** 是否在输入区状态行展示本会话的模型速度读数（平均 TTFT / ATPS），默认开启。 */
+  modelSpeedEnabled: boolean
   /**
    * 模型统计重定向规则：按顺序匹配来源（同一来源只有最上面一条生效），
    * 由浏览器端在模型页与日期、会话明细的按模型表归并，见 `src/client/stats.ts` 的 redirectModels。

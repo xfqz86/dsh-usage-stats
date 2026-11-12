@@ -14,7 +14,7 @@
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
  *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与单日明细）；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
- *   - 偏好设置：归一化与夹取（含分组与范围记忆）、路径写入只带显式字段、表单视图引用稳定、解绑带表单身份
+ *   - 偏好设置：归一化与夹取（含分组与范围记忆、模型速度开关）、路径写入只带显式字段、表单视图引用稳定、解绑带表单身份
  *     （热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧 localStorage 迁移
  *     （等表单落定、成功写入才删旧键、不可用时保留）；配置串编解码（与独立 Base64 实现互通、
  *     容错与逐码失败语义、解码归一化、改动字段清单）与整份替换写入（默认值字段 unset、
@@ -1665,6 +1665,14 @@ describe('偏好设置：归一化与写入操作', () => {
     assert.equal(normalizeUsageSettings({ showSessionId: 'yes' }).showSessionId, true);
     assert.deepEqual(settingOps({ showSessionId: false }), [{ op: 'set', path: ['showSessionId'], value: false }]);
   });
+
+  it('输入区模型速度开关默认开启，非布尔回退默认', () => {
+    assert.equal(USAGE_SETTINGS_DEFAULTS.modelSpeedEnabled, true);
+    assert.equal(normalizeUsageSettings({}).modelSpeedEnabled, true);
+    assert.equal(normalizeUsageSettings({ modelSpeedEnabled: false }).modelSpeedEnabled, false);
+    assert.equal(normalizeUsageSettings({ modelSpeedEnabled: 'no' }).modelSpeedEnabled, true);
+    assert.deepEqual(settingOps({ modelSpeedEnabled: false }), [{ op: 'set', path: ['modelSpeedEnabled'], value: false }]);
+  });
   it('间隔夹到下限、小数取整，非有限值回退默认', () => {    assert.equal(normalizeUsageSettings({ goFetchMinutes: 1 }).goFetchMinutes, GO_FETCH_MIN_MINUTES);
     assert.equal(normalizeUsageSettings({ goFetchMinutes: 12.6 }).goFetchMinutes, 13);
     assert.equal(normalizeUsageSettings({ goFetchMinutes: Number.NaN }).goFetchMinutes, GO_FETCH_DEFAULT_MINUTES);
@@ -1996,6 +2004,7 @@ describe('偏好设置：整份替换写入', () => {
       { op: 'unset', path: ['showZaiInSidebar'] },
       { op: 'unset', path: ['zaiFetchMinutes'] },
       { op: 'set', path: ['showSessionId'], value: false },
+      { op: 'unset', path: ['modelSpeedEnabled'] },
       { op: 'set', path: ['modelRedirects'], value: rules },
       { op: 'unset', path: ['modelGroupMode'] },
       { op: 'unset', path: ['timeRange'] },
@@ -2024,6 +2033,7 @@ describe('偏好设置：整份替换写入', () => {
       { op: 'unset', path: ['deepseekFetchMinutes'] },
       { op: 'unset', path: ['zaiEnabled'] },
       { op: 'unset', path: ['showZaiInSidebar'] },
+      { op: 'unset', path: ['modelSpeedEnabled'] },
       { op: 'unset', path: ['modelRedirects'] },
       { op: 'unset', path: ['modelGroupMode'] },
       { op: 'unset', path: ['timeRange'] },

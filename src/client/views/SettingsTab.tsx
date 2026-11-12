@@ -6,7 +6,7 @@
  * 时在额度监控表格上方挂一张状态提示卡，正常态不显示存储说明。
  * 额度监控是一张四列表格（行 = 来源，列 = 监控项 / 启用 / 侧边栏展示 / 抓取间隔）：
  * 启用项关掉后不再轮询该来源，展示项只影响侧边栏芯片，关闭监控时后两列置灰不可改。
- * 其余分组为模型统计重定向规则表（ModelRedirectEditor）与会话 ID 徽标开关。
+ * 其余分组为模型统计重定向规则表（ModelRedirectEditor）、会话 ID 徽标开关与输入区模型速度读数开关。
  * 两个折叠区自上而下为配置迁移、账本操作（危险度高的在下）；快照 scanning 为真时
  * 清零/重建置灰，展开账本操作区时给出原因——扫描会与写账本交错，服务端也以 usageStats/busy 拒绝。
  */
@@ -110,14 +110,14 @@ export function SettingsTab({
         />
       </div>
 
-      {/* 会话分组：标题旁 session-id 徽标开关 */}
+      {/* 会话分组：标题旁 session-id 徽标开关 + 输入区模型速度读数开关 */}
       <div className={css.prefGroup}>
         <div className={css.prefGroupHead}>
           <span className={css.prefGroupIcon} aria-hidden>
             <IconUserOutlineRegular size={14} />
           </span>
           <span className={css.prefGroupTitle}>{t('settings.sessionGroup')}</span>
-          <span className={css.prefGroupCount}>1</span>
+          <span className={css.prefGroupCount}>2</span>
         </div>
         {/* 会话标题旁展示会话 ID，默认开启 */}
         <label className={css.settingRow}>
@@ -128,6 +128,17 @@ export function SettingsTab({
           <SettingsSwitch
             checked={settings.showSessionId}
             onToggle={() => onUpdateSettings({ showSessionId: !settings.showSessionId })}
+          />
+        </label>
+        {/* 输入区状态行的模型速度读数，默认开启；关闭后输入区不再渲染该读数（见 client/speed） */}
+        <label className={css.settingRow}>
+          <span className={css.settingText}>
+            <span className={css.settingTitle}>{t('settings.modelSpeed')}</span>
+            <span className={css.settingDesc}>{t('settings.modelSpeedHint')}</span>
+          </span>
+          <SettingsSwitch
+            checked={settings.modelSpeedEnabled}
+            onToggle={() => onUpdateSettings({ modelSpeedEnabled: !settings.modelSpeedEnabled })}
           />
         </label>
       </div>

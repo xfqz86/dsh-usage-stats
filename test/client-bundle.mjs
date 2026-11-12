@@ -56,17 +56,17 @@ function makeDocument() {
 }
 
 /** 用真实 node_modules 里的包作为 require 桩（构建期 externals 的运行时镜像）。
- *  primitives 真实加载会拉 katex 的 .css（Node 不识别），但 factory 只定义
- *  组件不渲染，UI 组件用惰性 stub（任意成员返回渲染函数）即可。 */
+ *  primitives 真实加载会拉 katex 的 .css（Node 不识别）、react-dom 初始化要求完整 DOM；
+ *  factory 只定义组件不渲染，这两个 UI 依赖用惰性 stub（任意成员返回渲染函数）即可。 */
 const nodeRequire = createRequire(import.meta.url)
-const primitivesStub = new Proxy({}, {
+const lazyStub = new Proxy({}, {
   get(_t, prop) {
     if (typeof prop === 'string') return (..._args) => null
     return undefined
   },
 })
-const requireStub = (spec) =>
-  spec === '@deepseek-ai/dsh-client-ui-primitives' ? primitivesStub : nodeRequire(spec)
+const STUBBED = new Set(['@deepseek-ai/dsh-client-ui-primitives', 'react-dom', 'react-dom/client'])
+const requireStub = (spec) => (STUBBED.has(spec) ? lazyStub : nodeRequire(spec))
 
 let registered = null
 const prevModuleLoaderDesc = Object.getOwnPropertyDescriptor(globalThis, '__ModuleLoader__')

@@ -1,0 +1,275 @@
+/* 输入区状态行的常驻读数，以及点击后弹出的详情卡。
+   颜色全部取设计 token；浮层必须 portal 到 body（输入框卡片会裁剪溢出内容）。 */
+
+/* 状态行图标：跟随会话阶段；只有进行中的阶段才脉冲。 */
+.phaseIcon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+}
+
+.phaseIcon[data-pulse='true'] svg {
+  opacity: 1;
+  animation: phasePulse 1.15s ease-in-out infinite;
+}
+
+@keyframes phasePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phaseIcon[data-pulse='true'] svg {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+/* 插槽占位：只包住按钮，详情卡 portal 后不影响这一行的高度。 */
+.anchor {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  flex: none;
+}
+
+/* 常驻读数：与输入框工具行同高，默认静止态是低对比的辅助信息。 */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  /* 与基座输入区状态行的读数同号：13px 字号再小 1px、行高 20px（同 --dsh-content-font-* 口径）。 */
+  font-size: 12px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  opacity: 0.8;
+}
+
+@media (hover: hover) {
+  .pill:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+.pill[aria-expanded='true'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unit {
+  color: var(--dsw-alias-label-caption);
+}
+
+.sep {
+  color: var(--dsw-alias-label-caption);
+}
+
+/* 状态胶囊：和「模型速度」同一行，居中摆（生成中 / 调用工具中 / 上下文压缩中 …）。 */
+.phaseText {
+  justify-self: center;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* 详情卡：JS 计算 fixed 坐标，向上展开；12px 视口边距在组件里夹紧。 */
+.panel {
+  position: fixed;
+  z-index: 1100;
+  box-sizing: border-box;
+  width: 300px;
+  padding: 13px 14px 11px;
+  border-radius: var(--dsw-radius-lg);
+  /* 实底色：详情卡悬在对话内容之上，半透明会让背后的正文透出来，读数看不清。 */
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-elevation-prominent);
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: default;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.panelHeader {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 9px;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.headerLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.headerLabel svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.calls {
+  justify-self: end;
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.table {
+  width: 100%;
+  margin-top: 7px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 4px 0;
+  text-align: right;
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+
+.table thead th {
+  padding-bottom: 5px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+}
+
+.table tbody th {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+}
+
+.table tbody td {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* 指标名 + 单位 + 问号，保持同一行基线。 */
+.metricName {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* 指标名后的小问号：不抢视觉，悬停/聚焦时弹出说明。 */
+.help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+  border-radius: 50%;
+}
+
+.help svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.help:hover {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.help:focus-visible {
+  color: var(--dsw-alias-label-secondary);
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}
+
+/* 说明气泡：固定从问号左侧展开，宽度限制在详情卡内容区内，避免被面板裁掉。 */
+.helpBubble {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: -2px;
+  z-index: 3;
+  box-sizing: border-box;
+  width: 196px;
+  padding: 6px 8px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-tooltip-bg);
+  /* 气泡底恒为深色（两套主题一致），文字用与仓库其它气泡相同的静态白。 */
+  color: var(--dsw-static-neutral-bluish-00);
+  box-shadow: var(--dsw-elevation-prominent);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 15px;
+  text-align: left;
+  white-space: normal;
+}
+
+.help:hover .helpBubble,
+.help:focus-visible .helpBubble {
+  display: block;
+}
+
+.empty {
+  padding: 12px 2px 4px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.emptyHint {
+  margin-top: 4px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 11px;
+  line-height: 16px;
+}

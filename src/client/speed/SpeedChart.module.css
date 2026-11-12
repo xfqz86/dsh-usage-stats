@@ -1,0 +1,175 @@
+/* 详情卡顶部的双轴小图表：ATPS 柱 + TTFT 折线。 */
+
+.wrap {
+  margin: 2px 0 0;
+}
+
+/* 图表本体：宽度跟随详情卡内容区。 */
+.chartArea {
+  display: block;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--dsw-alias-border-l2);
+  stroke-width: 0.5;
+}
+
+.bar {
+  fill: var(--dsw-alias-state-success-primary);
+  opacity: 0.32;
+}
+
+.bar[data-last='true'] {
+  opacity: 0.7;
+}
+
+.bar[data-active='true'] {
+  opacity: 0.9;
+}
+
+.line {
+  fill: none;
+  stroke: var(--dsw-alias-state-business-primary);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.dot {
+  fill: var(--dsw-specific-menu);
+  stroke: var(--dsw-alias-state-business-primary);
+  stroke-width: 1.25;
+}
+
+.dot[data-last='true'] {
+  fill: var(--dsw-alias-state-business-primary);
+}
+
+.dot[data-active='true'] {
+  stroke-width: 2.25;
+}
+
+/* 透明命中区：接收指针事件，不画任何东西。 */
+.hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+/* 悬停读数卡：固定在详情卡外侧（图表外面，不压柱和折线），实底色保证读数清晰。 */
+.tooltip {
+  position: fixed;
+  z-index: 1200;
+  box-sizing: border-box;
+  width: 174px;
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-elevation-prominent);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.tipTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.tipTime {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+}
+
+.tipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tipDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.tipDot[data-kind='ttft'] {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.tipDot[data-kind='atps'] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.tipDot[data-kind='tokens'],
+.tipDot[data-kind='total'] {
+  background: var(--dsw-alias-label-caption);
+}
+
+.tipLabel {
+  flex: 1;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tipValue {
+  font-variant-numeric: tabular-nums;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 3px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.legendItems {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.swatchBar {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--dsw-alias-state-success-primary);
+  opacity: 0.45;
+}
+
+.swatchLine {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.recent {
+  color: var(--dsw-alias-label-caption);
+}
