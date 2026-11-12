@@ -14,7 +14,7 @@
 
 import { clamp, round1 } from '../utils.ts';
 
-import type { SessionEventSource, SessionEventLikeEntry, SessionEventWindow, SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client';
+import type { SessionEventSource, SessionEventLikeEntry, SessionEventWindow, SessionFace, SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client';
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store';
 import type { AssistantStreamRecord, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm';
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types';
@@ -173,6 +173,37 @@ export function summarizeSamples(samples: readonly SpeedSample[]): SpeedSummary 
     ttft: metricOf(ttftValues, ttftAverage),
     atps: metricOf(atpsValues, atpsAverage),
   };
+}
+
+// ---- 历史分页 ----
+
+/** 分页读历史所需的最小会话能力：会话状态快照 + 载入更早一页。 */
+export type HistoryPager = Pick<SessionFace, 'getSnapshot' | 'loadOlder'>;
+
+/**
+ * 把会话历史一页页读完：DSH 首次只加载尾部 50 条消息，滚动到顶才继续加载；
+ * 模型速度要覆盖整条会话，因此挂载后主动补齐，读数随每页到达逐步变大。
+ * @param session - 已打开的会话面。
+ * @param loadedEntries - 当前事件窗口的条目数，用于判断一页是否真的载入。
+ * @param cancelled - 卸载或切走会话后停止。
+ */
+export async function drainOlderHistory(
+  session: HistoryPager,
+  loadedEntries: () => number,
+  cancelled: () => boolean,
+): Promise<void> {
+  for (;;) {
+    if (cancelled()) return;
+    const snapshot = session.getSnapshot();
+    if (snapshot.openState !== 'open' || !snapshot.hasMore) return;
+    const before = loadedEntries();
+    await session.loadOlder();
+    if (cancelled()) return;
+    const after = session.getSnapshot();
+    if (!after.hasMore) return;
+    // 没有新条目说明这一页没有进展（被替换或并发请求吞掉），退出避免空转。
+    if (loadedEntries() === before) return;
+  }
 }
 
 // ---- 展示格式 ----

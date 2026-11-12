@@ -1,5 +1,5 @@
 /**
- * 模型速度纯逻辑单测：事件折叠、统计口径、格式化、图表几何、增量存储与阶段判定。
+ * 模型速度纯逻辑单测：事件折叠、统计口径、格式化、图表几何、增量存储、阶段判定与历史分页。
  * 运行 `node --experimental-strip-types test/speed.mjs`（类型剥离，直接 import 源码 TS）。
  */
 
@@ -9,6 +9,7 @@ import { describe, it } from 'node:test';
 import {
   buildChartGeometry,
   createSpeedStore,
+  drainOlderHistory,
   firstTokenTimeOf,
   formatRate,
   formatTtft,
@@ -316,5 +317,55 @@ describe('buildChartGeometry', () => {
     const empty = { bars: [], segments: [], dots: [], hits: [], baseline: 0, midline: 0 };
     assert.deepEqual(buildChartGeometry([], 272, 88), empty);
     assert.deepEqual(buildChartGeometry(samples, 0, 88), empty);
+  });
+});
+
+
+describe('speed：历史分页读完', () => {
+  /** 造一个按页返回条目的会话面；页为每页新增的条目数。 */
+  function historySession(pages, { open = 'open', noProgress = false } = {}) {
+    let loaded = 0;
+    let calls = 0;
+    let pageIndex = 0;
+    let hasMore = pages.length > 0;
+    const session = {
+      getSnapshot: () => ({ openState: open, hasMore, loadingOlder: false }),
+      async loadOlder() {
+        calls += 1;
+        if (noProgress) return;
+        const page = pages[pageIndex];
+        if (page === undefined) { hasMore = false; return; }
+        pageIndex += 1;
+        loaded += page;
+        hasMore = pageIndex < pages.length;
+      },
+    };
+    return { session, loaded: () => loaded, calls: () => calls };
+  }
+
+  it('逐页读到 hasMore 为 false', async () => {
+    const fake = historySession([2, 3, 4]);
+    await drainOlderHistory(fake.session, fake.loaded, () => false);
+    assert.equal(fake.loaded(), 9);
+    assert.equal(fake.calls(), 3);
+  });
+
+  it('取消后不再继续加载', async () => {
+    const fake = historySession([2, 3, 4]);
+    await drainOlderHistory(fake.session, fake.loaded, () => fake.calls() >= 1);
+    assert.equal(fake.loaded(), 2);
+    assert.equal(fake.calls(), 1);
+  });
+
+  it('会话未打开时不加载', async () => {
+    const fake = historySession([2, 3], { open: 'loading' });
+    await drainOlderHistory(fake.session, fake.loaded, () => false);
+    assert.equal(fake.calls(), 0);
+  });
+
+  it('一页没有进展时退出，避免空转', async () => {
+    const fake = historySession([2, 3], { noProgress: true });
+    await drainOlderHistory(fake.session, fake.loaded, () => false);
+    assert.equal(fake.calls(), 1);
   });
 });

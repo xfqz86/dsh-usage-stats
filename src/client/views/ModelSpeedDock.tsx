@@ -3,14 +3,15 @@
  *
  * 存储随条目挂载而建、随卸载（切走会话、关闭开关、插件卸载）而解绑：会话在最后一个引用
  * 释放后会被回收，重新进入时拿到的是新的事件窗口，所以不跨挂载缓存 store，避免读到冻结的
- * 旧快照。`ctx.sessions.binding(sessionId)` 暂不可用时订阅会话列表，等绑定出现后再建并退订。
+ * 旧快照。绑定就绪后在后台把历史分页读完，让读数覆盖整条会话；`ctx.sessions.binding(sessionId)`
+ * 暂不可用时订阅会话列表，等绑定出现后再建并退订。
  */
 
 import { useCallback, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 
 import { ModelSpeedPill, type SpeedEntryProps, type SpeedInjected } from '../components/ModelSpeedPill.tsx';
 import { useUsageSettingsView } from '../hooks/useUsageSettings.ts';
-import { createSpeedStore, EMPTY_SPEED_SNAPSHOT, type SpeedSnapshot, type SpeedStore, type SpeedStoreHandle } from '../modelSpeed.ts';
+import { createSpeedStore, drainOlderHistory, EMPTY_SPEED_SNAPSHOT, type SpeedSnapshot, type SpeedStore, type SpeedStoreHandle } from '../modelSpeed.ts';
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
@@ -41,11 +42,35 @@ export function createSpeedInjection(ctx: ClientContext): SpeedInjection {
       useLayoutEffect(() => {
         let handle: SpeedStoreHandle | null = null;
         let unsubscribe = (): void => {};
+        let unsubscribeSession = (): void => {};
+        let cancelled = false;
+        let started = false;
+        let done = false;
         const attempt = (): boolean => {
           const binding = ctx.sessions.binding(sessionId);
           if (binding === undefined) return false;
           handle = createSpeedStore(binding.eventSource, binding.session);
           setStore(handle.store);
+          // DSH 首次只加载尾部 50 条消息，往上滚才继续分页；这里在后台把历史读完，
+          // 让读数覆盖整条会话（每页到达都会触发 store 全量重算）。
+          const session = binding.session;
+          const pump = (): void => {
+            if (cancelled || started || done || session.getSnapshot().openState !== 'open') return;
+            started = true;
+            void drainOlderHistory(
+              session,
+              () => binding.eventSource.getSnapshot().entries.length,
+              () => cancelled,
+            ).catch(() => {
+              // 历史读取失败不影响已有读数，保留当前窗口的统计。
+            }).finally(() => {
+              started = false;
+              done = true;
+              unsubscribeSession();
+            });
+          };
+          unsubscribeSession = session.subscribe(pump);
+          pump();
           return true;
         };
         if (!attempt()) {
@@ -54,7 +79,9 @@ export function createSpeedInjection(ctx: ClientContext): SpeedInjection {
           });
         }
         return () => {
+          cancelled = true;
           unsubscribe();
+          unsubscribeSession();
           handle?.dispose();
         };
       }, [sessionId]);
