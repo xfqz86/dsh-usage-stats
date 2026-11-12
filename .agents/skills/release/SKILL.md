@@ -41,7 +41,7 @@ node .agents/skills/release/scripts/release-preflight.mjs <版本号>
 | `docs/releases/v<版本>.md` | 面向用户的更新说明，**文件名即 tag**；缺失时 `release.yml` 直接失败，不会发布 |
 
 ### 3. 过验证门禁
-先跑 `AGENTS.md` §9 的全部命令（`tsc` / `eslint` / `pnpm tree:check` / `pnpm build` / `test/pure.mjs`、`test/smoke.mjs`、`test/styles.mjs`、`test/client-bundle.mjs` / 发布形态验证），再补装机实测——CI 与发布都走生产态，开发态看不出压缩与剪枝问题：
+先跑 `AGENTS.md` §9 的全部命令（`tsc` / `eslint` / `pnpm tree:check` / `pnpm build` / `test/pure.mjs`、`test/speed.mjs`、`test/smoke.mjs`、`test/styles.mjs`、`test/client-bundle.mjs` / 发布形态验证），再补装机实测——CI 与发布都走生产态，开发态看不出压缩与剪枝问题：
 
 ```bash
 node .agents/skills/release/scripts/verify-release.mjs   # 生产构建 → 出真 tarball → 包内容 / Remote 方法签名校验 → 还原开发态 lib/

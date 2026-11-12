@@ -175,6 +175,7 @@
   | `showGoInSidebar` / `showDeepSeekInSidebar` / `showZaiInSidebar` | `true` | 只门控侧边栏底部芯片（含宽列与 rail），模态窗内详情仍可见 |
   | `goFetchMinutes` / `deepseekFetchMinutes` / `zaiFetchMinutes` | `5`（下限 3） | 抓取间隔，作为对应请求的 `intervalMinutes`，服务端据此调整 TTL |
   | `showSessionId` | `true` | 会话标题右侧 session-id 徽标开关：关闭后 `conversation.session.header.utilities` 的徽标 entry 渲染空 |
+  | `modelSpeedEnabled` | `true` | 输入区状态行的模型速度读数开关，门控与口径见 `docs/ARCHITECTURE.md` §7 |
   | `modelRedirects` | `[]` | 模型统计重定向规则表，见下 |
   | `modelGroupMode` | `'none'` | 模型表分组记忆，三处模型表共用同一选择；只收三值之一，非法回落 `'none'` |
   | `timeRange` | `'365d'` | 时间范围记忆，模型页与日期页共用同一选择；只收七值之一，非法回落 `'365d'` |

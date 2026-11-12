@@ -77,6 +77,7 @@ npx eslint .              # 0 errors 为门禁
 pnpm tree:check           # docs/STRUCTURE.md 与真实结构一致（CI 同款门禁）
 pnpm build
 node --experimental-strip-types test/pure.mjs
+node --experimental-strip-types test/speed.mjs
 node --experimental-strip-types test/smoke.mjs
 node --experimental-strip-types test/styles.mjs
 node test/client-bundle.mjs

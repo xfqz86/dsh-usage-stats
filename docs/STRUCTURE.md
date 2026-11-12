@@ -76,6 +76,16 @@ dsh-usage-stats/
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
 │   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：为需要多行排版或跟随鼠标的气泡提供 `content` 插槽与 `follow` 定位。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、Tab 栏、通用提示等。
+│   │   ├── speed/
+│   │   │   ├── chart.ts ← 详情卡小图表的纯几何计算：每次调用一根 ATPS 柱 + TTFT 折线，两套纵轴各自缩放。
+│   │   │   ├── events.ts ← 会话事件窗口 → 速度汇总的折叠与增量存储。
+│   │   │   ├── ModelSpeedDock.tsx ← 输入区状态行读数条目的入口：按设置门控，并在挂载期间维护一个会话速度存储。
+│   │   │   ├── ModelSpeedPill.module.css ← 输入区状态行的常驻读数，以及点击后弹出的详情卡。
+│   │   │   ├── ModelSpeedPill.tsx ← 输入区状态行上的模型速度读数：常驻显示当前会话的平均 TTFT / ATPS，点击弹出详情卡。
+│   │   │   ├── phase.ts ← 会话阶段判定：状态行图标和详情卡状态文案共用这一套口径。
+│   │   │   ├── SpeedChart.module.css ← 详情卡顶部的双轴小图表：ATPS 柱 + TTFT 折线。
+│   │   │   ├── SpeedChart.tsx ← 详情卡顶部的模型速度小图表：每次调用一根 ATPS 柱，TTFT 用折线叠加（两套纵轴各自缩放）。
+│   │   │   └── stats.ts ← 模型速度纯计算：把会话事件窗口折算成每次模型调用的样本与统计量。
 │   │   ├── views/
 │   │   │   ├── AboutTab.module.css ← 「关于」Tab AboutTab：品牌区、数据与隐私 / 链接双栏卡片、统计口径条与页脚， 尺寸按 960x640 设计稿换算；颜色全部使用设计 token，窄视口（≤800px）双栏改单列。
 │   │   │   ├── AboutTab.tsx ← 「关于」Tab：品牌区、数据与隐私、外链入口、统计口径条与构建信息。
@@ -119,7 +129,7 @@ dsh-usage-stats/
 │   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，头部 + Tab 栏 + 内容区。
 │   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定：调用前经 usageStatsRemote() 取命名空间服务。
 │   │   ├── configTransfer.ts ← 配置串编解码：把整份偏好打包成可复制粘贴的 Base64 文本，并反向解析。
-│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）与会话标题旁的 session-id 徽标。
+│   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）、会话标题旁的 session-id 徽标与输入区状态行的模型速度读数。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口：apply 内挂载手写贡献，hooks 经 usageStatsRemote() 取服务。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
@@ -166,6 +176,7 @@ dsh-usage-stats/
 │   ├── pure.mjs ← 纯逻辑、账本折叠与协议/偏好逻辑的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
 │   ├── smoke.mjs ← 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。
+│   ├── speed.mjs ← 模型速度纯逻辑单测：事件折叠、统计口径、格式化、图表几何、增量存储与阶段判定。
 │   └── styles.mjs ← 样式契约单测：本插件全部 *.module.css 只允许引用 dsh 主题真实声明的设计变量。
 ├── .gitignore ← git 忽略规则（不入库清单：产物 / 锁目录 / 本机私有）
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）

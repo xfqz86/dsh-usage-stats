@@ -1,7 +1,8 @@
 # 架构与统计口径（ARCHITECTURE.md）
 
 > 本文件是插件运行机制与统计口径的**唯一权威**：数据流、折叠与去重、fork 继承前缀、
-> 清零墓碑、精确口径与产物形态；只写跨文件机制事实。规则在 `AGENTS.md`，协议在 `docs/API.md`。
+> 清零墓碑、精确口径、模型速度读数与产物形态；只写跨文件机制事实。规则在 `AGENTS.md`，
+> 协议在 `docs/API.md`。
 
 ## 1. 总则
 
@@ -114,3 +115,22 @@
   `<style data-plugin-css>` 注入（源码仍是真实 CSS Modules）。
 - 品牌图：`scripts/svg-raw.mjs` 把 `icon.svg?raw` 编译成导出 SVG 文本的模块，「关于」页在构建期
   内联包根 `icon.svg`，与插件列表共用同一文件；改图标后重建客户端即可同步（列表侧由 Host 实时读文件）。
+
+## 7. 模型速度读数（浏览器端，不进账本）
+
+- 形态：输入区状态行（`conversation.composer.dock`，entry id `dsh-usage-stats-speed`）的只读读数，
+  点击弹出详情卡（每次调用的 ATPS 柱 + TTFT 折线，平均/最近/最小/最大表）。只读当前会话的客户端
+  事件窗口（`ctx.sessions.binding(sessionId).eventSource`），不发请求、不写账本；设置
+  `modelSpeedEnabled`（默认开）关闭时 entry 渲染空，不建会话事件订阅；偏好未落定前同样先不挂载，
+  存储随条目挂载而建、随卸载（切走会话或关闭开关）解绑。
+- 一次调用 = 一个 `assistant/message`，`step/start` 是该 step 的起点（turn:step 组合键）。
+- TTFT = `step/start` → stream 第一个 token 增量；重试步取第一条 `assistant/attempt` 的首 token
+  （与 dsh 自身的会话速度口径一致）。
+- ATPS = provider 报告的 `usage.outputTokens` ÷ `step/start` → `assistant/message` 的总用时
+  （含首 token 等待与重试）。平均 TTFT 为每次调用等权平均；平均 ATPS = 总输出 tokens ÷ 总用时
+  （加权）。最小/最大/最近只取有效值；缺 usage、缺 `step/start` 或总用时为 0 的调用不可测量。
+- 只统计当前客户端已加载的事件窗口：极长会话分页加载前只含已加载区间；刷新页面后历史会话可复现
+  （依赖 `assistant/message` 持久化的 stream）。窗口整体替换/前插时全量重建，追加时增量折叠；
+  流式 chunk 不触发重算，只在调用完成或阶段变化时刷新界面。
+- 阶段（生成中/工具调用中/压缩中/压缩完成/空闲）只看 durable 事件与 `binding.session.running`，
+  判定器在 `client/speed/phase.ts`。
