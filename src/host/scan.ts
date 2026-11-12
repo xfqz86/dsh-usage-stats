@@ -9,7 +9,7 @@
  */
 import { readFileSync } from 'node:fs';
 
-import { errorMessage, startOfDay  } from '../utils.ts';
+import { clamp, errorMessage, startOfDay  } from '../utils.ts';
 
 import { newAgg } from './agg.ts';
 import { findSessionLogs, getSessionsRoot, parseLogLines } from './logs.ts';
@@ -22,7 +22,6 @@ import type { UsageStore } from './store.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import type { SessionId, SessionEvent } from '@deepseek-ai/dsh-session';
 import type { SessionHandle } from '@deepseek-ai/dsh-session-persistence';
-
 
 
 
@@ -271,7 +270,7 @@ export async function scanOnce(
       }
     }
 
-    const n = Math.max(1, Math.min(SCAN_WORKERS, idList.length || 1));
+    const n = clamp(idList.length || 1, 1, SCAN_WORKERS);
     const workers: Promise<void>[] = [];
     for (let k = 0; k < n; k += 1) workers.push(worker());
     await Promise.all(workers.map((w) => w.catch((e) => { store.lastError = 'worker: ' + errorMessage(e); store.failed += 1; })));

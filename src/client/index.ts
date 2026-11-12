@@ -1,11 +1,12 @@
 /**
- * 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）与会话标题旁的 session-id 徽标。
+ * 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）、会话标题旁的 session-id 徽标与输入区状态行的模型速度读数。
  *
- * - 注册 `sidebar.footer.action`（cell id `dsh-usage-stats`，order 1）与
- *   `conversation.session.header.utilities`（entry id `dsh-usage-stats-session-id`，order -20）。
+ * - 注册 `sidebar.footer.action`（cell id `dsh-usage-stats`，order 1）、
+ *   `conversation.session.header.utilities`（entry id `dsh-usage-stats-session-id`，order -20）与
+ *   `conversation.composer.dock`（entry id `dsh-usage-stats-speed`，order -10，输入区模型速度读数）。
  * - 底部角标宽列显示今日 tokens、调用数与三色比例条，56px rail 收窄为额度与今日迷你芯片，
  *   点击打开模态窗详情；数据经 usageStatsRemote() 取命名空间服务调用 usageStats/snapshot。
- * - 偏好设置（三额度开关/展示/间隔、会话徽标、模型重定向规则）来自服务端 profile 配置文档：
+ * - 偏好设置（三额度开关/展示/间隔、会话徽标、模型速度读数、模型重定向规则）来自服务端 profile 配置文档：
  *   表单取自 ctx.configForms 的 `usage-stats` 条目（schema 在 src/host/settings.ts），组件经
  *   useUsageSettings 读写；旧版本 localStorage 偏好由 migrateLegacySettings 一次性迁移。
  */
@@ -18,6 +19,7 @@ import { SessionIdBadge } from './components/SessionIdBadge.tsx';
 import { NS, zh, en } from './locales.ts';
 import { mountUsageStatsRemote } from './remote.ts';
 import { attachUsageSettings, detachUsageSettings, migrateLegacySettings } from './settings.ts';
+import { createSpeedInjection, ModelSpeedDock } from './views/ModelSpeedDock.tsx';
 import { UsageStatsFooter } from './views/UsageStatsFooter.tsx';
 
 import type { UsageSettings } from '../types.ts';
@@ -30,8 +32,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client';
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client';
 import type {} from '@deepseek-ai/dsh-client-ui-slots';
 
-/** 必需服务，为 cordis fiber inject：configForms 提供偏好设置的跨端存储。 */
-export const inject = ['slots', 'locale', 'remote', 'configForms'];
+/** 必需服务，为 cordis fiber inject：configForms 提供偏好设置的跨端存储，sessions 提供会话事件窗口。 */
+export const inject = ['slots', 'locale', 'remote', 'configForms', 'sessions'];
 
 /** 挂载 Remote 贡献、绑定偏好设置表单，并注册侧边栏底部动作。 */
 export async function apply(ctx: ClientContext): Promise<void> {
@@ -57,6 +59,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
     locale: NS,
     order: 1,
   }, (props) => createElement(UsageStatsFooter, props)));
+
+  // 输入区状态行的模型速度读数：条目挂载期间才持有该会话的事件订阅；设置关闭时组件渲染空。
+  const speed = createSpeedInjection(ctx);
+  ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+    name: 'conversation.composer.dock',
+    id: 'dsh-usage-stats-speed',
+    locale: NS,
+    order: -10,
+    inject: speed.inject,
+  }, (props) => createElement(ModelSpeedDock, props)));
 
   // order 取 -20 而不是与基座同值：列表插槽按 order 升序、同值保持注册顺序，
   // 基座的「用应用打开」entry（open-in-app，order -10）先于本插件注册，同值会把

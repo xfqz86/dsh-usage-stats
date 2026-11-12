@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Usage Stats",
+    "description": "Today's usage in the sidebar, daily / session / model breakdowns, three quota monitors, and model speed readings in the composer.",
+    "detail": "docs/DETAIL.en.md"
+  }
+}

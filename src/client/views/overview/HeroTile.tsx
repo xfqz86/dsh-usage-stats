@@ -1,0 +1,100 @@
+/**
+ * 英雄磁贴 HeroTile，今日与总 tokens 共用的合并磁贴。
+ * 展示大数 + 命中率 + 调用次数 + 底部三色比例条，含缓存、输入与输出，
+ * tooltip 明细与侧边栏同款口径。独立成文件，一个组件一个文件，
+ * 由 OverviewTab 复用两次，避免 TodayTile 与 TotalTile 重复。
+ */
+
+import { cacheTotal } from '../../../utils.ts';
+import { Tooltip } from '../../components/Tooltip.tsx';
+import shared from '../../components/UsageStatsCommon.module.css';
+import { avgPerCall, fmtFull, pctOf } from '../../stats.ts';
+
+import css from './HeroTile.module.css';
+
+import type { UsageAgg } from '../../../types.ts';
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
+import type { ReactNode } from 'react';
+
+/** 英雄磁贴：标题图标 + 大数 / 命中率 / 调用 / 比例条。 */
+export function HeroTile({
+  icon, label, usage, calls, t, side,
+}: {
+  icon: ReactNode
+  label: ReactNode
+  usage: UsageAgg
+  calls: number
+  t: PropsLocale<'dsh-usage-stats'>['t']
+  /** 标题行右侧的补充信息，如总计卡片的会话数。 */
+  side?: ReactNode
+}) {
+  const tokens = usage.total || 0;
+  const cache = cacheTotal(usage);
+  const input = usage.input || 0;
+  const output = usage.output || 0;
+  const cacheRead = usage.cacheRead || 0;
+  // 缓存命中率等于 cacheRead 除以 cacheRead 与 input 之和，与侧边栏同口径。
+  const cacheHitRate = (cacheRead + input) > 0
+    ? Math.round((cacheRead / (cacheRead + input)) * 1000) / 10
+    : null;
+
+  // 三色比例条 tooltip，顺序与热力图一致，含缓存、输入、输出、总计、缓存命中率、调用次数与平均每次调用，标签左、数值右。
+  // tooltip 仅在 tokens > 0 时渲染，此处 ?? 0 仅为类型兜底，展示上不会出现。
+  const avg = avgPerCall(tokens, calls) ?? 0;
+  const barContent = tokens > 0
+    ? (
+      <div className={`${shared.tipPanelRows} ${shared.tipList}`}>
+        {([
+          [t('table.cacheRead'), fmtFull(cache)],
+          [t('table.input'), fmtFull(input)],
+          [t('table.output'), fmtFull(output)],
+          [t('table.total'), fmtFull(tokens)],
+          [t('footer.cacheHitRate'), pctOf(cacheHitRate)],
+          [t('table.calls'), fmtFull(calls)],
+          [t('table.avgPerCall'), fmtFull(avg)],
+        ] as const).map(([k, v]) => (
+          <div key={k} className={shared.tipListRow}>
+            <span className={shared.tipListKey}>{k}</span>
+            <span className={shared.tipListVal}>{v}</span>
+          </div>
+        ))}
+      </div>
+    )
+    : null;
+
+  // 调用量文本：中文带后缀"次"，英文回退到 "351 Calls"
+  const callsSuffix = t('panel.summary.callsSuffix');
+  const callsText = callsSuffix ? fmtFull(calls) + callsSuffix : fmtFull(calls) + ' ' + t('table.calls');
+
+  return (
+    <div className={`${shared.cell} ${css.cellHero}`}>
+      <div className={css.heroHead}>
+        <span className={shared.cellIcon}>{icon}</span>
+        <span className={css.heroLabel}>{label}</span>
+        {side != null && side !== '' && <span className={css.heroSide}>{side}</span>}
+      </div>
+      <div className={css.heroMain}>
+        <span className={css.heroValue}>{fmtFull(tokens)}</span>
+      </div>
+      <div className={css.heroMeta}>
+        <span className={css.heroHitRate}>{t('footer.cacheHitRate')} {pctOf(cacheHitRate)}</span>
+        <span className={css.heroCallsRight}>{callsText}</span>
+      </div>
+      {tokens > 0 && (
+        <Tooltip follow content={barContent} side="bottom" delayMs={300}>
+          <span className={css.heroBar}>
+            {cache > 0 && (
+              <span className={`${css.heroBarSeg} ${css.heroBarCache}`} style={{ flex: cache }} />
+            )}
+            {input > 0 && (
+              <span className={`${css.heroBarSeg} ${css.heroBarInput}`} style={{ flex: input }} />
+            )}
+            {output > 0 && (
+              <span className={`${css.heroBarSeg} ${css.heroBarOutput}`} style={{ flex: output }} />
+            )}
+          </span>
+        </Tooltip>
+      )}
+    </div>
+  );
+}

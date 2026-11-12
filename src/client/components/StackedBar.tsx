@@ -8,15 +8,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { HIT_RATE_COLOR, buildDateStack, buildModelStack, fmtFull, getDateTokenMeta, hitRateOfDay, modelColorAt, pctOf, type DateRange, type ModelRange } from '../stats.ts';
+import { clamp, joinModelKey } from '../../utils.ts';
+import { HIT_RATE_COLOR, buildDateStack, buildModelStack, fmtFull, getDateTokenMeta, hitRateOfDay, modelColorAt, pctOf, type DateRange, type TimeRange } from '../stats.ts';
 
 import css from './StackedBar.module.css';
 
 import type { SeriesPoint } from '../../types.ts';
+import type { ModelStat } from '../hooks/useSnapshot.ts';
 import type { LocaleFn } from '../locales.ts';
-import type { ModelStat } from '../useSnapshot.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
-
 
 /** 统一堆叠柱：discriminated union，date 模式按 token 类型堆叠，model 模式按模型堆叠。 */
 export type StackedBarProps =
@@ -29,7 +29,7 @@ export type StackedBarProps =
   | {
     mode: 'model'
     models: ModelStat[]
-    range: ModelRange
+    range: TimeRange
     t: PropsLocale<'dsh-usage-stats'>['t']
   };
 
@@ -60,7 +60,7 @@ export function StackedBar(props: StackedBarProps) {
     if (isDate || !modelStack) return null;
     const m = new Map<string, string>();
     modelStack.models.forEach((mod, idx) => {
-      m.set(mod.provider + '\u0000' + mod.model, modelColorAt(idx));
+      m.set(joinModelKey(mod.provider, mod.model), modelColorAt(idx));
     });
     return m;
   }, [isDate, modelStack]);
@@ -81,7 +81,7 @@ export function StackedBar(props: StackedBarProps) {
 
   // 模型图例数据，避免非空断言，统一由可选链与回退提供
   const modelList = modelStack?.models ?? [];
-  const getModelColor = (provider: string, model: string) => colorMap?.get(provider + '\u0000' + model);
+  const getModelColor = (provider: string, model: string) => colorMap?.get(joinModelKey(provider, model));
 
   // 日期模式命中率序列：与 DatesTab 同口径，null 处折线断开
   const hitRates = useMemo(() => {
@@ -108,7 +108,7 @@ export function StackedBar(props: StackedBarProps) {
     const scrollLeft = wrapRef.current?.scrollLeft ?? 0;
     const visibleLeft = scrollLeft;
     const visibleRight = scrollLeft + wrapW;
-    left = Math.max(visibleLeft + 4, Math.min(left, visibleRight - w - 4));
+    left = clamp(left, visibleLeft + 4, visibleRight - w - 4);
     let top = tip.y - h - 10;
     top = Math.max(4, top);
     setTipPos({ left, top });
@@ -151,7 +151,7 @@ export function StackedBar(props: StackedBarProps) {
     return (
       <>
         {modelList.slice(0, 6).map((m) => (
-          <span key={m.provider + '\u0000' + m.model} className={css.legendItem}>
+          <span key={joinModelKey(m.provider, m.model)} className={css.legendItem}>
             <span className={css.legendDot} style={{ background: getModelColor(m.provider, m.model) }} />
             <span>{m.model}</span>
           </span>
@@ -184,7 +184,7 @@ export function StackedBar(props: StackedBarProps) {
       const color = getModelColor(seg.provider, seg.model) ?? 'var(--dsw-alias-label-tertiary, #8a8a8a)';
       return (
         <span
-          key={seg.provider + '\u0000' + seg.model}
+          key={joinModelKey(seg.provider, seg.model)}
           className={css.barSeg}
           style={{ height: Math.max(1, h) + 'px', background: color }}
         />
@@ -200,7 +200,7 @@ export function StackedBar(props: StackedBarProps) {
     const pts = hitRates.map((rate, idx) => {
       if (rate === null) return null;
       const x = BAR_W / 2 + idx * (BAR_W + BAR_GAP);
-      const y = Math.max(0, Math.min(H, H - (rate / 100) * H));
+      const y = clamp(H - (rate / 100) * H, 0, H);
       return { x, y };
     });
     // 连续非空点成段，单点仅绘圆点不断线
@@ -329,7 +329,7 @@ export function StackedBar(props: StackedBarProps) {
                   <div style={{ color: 'var(--dsw-alias-label-tertiary)', fontSize: 11 }}>—</div>
                 ) : (
                   (tipDay.segments as { provider: string; model: string; total: number }[]).map((seg) => (
-                    <div key={seg.provider + '\u0000' + seg.model} className={css.tipRow}>
+                    <div key={joinModelKey(seg.provider, seg.model)} className={css.tipRow}>
                       <span className={css.tipDot} style={{ background: getModelColor(seg.provider, seg.model) }} />
                       <span className={css.tipModel}>{seg.model} · {seg.provider}</span>
                       <span className={css.tipVal}>{fmtFull(seg.total)}</span>

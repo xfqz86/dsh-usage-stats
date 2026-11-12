@@ -6,22 +6,23 @@
  * 不产生真实外网请求，快照截断用内存 store、不碰 sqlite。
  *
  * 覆盖范围：
- *   - utils：日期与键（startOfDay/dateKeyOf/splitModelKey）、共享常量、effectiveQuotaTtl 按 min/max 夹取；
+ *   - utils：日期与键（startOfDay/dateKeyOf/joinModelKey/splitModelKey）、共享常量、数值夹取与一位小数、
+ *     用量零值与合计、effectiveQuotaTtl 按 min/max 夹取；
  *   - 额度展示与文本：goPercent/goLevelOf/goResetsAt、parseJsonLine/errorMessage/cacheTotal；
  *   - agg 口径：newAgg/ink（reasoning 不计 total、缺字段归零仍计次）、usable 收对话与压缩调用、
- *     拒 assistant/attempt；modelKeyOf 两处取源；
+ *     拒 assistant/attempt；hasUsage 零用量判定；modelKeyOf 两处取源；
  *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、截断尾帧、坏帧）；
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
  *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与单日明细）；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
- *   - 偏好设置：归一化与夹取、路径写入只带显式字段、表单视图引用稳定、解绑带表单身份
+ *   - 偏好设置：归一化与夹取（含分组与范围记忆、模型速度开关）、路径写入只带显式字段、表单视图引用稳定、解绑带表单身份
  *     （热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧 localStorage 迁移
  *     （等表单落定、成功写入才删旧键、不可用时保留）；配置串编解码（与独立 Base64 实现互通、
  *     容错与逐码失败语义、解码归一化、改动字段清单）与整份替换写入（默认值字段 unset、
  *     改动字段 set 且夹取、同一套写入守卫）；服务端条目 schema（字段全 volatile、解析值等于
  *     共享默认值、条目 id 与浏览器端常量一致）；
  *   - stats：格式化 / 会话分组与排序比较 / 时间范围 / 图表几何 / 模型范围与堆叠 / 最近活跃自然日 /
- *     快照构建与截断 / 会话明细聚合 / 模型明细合并 / 模型统计重定向（归一化、归并、候选过滤）；
+ *     快照构建与截断 / 会话明细聚合 / 模型明细合并 / 模型统计重定向（归一化、归并、候选过滤）/ 模型分组；
  *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
  */
 import { afterEach, describe, it } from 'node:test';
@@ -29,7 +30,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { constants, zstdCompressSync } from 'node:zlib';
 
-import { ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
+import { hasUsage, ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
 import { fetchDeepSeekBalance, queryDeepSeekBalance } from '../src/host/deepseekBalance.ts';
 import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
@@ -67,6 +68,8 @@ import { fetchZaiQuota } from '../src/host/zaiQuota.ts';
 import {
   buildDateStack,
   buildModelStack,
+  compareModelGroup,
+  compareModelRow,
   compareSessionGroup,
   dateRangeCutoff,
   dayTotal,
@@ -75,6 +78,7 @@ import {
   fmtFull,
   formatLastActive,
   fullDayLabel,
+  groupModels,
   groupSessions,
   heatGridOf,
   hitRateOfDay,
@@ -93,6 +97,7 @@ import {
   todayOf,
   unusedRedirectSources,
   usageTotal,
+  withModelShares,
 } from '../src/client/stats.ts';
 import {
   diffFromDefaults,
@@ -110,11 +115,14 @@ import {
   ZAI_FETCH_DEFAULT_MINUTES,
   ZAI_FETCH_MIN_MINUTES,
   cacheTotal,
+  clamp,
   clampDeepSeekFetchMinutes,
   clampGoFetchMinutes,
   clampZaiFetchMinutes,
   dateKeyOf,
   effectiveQuotaTtl,
+  emptyUsage,
+  joinModelKey,
   errorMessage,
   goLevelOf,
   goPercent,
@@ -124,8 +132,11 @@ import {
   normalizeModelRedirects,
   normalizeUsageSettings,
   parseJsonLine,
+  round1,
+  settingsValueEqual,
   splitModelKey,
   startOfDay,
+  tokensTotal,
   updateRelation,
 } from '../src/utils.ts';
 
@@ -229,6 +240,11 @@ describe('utils：日期与键', () => {
     assert.deepEqual(splitModelKey(''), { provider: 'unknown', model: 'unknown' });
   });
 
+  it('joinModelKey 与 splitModelKey 互逆', () => {
+    assert.equal(joinModelKey('p', 'm'), 'p\0m');
+    assert.deepEqual(splitModelKey(joinModelKey('p', 'm')), { provider: 'p', model: 'm' });
+  });
+
   it('共享常量取值', () => {
     assert.equal(SERIES_MAX_DAYS, 366);
     assert.equal(DAY_MS, 86_400_000);
@@ -243,6 +259,39 @@ describe('utils：日期与键', () => {
     assert.equal(effectiveQuotaTtl(0), 180_000);
     assert.equal(effectiveQuotaTtl(5), 300_000);
     assert.equal(effectiveQuotaTtl(10), 300_000);
+  });
+});
+
+describe('utils：数值与计数', () => {
+  it('clamp 夹取，上下界倒置时贴下界', () => {
+    assert.equal(clamp(5, 0, 10), 5);
+    assert.equal(clamp(-1, 0, 10), 0);
+    assert.equal(clamp(11, 0, 10), 10);
+    assert.equal(clamp(5, 10, 0), 10);
+  });
+
+  it('round1 保留一位小数', () => {
+    assert.equal(round1(1.24), 1.2);
+    assert.equal(round1(1.25), 1.3);
+    assert.equal(round1(-1.24), -1.2);
+  });
+
+  it('tokensTotal 只算四类 token，缺省按 0', () => {
+    assert.equal(tokensTotal(1, 2, 3, 4), 10);
+    assert.equal(tokensTotal(undefined, null, 3), 3);
+  });
+
+  it('emptyUsage 每次返回独立零值', () => {
+    const a = emptyUsage();
+    assert.notEqual(a, emptyUsage());
+    assert.deepEqual(a, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 });
+  });
+
+  it('settingsValueEqual 比较标量与数组', () => {
+    assert.equal(settingsValueEqual(1, 1), true);
+    assert.equal(settingsValueEqual(1, 2), false);
+    assert.equal(settingsValueEqual([{ a: 1 }], [{ a: 1 }]), true);
+    assert.equal(settingsValueEqual([{ a: 1 }], [{ a: 2 }]), false);
   });
 });
 
@@ -317,6 +366,12 @@ describe('agg：口径', () => {
     assert.equal(usable({ type: 'compaction/summary' }), false);
     // assistant/attempt 的用量是流式中间态，会与同 turn 的 assistant/message 重复，不收
     assert.equal(usable({ type: 'assistant/attempt', data: { usage: {} } }), false);
+  });
+
+  it('hasUsage 全零为 false，reasoning 也算用量', () => {
+    assert.equal(hasUsage({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }), false);
+    assert.equal(hasUsage({ input: 1, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }), true);
+    assert.equal(hasUsage({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 1 }), true);
   });
 
   it('modelKeyOf 缺失记 unknown', () => {
@@ -1136,6 +1191,77 @@ describe('模型统计重定向：候选过滤（设置页自动完成）', () =
   });
 });
 
+describe('模型分组：占比、聚合与排序比较', () => {
+  const mstat = (provider, name, total, calls = 1, extra = {}) => ({
+    provider,
+    model: name,
+    calls,
+    usage: { input: total, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total },
+    ...extra,
+  });
+
+  it('withModelShares 最大余数求和 100，零分母与空数组全 0', () => {
+    const rows = withModelShares([mstat('p', 'a', 1), mstat('p', 'b', 1), mstat('p', 'c', 1)]);
+    assert.ok(Math.abs(rows.reduce((s, r) => s + r.share, 0) - 100) < 1e-9);
+    // 零分母整列 0，不产生 NaN
+    assert.deepEqual(withModelShares([mstat('p', 'a', 0), mstat('p', 'b', 0)]).map((r) => r.share), [0, 0]);
+    assert.deepEqual(withModelShares([]), []);
+  });
+
+  it('groupModels 按厂商聚合用量、调用与占比，leaves 保持传入顺序', () => {
+    const rows = withModelShares([mstat('p1', 'a', 60), mstat('p1', 'b', 30), mstat('p2', 'a', 10)]);
+    const groups = groupModels(rows, 'provider');
+    // 首见顺序：p1 在前
+    assert.deepEqual(groups.map((g) => g.key), ['p1', 'p2']);
+    const p1 = groups[0];
+    assert.equal(p1.label, 'p1');
+    assert.equal(p1.usage.total, 90);
+    assert.equal(p1.calls, 2);
+    assert.equal(p1.share, Math.round(rows.slice(0, 2).reduce((s, r) => s + r.share, 0) * 10) / 10);
+    assert.deepEqual(p1.leaves.map((l) => l.m.model), ['a', 'b']);
+  });
+
+  it('groupModels 按模型名跨厂商合并，空名回落但 key 保持原值', () => {
+    const rows = withModelShares([mstat('p1', 'x', 40), mstat('p2', 'x', 60), mstat('p3', '', 10)]);
+    const groups = groupModels(rows, 'model');
+    assert.equal(groups.length, 2);
+    const x = groups.find((g) => g.key === 'x');
+    assert.ok(x !== undefined);
+    assert.equal(x.leaves.length, 2);
+    assert.equal(x.usage.total, 100);
+    assert.equal(x.calls, 2);
+    assert.equal(x.share, Math.round(x.leaves.reduce((s, l) => s + l.share, 0) * 10) / 10);
+    // 空模型名：label 回落 '--'，key 保持 ''
+    const empty = groups.find((g) => g.key === '');
+    assert.equal(empty.label, '--');
+  });
+
+  it('compareModelRow 与 compareModelGroup 只看符号，方向由 stableSort 决定', () => {
+    const a = { m: mstat('p', 'b', 100, 4), share: 70 };
+    const b = { m: mstat('p', 'a', 10, 2), share: 30 };
+    // 文本列 b 的模型名在前，数值列 a 更大
+    assert.ok(compareModelRow('model', a, b) > 0);
+    assert.ok(compareModelRow('total', a, b) > 0);
+    assert.ok(compareModelRow('calls', a, b) > 0);
+    assert.ok(compareModelRow('share', a, b) > 0);
+    // 命中率为 null 时按 -1 兜底：无命中行小于有命中行
+    const noHit = { m: mstat('p', 'm', 0, 1), share: 0 };
+    noHit.m.usage.input = 0;
+    noHit.m.usage.cacheRead = 0;
+    const hitStat = mstat('p', 'm', 10, 1);
+    hitStat.usage.input = 1;
+    hitStat.usage.cacheRead = 3;
+    const hasHit = { m: hitStat, share: 0 };
+    assert.ok(compareModelRow('hitRate', noHit, hasHit) < 0);
+    // 分组比较同口径：label 文本与分组合计
+    const ga = groupModels([a], 'provider')[0];
+    const gb = groupModels([b], 'provider')[0];
+    assert.ok(compareModelGroup('total', ga, gb) > 0);
+    assert.ok(compareModelGroup('share', ga, gb) > 0);
+    assert.ok(compareModelGroup('calls', ga, gb) > 0);
+  });
+});
+
 describe('lastActiveDayKind：最近活跃自然日判定', () => {
   // 固定本地时间 2026-09-14 09:30，用例不随当前时间漂移
   const now = new Date(2026, 8, 14, 9, 30).getTime();
@@ -1590,6 +1716,14 @@ describe('偏好设置：归一化与写入操作', () => {
     assert.equal(normalizeUsageSettings({ showSessionId: 'yes' }).showSessionId, true);
     assert.deepEqual(settingOps({ showSessionId: false }), [{ op: 'set', path: ['showSessionId'], value: false }]);
   });
+
+  it('输入区模型速度开关默认开启，非布尔回退默认', () => {
+    assert.equal(USAGE_SETTINGS_DEFAULTS.modelSpeedEnabled, true);
+    assert.equal(normalizeUsageSettings({}).modelSpeedEnabled, true);
+    assert.equal(normalizeUsageSettings({ modelSpeedEnabled: false }).modelSpeedEnabled, false);
+    assert.equal(normalizeUsageSettings({ modelSpeedEnabled: 'no' }).modelSpeedEnabled, true);
+    assert.deepEqual(settingOps({ modelSpeedEnabled: false }), [{ op: 'set', path: ['modelSpeedEnabled'], value: false }]);
+  });
   it('间隔夹到下限、小数取整，非有限值回退默认', () => {    assert.equal(normalizeUsageSettings({ goFetchMinutes: 1 }).goFetchMinutes, GO_FETCH_MIN_MINUTES);
     assert.equal(normalizeUsageSettings({ goFetchMinutes: 12.6 }).goFetchMinutes, 13);
     assert.equal(normalizeUsageSettings({ goFetchMinutes: Number.NaN }).goFetchMinutes, GO_FETCH_DEFAULT_MINUTES);
@@ -1599,6 +1733,23 @@ describe('偏好设置：归一化与写入操作', () => {
     assert.equal(clampGoFetchMinutes(Number.POSITIVE_INFINITY), GO_FETCH_DEFAULT_MINUTES);
     assert.equal(clampDeepSeekFetchMinutes(4.4), 4);
     assert.equal(clampZaiFetchMinutes(2), ZAI_FETCH_MIN_MINUTES);
+  });
+
+  it('分组与范围记忆：合法值保留，非法值回落默认', () => {
+    assert.equal(USAGE_SETTINGS_DEFAULTS.modelGroupMode, 'none');
+    assert.equal(USAGE_SETTINGS_DEFAULTS.timeRange, '365d');
+    assert.equal(normalizeUsageSettings({ modelGroupMode: 'provider' }).modelGroupMode, 'provider');
+    assert.equal(normalizeUsageSettings({ modelGroupMode: 'model' }).modelGroupMode, 'model');
+    assert.equal(normalizeUsageSettings({ modelGroupMode: 'other' }).modelGroupMode, 'none');
+    assert.equal(normalizeUsageSettings({ modelGroupMode: '' }).modelGroupMode, 'none');
+    assert.equal(normalizeUsageSettings({ timeRange: '7d' }).timeRange, '7d');
+    assert.equal(normalizeUsageSettings({ timeRange: 'all' }).timeRange, 'all');
+    assert.equal(normalizeUsageSettings({ timeRange: '30' }).timeRange, '365d');
+    assert.equal(normalizeUsageSettings({ timeRange: 30 }).timeRange, '365d');
+    // diff 行为：等于默认值不算改动，改过才进补丁。
+    assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, modelGroupMode: 'provider' }), { modelGroupMode: 'provider' });
+    assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, timeRange: '7d' }), { timeRange: '7d' });
+    assert.deepEqual(legacySettingsPatch({ modelGroupMode: 'bad', timeRange: 'bad' }), {});
   });
 
   it('局部偏好只生成显式字段的路径写入，间隔先夹取', () => {
@@ -1789,6 +1940,8 @@ describe('偏好设置：配置串编解码', () => {
       zaiFetchMinutes: 9,
       showSessionId: false,
       modelRedirects: rules,
+      modelGroupMode: 'provider',
+      timeRange: '7d',
     };
     assert.deepEqual(changedSettingFields(base, all), Object.keys(USAGE_SETTINGS_DEFAULTS));
     assert.deepEqual(changedSettingFields(all, base), Object.keys(USAGE_SETTINGS_DEFAULTS));
@@ -1902,7 +2055,10 @@ describe('偏好设置：整份替换写入', () => {
       { op: 'unset', path: ['showZaiInSidebar'] },
       { op: 'unset', path: ['zaiFetchMinutes'] },
       { op: 'set', path: ['showSessionId'], value: false },
+      { op: 'unset', path: ['modelSpeedEnabled'] },
       { op: 'set', path: ['modelRedirects'], value: rules },
+      { op: 'unset', path: ['modelGroupMode'] },
+      { op: 'unset', path: ['timeRange'] },
     ]);
   });
 
@@ -1928,7 +2084,10 @@ describe('偏好设置：整份替换写入', () => {
       { op: 'unset', path: ['deepseekFetchMinutes'] },
       { op: 'unset', path: ['zaiEnabled'] },
       { op: 'unset', path: ['showZaiInSidebar'] },
+      { op: 'unset', path: ['modelSpeedEnabled'] },
       { op: 'unset', path: ['modelRedirects'] },
+      { op: 'unset', path: ['modelGroupMode'] },
+      { op: 'unset', path: ['timeRange'] },
     ]);
   });
 
@@ -2212,5 +2371,154 @@ describe('更新检查', () => {
     assert.deepEqual(await queryUpdateCheck(true, 'npm'), {
       status: 'error', latest: null, url: RELEASES, notes: null, publishedAt: null, install: 'npm',
     });
+  });
+});
+
+describe('偏好设置：乐观更新', () => {
+  afterEach(() => { detachUsageSettings(); });
+
+  /** 可控设置表单：mutate 只收信不落盘，调 accept/reject 才落定并推送快照。 */
+  function deferredScope(initial) {
+    const state = {
+      status: 'ready',
+      value: { ...USAGE_SETTINGS_DEFAULTS },
+      user: undefined,
+      base: undefined,
+      revision: 1,
+      writable: true,
+      mode: 'host',
+      ...initial,
+    };
+    let snapshot = { ...state };
+    const listeners = new Set();
+    const inbox = [];
+    const publish = () => {
+      snapshot = { ...state };
+      for (const fn of Array.from(listeners)) fn();
+    };
+    const scope = {
+      getSnapshot: () => snapshot,
+      subscribe: (fn) => {
+        listeners.add(fn);
+        return () => { listeners.delete(fn); };
+      },
+      mutate: (ops) => new Promise((resolve, reject) => {
+        inbox.push({ ops, resolve, reject });
+      }),
+    };
+    // 按服务端语义落定一笔写入：应用 ops、推送快照、再 resolve。
+    const accept = (index) => {
+      const item = inbox[index];
+      for (const op of item.ops) {
+        if (op.op === 'set') {
+          state.value = { ...state.value, [op.path[0]]: op.value };
+        } else {
+          const next = { ...state.value };
+          delete next[op.path[0]];
+          state.value = next;
+        }
+      }
+      state.revision += 1;
+      publish();
+      item.resolve(true);
+    };
+    // 模拟服务端从别处改了取值：直接换 value 并推送，不经过本地写入。
+    const applyRemote = (value) => {
+      state.value = { ...value };
+      publish();
+    };
+    return { scope, inbox, accept, applyRemote };
+  }
+
+  /** 等一个宏任务：让 mutate 的 resolve/reject 回调跑完。 */
+  const tick = () => new Promise((r) => { setTimeout(r, 0); });
+
+  it('点下去当拍即变，后台落盘后猜测消掉', async () => {
+    const { scope, inbox, accept, applyRemote } = deferredScope();
+    attachUsageSettings(scope);
+    const seen = [];
+    const unsubscribe = subscribeUsageSettings(() => { seen.push(usageSettingsView().settings.modelGroupMode); });
+    try {
+      updateUsageSettings({ modelGroupMode: 'provider' });
+      // 当拍即新值：不等服务端往返；后台只收到一次写入。
+      assert.equal(usageSettingsView().settings.modelGroupMode, 'provider');
+      assert.equal(inbox.length, 1);
+      assert.deepEqual(inbox[0].ops, [{ op: 'set', path: ['modelGroupMode'], value: 'provider' }]);
+      // mutate 尚在途中：服务端快照仍是旧值，全靠本地猜测撑住显示。
+      assert.equal(scope.getSnapshot().value.modelGroupMode, 'none');
+      assert.deepEqual(seen, ['provider']);
+      // 服务端落定并推送：猜测与快照一致即消掉，显示保持新值且不再打扰界面。
+      accept(0);
+      assert.equal(usageSettingsView().settings.modelGroupMode, 'provider');
+      assert.equal(seen.length, 1);
+      // 猜测已消：之后服务端从别处改了同一字段，显示跟服务端走。
+      applyRemote({ ...USAGE_SETTINGS_DEFAULTS, modelGroupMode: 'model' });
+      assert.equal(usageSettingsView().settings.modelGroupMode, 'model');
+      assert.deepEqual(seen, ['provider', 'model']);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('mutate 拒绝后回滚到服务端值', async () => {
+    const realWarn = console.warn;
+    console.warn = () => {};
+    const { scope, inbox } = deferredScope();
+    attachUsageSettings(scope);
+    const unsubscribe = subscribeUsageSettings(() => {});
+    try {
+      updateUsageSettings({ timeRange: '7d' });
+      assert.equal(usageSettingsView().settings.timeRange, '7d');
+      inbox[0].reject(new Error('offline'));
+      await tick();
+      assert.equal(usageSettingsView().settings.timeRange, '365d');
+      assert.equal(scope.getSnapshot().value.timeRange, '365d');
+    } finally {
+      console.warn = realWarn;
+      unsubscribe();
+    }
+  });
+
+  it('连续点同一字段只回滚本次写入，不误删后来的点击', async () => {
+    const realWarn = console.warn;
+    console.warn = () => {};
+    const { scope, inbox, accept } = deferredScope();
+    attachUsageSettings(scope);
+    const unsubscribe = subscribeUsageSettings(() => {});
+    try {
+      updateUsageSettings({ timeRange: '7d' });
+      updateUsageSettings({ timeRange: '30d' });
+      assert.equal(usageSettingsView().settings.timeRange, '30d');
+      assert.equal(inbox.length, 2);
+      // 第一笔被拒：本地已是第二笔的值，不回滚。
+      inbox[0].reject(new Error('boom'));
+      await tick();
+      assert.equal(usageSettingsView().settings.timeRange, '30d');
+      // 第二笔落定：服务端确认后猜测消掉。
+      accept(1);
+      assert.equal(usageSettingsView().settings.timeRange, '30d');
+      assert.equal(scope.getSnapshot().value.timeRange, '30d');
+    } finally {
+      console.warn = realWarn;
+      unsubscribe();
+    }
+  });
+
+  it('解绑后本地订阅保留，重绑后转发恢复', () => {
+    const first = deferredScope();
+    attachUsageSettings(first.scope);
+    let notified = 0;
+    const unsubscribe = subscribeUsageSettings(() => { notified += 1; });
+    try {
+      detachUsageSettings(first.scope);
+      assert.equal(usageSettingsView().status, 'unavailable');
+      const second = deferredScope();
+      attachUsageSettings(second.scope);
+      second.applyRemote({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+      assert.equal(usageSettingsView().settings.showSessionId, false);
+      assert.equal(notified, 1);
+    } finally {
+      unsubscribe();
+    }
   });
 });

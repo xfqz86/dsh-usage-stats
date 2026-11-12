@@ -1,5 +1,5 @@
 name: prune-package
-description: Prune package.json to minimal publish allowlist (name,version,type...)
+description: Prune package.json to minimal publish allowlist (name,version,icon,type...)
 author: xfqz86
 
 branding:
@@ -14,7 +14,7 @@ inputs:
   allow:
     description: Comma-separated allowlist
     required: false
-    default: "name,version,description,type,main,exports,files,engines,dsh,license,repository,dependencies,peerDependencies"
+    default: "name,version,description,icon,type,main,exports,files,engines,dsh,license,repository,dependencies,peerDependencies"
   check:
     description: If true, only check (no write, exit 1 if not pruned)
     required: false

@@ -19,11 +19,13 @@
 - 日期差换算用 `DAY_MS`（`utils.ts`），**绝不**用毫秒回推逐日推进——夏令时日不是 24h，
   推进一律 `date.setDate(date.getDate() ± n)`（原因见 `utils.ts` 的 `DAY_MS` 注释与
   `stats.ts` 的 `buildDateStack`）。
+- 数值夹取用 `utils.clamp`、一位小数用 `utils.round1`；token 合计用 `utils.tokensTotal`，
+  零值起点用 `utils.emptyUsage`（host 的 Agg 用 `agg.newAgg`），不手写字段字面量与 `Math.min/Math.max` 套娃。
 
 ## 3. 字符串
 
-- 插值优先模板字面量：`` `${a} ${b}` `` 而非 `a + ' ' + b`。唯一例外是模型键拼接
-  `provider + '\0' + model`（全仓库统一，含测试），拆分只用 `splitModelKey`。
+- 插值优先模板字面量：`` `${a} ${b}` `` 而非 `a + ' ' + b`。模型键一律用
+  `joinModelKey(provider, model)` 拼、`splitModelKey` 拆，不手写分隔符（含测试）。
 - 裸 `\0` 字节绝不进源码：测试写转义 `'\0'`，DB 入列前走 `sanitizeSqlText`。
 
 ## 4. 错误消息与文案
@@ -112,4 +114,4 @@
 - **确认操作/间隔输入**：走 `useConfirmOp`/`useIntervalText`，接口调用走 `postLedgerApi`。
 - **判空**：可空类型全是 `T | null`，用 `=== null`/`!== null`；`!= null` 只留给运行时可能
   undefined 的防御位（如 `p?.t`）；`== null` 不出现。
-- **新文件归属**：可复用 hook 进 `src/client/use*.ts`，跨端常量进 `utils.ts`。
+- **新文件归属**：可复用 hook 进 `src/client/hooks/use*.ts`，跨端常量进 `utils.ts`。

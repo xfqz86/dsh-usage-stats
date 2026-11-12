@@ -175,7 +175,10 @@
   | `showGoInSidebar` / `showDeepSeekInSidebar` / `showZaiInSidebar` | `true` | 只门控侧边栏底部芯片（含宽列与 rail），模态窗内详情仍可见 |
   | `goFetchMinutes` / `deepseekFetchMinutes` / `zaiFetchMinutes` | `5`（下限 3） | 抓取间隔，作为对应请求的 `intervalMinutes`，服务端据此调整 TTL |
   | `showSessionId` | `true` | 会话标题右侧 session-id 徽标开关：关闭后 `conversation.session.header.utilities` 的徽标 entry 渲染空 |
+  | `modelSpeedEnabled` | `true` | 输入区状态行的模型速度读数开关，门控与口径见 `docs/ARCHITECTURE.md` §7 |
   | `modelRedirects` | `[]` | 模型统计重定向规则表，见下 |
+  | `modelGroupMode` | `'none'` | 模型表分组记忆，三处模型表共用同一选择；只收三值之一，非法回落 `'none'` |
+  | `timeRange` | `'365d'` | 时间范围记忆，模型页与日期页共用同一选择；只收七值之一，非法回落 `'365d'` |
 
 - **模型统计重定向**（浏览器端归并，服务端快照与各明细保持原始行）：模型页、日期明细与会话明细的「按模型」
   三处共用 `src/client/stats.ts` 的 `redirectModels`。匹配按 `provider + model` 精确比较（trim 后、区分
@@ -186,7 +189,7 @@
   截断到上限；自动完成候选由快照 `models` 经 `modelCatalog` 建表，来源侧排除其他行已配过的组合（`unusedRedirectSources`）。
 
 - **读取路径**：表单快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔、间隔只收有限数并夹取、规则表
-  按 `normalizeModelRedirects` 清洗）→ 缺字段回退默认值；表单未就绪同样回退默认值。读不到或写不了配置文档
+  按 `normalizeModelRedirects` 清洗、分组只收三值范围只收七值否则回默认值）→ 缺字段回退默认值；表单未就绪同样回退默认值。读不到或写不了配置文档
   时，设置页在表格上方挂状态提示卡。
 - **旧版 localStorage 迁移**（key `dsh-usage-stats.settings`，升级后首次挂载一次性）：等表单落定；就绪可写且
   条目尚无用户片段时把与默认值不同的字段写入文档并删除旧键，已有用户片段时只删旧键；服务端设置缺席或只读时

@@ -1,5 +1,5 @@
 name: verify-pack
-description: Verify distribution contains only 7 files and pruned package.json
+description: Verify distribution contains only the whitelisted files (lib, locale, detail docs) and pruned package.json
 author: xfqz86
 
 branding:
@@ -13,7 +13,7 @@ inputs:
   allow:
     description: Comma-separated allowlist for package.json
     required: false
-    default: "name,version,description,type,main,exports,files,engines,dsh,license,repository,dependencies,peerDependencies"
+    default: "name,version,description,icon,type,main,exports,files,engines,dsh,license,repository,dependencies,peerDependencies"
 
 runs:
   using: node24

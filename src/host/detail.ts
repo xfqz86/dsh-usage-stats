@@ -6,25 +6,16 @@
  * 理由与统计口径见 docs/ARCHITECTURE.md §3 末条与 §5；本模块只保证返回形状与
  * 默认排序稳定，日划分一律用 utils.ts 的 startOfDay。
  */
-import { splitModelKey } from '../utils.ts';
+import { emptyUsage, joinModelKey, splitModelKey, tokensTotal } from '../utils.ts';
 
+import { newAgg } from './agg.ts';
 import { buildSeries, usageOf } from './snapshot.ts';
 import { metaOf } from './store.ts';
 
 import type { Agg } from './agg.ts';
 import type { Ledger } from './ledger.ts';
 import type { UsageStore } from './store.ts';
-import type { DateDetail, ModelDetail, ModelStat, SessionDetail, SessionStat, UsageAgg } from '../types.ts';
-
-/** 明细合计的零值起点，两处明细各由自己维度的行逐行累加（modelDetail 累会话行、dateDetail 累模型行）。 */
-function zeroUsage(): UsageAgg {
-  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
-}
-
-/** 会话明细并桶的零值起点（Agg 比 UsageAgg 多 calls），与 agg.newAgg 同形。 */
-function zeroBucket(): Agg {
-  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 };
-}
+import type { DateDetail, ModelDetail, ModelStat, SessionDetail, SessionStat } from '../types.ts';
 
 /**
  * 构建某模型的明细 value：按日取聚合缓存的该模型每日桶，按会话取账本聚合。
@@ -38,16 +29,16 @@ export function modelDetail(
   model: string,
   since: number | null,
 ): ModelDetail {
-  const dailyMap = store.modelDaily.get(provider + '\u0000' + model);
+  const dailyMap = store.modelDaily.get(joinModelKey(provider, model));
   const daily = dailyMap === undefined
     ? []
     : buildSeries(buildRangeMap(dailyMap, since));
 
-  const usage = zeroUsage();
+  const usage = emptyUsage();
   let calls = 0;
   const sessions: SessionStat[] = [];
   for (const row of ledger.modelSessions(provider, model, since ?? 0)) {
-    const total = row.input + row.output + row.cacheRead + row.cacheWrite;
+    const total = tokensTotal(row.input, row.output, row.cacheRead, row.cacheWrite);
     usage.input += row.input;
     usage.output += row.output;
     usage.cacheRead += row.cacheRead;
@@ -87,7 +78,7 @@ export function modelDetail(
 export function dateDetail(store: UsageStore, ledger: Ledger, day: number): DateDetail {
   const models: ModelStat[] = [];
   const sessions: SessionStat[] = [];
-  const usage = zeroUsage();
+  const usage = emptyUsage();
   let calls = 0;
   // 非正数即无效请求（服务层已归一，这里再夹一次保证返回值与类型约定一致）：
   // 桶键是 startOfDay 的结果、恒不为 0，本就会查空，显式挡在循环外让
@@ -150,7 +141,7 @@ export function sessionDetail(
   ledger: Ledger,
   sessionIds: readonly string[],
 ): SessionDetail {
-  const usage = zeroUsage();
+  const usage = emptyUsage();
   let calls = 0;
   const dailyMap = new Map<number, Agg>();
   for (const id of sessionIds) {
@@ -167,7 +158,7 @@ export function sessionDetail(
     for (const [day, agg] of info.daily) {
       let bucket = dailyMap.get(day);
       if (bucket === undefined) {
-        bucket = zeroBucket();
+        bucket = newAgg();
         dailyMap.set(day, bucket);
       }
       bucket.input += agg.input;
@@ -182,7 +173,7 @@ export function sessionDetail(
 
   const models: ModelStat[] = [];
   for (const row of ledger.sessionModels(sessionIds)) {
-    const total = row.input + row.output + row.cacheRead + row.cacheWrite;
+    const total = tokensTotal(row.input, row.output, row.cacheRead, row.cacheWrite);
     models.push({
       provider: row.provider,
       model: row.model,

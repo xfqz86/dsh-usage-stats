@@ -6,9 +6,9 @@
  * foldRecord 与账本追加路径。折叠语义、去重与 fork 继承前缀见 docs/ARCHITECTURE.md §4。
  * 所有操作都是 store 为首参的纯函数或折叠助手，可独立测试。
  */
-import { startOfDay, errorMessage  } from '../utils.ts';
+import { joinModelKey, startOfDay, errorMessage  } from '../utils.ts';
 
-import { newAgg, ink, usable } from './agg.ts';
+import { newAgg, hasUsage, ink, usable } from './agg.ts';
 import { toLedgerEvent } from './ledger.ts';
 
 import type { Agg, SessionInfo } from './agg.ts';
@@ -149,7 +149,7 @@ export function liveEventsOf<T>(events: readonly T[], inherited: number): readon
  * 若提供 ledger，则同步增量更新预统计物化表，挂起时跳过，由批量 persist 覆盖。
  */
 export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent, ledger?: Ledger): boolean {
-  if (ev.input + ev.output + ev.cacheRead + ev.cacheWrite + ev.reasoning <= 0) return false;
+  if (!hasUsage(ev)) return false;
   const usage: TokenUsage = {
     inputTokens: ev.input,
     outputTokens: ev.output,
@@ -160,7 +160,7 @@ export function foldLedgerEvent(store: UsageStore, ev: LedgerEvent, ledger?: Led
   const info = ensureSession(store, ev.sessionId);
   if (ev.seq >= 0 && ev.seq > info.maxSeq) info.maxSeq = ev.seq;
   foldUsage(store, info, ev.t, usage);
-  const modelKey = ev.provider + '\u0000' + ev.model;
+  const modelKey = joinModelKey(ev.provider, ev.model);
   ink(ensureModel(store, modelKey), usage);
   ink(dayAgg(ensureModelDaily(store, modelKey), startOfDay(ev.t)), usage);
   store.foldedEvents += 1;
@@ -234,7 +234,7 @@ export function foldRecord(
   if (ev === null) return;
   // 零用量事件不入账本：foldLedgerEvent 同样会跳过，提前返回避免 DB 膨胀；
   // 去重水位不受影响，此类事件本就不贡献统计。
-  if (ev.input + ev.output + ev.cacheRead + ev.cacheWrite + ev.reasoning <= 0) return;
+  if (!hasUsage(ev)) return;
   // 用量路径统一使用账本事件的会话 id，toLedgerEvent 已做 TEXT 归一，
   // 保证水位、meta 与聚合三处键一致。
   const sid = ev.sessionId;

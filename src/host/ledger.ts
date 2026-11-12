@@ -16,9 +16,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { dshHomePath } from '@deepseek-ai/dsh-home-paths';
 
-import { splitModelKey, startOfDay  } from '../utils.ts';
+import { joinModelKey, splitModelKey, startOfDay, tokensTotal  } from '../utils.ts';
 
-import { modelKeyOf } from './agg.ts';
+import { hasUsage, modelKeyOf, newAgg } from './agg.ts';
 
 import type { MeteredEvent } from './agg.ts';
 import type { UsageStore } from './store.ts';
@@ -195,7 +195,6 @@ CREATE TABLE IF NOT EXISTS agg_model_daily (
   calls       INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (provider, model, day)
 )`;
-
 
 /** 预统计：按会话。 */
 const AGG_SESSION_DDL = `
@@ -795,9 +794,9 @@ export class Ledger {
   incrementAgg(ev: LedgerEvent): void {
     this.assertOpen();
     if (this.aggSuspended) return;
-    if (ev.input + ev.output + ev.cacheRead + ev.cacheWrite + ev.reasoning <= 0) return;
+    if (!hasUsage(ev)) return;
     const day = startOfDay(ev.t);
-    const total = ev.input + ev.output + ev.cacheRead + ev.cacheWrite;
+    const total = tokensTotal(ev.input, ev.output, ev.cacheRead, ev.cacheWrite);
     const runInTx = (): void => {
       this.stmts.incAggTotal.run(ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1, 1);
       this.stmts.incAggDaily.run(day, ev.input, ev.output, ev.cacheRead, ev.cacheWrite, ev.reasoning, total, 1);
@@ -884,7 +883,7 @@ export class Ledger {
       });
     }
     for (const r of this.stmts.allAggModel.all() as Record<string, unknown>[]) {
-      const key = String(r.provider) + '\u0000' + String(r.model);
+      const key = joinModelKey(String(r.provider), String(r.model));
       store.models.set(key, {
         input: Number(r.input) || 0,
         output: Number(r.output) || 0,
@@ -896,7 +895,7 @@ export class Ledger {
       });
     }
     for (const r of this.stmts.allAggModelDaily.all() as Record<string, unknown>[]) {
-      const key = String(r.provider) + '\u0000' + String(r.model);
+      const key = joinModelKey(String(r.provider), String(r.model));
       const day = Number(r.day) || 0;
       let daily = store.modelDaily.get(key);
       if (!daily) { daily = new Map(); store.modelDaily.set(key, daily); }
@@ -916,17 +915,17 @@ export class Ledger {
         const events = this.allEvents();
         for (const ev of events) {
           const day = startOfDay(ev.t);
-          const key = ev.provider + '\u0000' + ev.model;
+          const key = joinModelKey(ev.provider, ev.model);
           let daily = store.modelDaily.get(key);
           if (!daily) { daily = new Map(); store.modelDaily.set(key, daily); }
           let agg = daily.get(day);
-          if (!agg) { agg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 }; daily.set(day, agg); }
+          if (!agg) { agg = newAgg(); daily.set(day, agg); }
           agg.input += ev.input;
           agg.output += ev.output;
           agg.cacheRead += ev.cacheRead;
           agg.cacheWrite += ev.cacheWrite;
           agg.reasoning += ev.reasoning;
-          agg.total += ev.input + ev.output + ev.cacheRead + ev.cacheWrite;
+          agg.total += tokensTotal(ev.input, ev.output, ev.cacheRead, ev.cacheWrite);
           agg.calls += 1;
         }
         if (store.modelDaily.size > 0) {
@@ -966,7 +965,7 @@ export class Ledger {
       const day = Number(r.day) || 0;
       let info = store.sessions.get(sid);
       if (!info) {
-        info = { daily: new Map(), allAgg: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 }, maxSeq: -1, lastActive: 0 };
+        info = { daily: new Map(), allAgg: newAgg(), maxSeq: -1, lastActive: 0 };
         store.sessions.set(sid, info);
       }
       info.daily.set(day, {

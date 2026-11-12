@@ -1,5 +1,5 @@
 /**
- * 校验交付物仅含 7 文件且 package.json 已剪枝（仅供 GitHub Action 使用）
+ * 校验交付物仅含白名单文件（lib、locale 与详情文档）且 package.json 已剪枝（仅供 GitHub Action 使用）
  * 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
  */
 
@@ -70,24 +70,23 @@ function verifyTarball(tgzPath) {
   const list = execSync(`tar -tzf ${JSON.stringify(abs)} | sort`, { encoding: 'utf-8' })
     .trim()
     .split('\n')
-    .filter(Boolean)
+    .filter(p => p !== '' && !p.endsWith('/'))
   console.log(list.join('\n'))
-  const check = (re, msg) => {
-    if (!list.some(p => re.test(p))) fail(msg)
-  }
-  check(/^package\/lib\/index\.js$/, 'lib/index.js missing in tarball')
-  check(/^package\/lib\/client\.js$/, 'lib/client.js missing in tarball')
-  check(/^package\/package\.json$/, 'package.json missing in tarball')
-  check(/^package\/cordis\.patch\.yml$/, 'cordis.patch.yml missing in tarball')
-  check(/^package\/README\.md$/, 'README.md missing in tarball')
-  check(/^package\/CHANGELOG\.md$/, 'CHANGELOG.md missing in tarball')
-  check(/^package\/LICENSE$/, 'LICENSE missing in tarball')
+  const REQUIRED = [
+    'package/lib/index.js', 'package/lib/client.js', 'package/package.json',
+    'package/cordis.patch.yml', 'package/icon.svg', 'package/README.md', 'package/CHANGELOG.md', 'package/LICENSE',
+    'package/locale/en.json', 'package/locale/zh.json',
+    'package/docs/DETAIL.md', 'package/docs/DETAIL.en.md',
+  ]
+  for (const file of REQUIRED) if (!list.includes(file)) fail(`${file} missing in tarball`)
 
-  if (list.length !== 7) fail(`unexpected file count ${list.length}, expected 7 (lib/index.js + lib/client.js + package.json/cordis.patch.yml/README.md/CHANGELOG.md/LICENSE)\n${list.join('\n')}`)
+  if (list.length !== REQUIRED.length) fail(`unexpected file count ${list.length}, expected ${REQUIRED.length}\n${list.join('\n')}`)
   if (list.some(p => p.includes('client.js.map'))) fail('client.js.map should not be in tarball')
-  if (list.some(p => /^package\/(src\/|tsconfig|tsdown|scripts\/|test\/|docs\/|\.github\/)/.test(p))) {
+  if (list.some(p => /^package\/(src\/|tsconfig|tsdown|scripts\/|test\/|\.github\/)/.test(p))) {
     fail(`tarball contains unwanted src/tsconfig/scripts/test files:\n${list.join('\n')}`)
   }
+  const extraDocs = list.filter(p => p.startsWith('package/docs/') && !REQUIRED.includes(p))
+  if (extraDocs.length > 0) fail(`tarball contains unexpected docs files:\n${extraDocs.join('\n')}`)
 
   const pkgJson = execSync(`tar -xzOf ${JSON.stringify(abs)} package/package.json`, { encoding: 'utf-8' })
   if (pkgJson.includes('"prepare"')) fail('prepare still in packed package.json')
@@ -102,7 +101,7 @@ function verifyTarball(tgzPath) {
   if (!j.dependencies || typeof j.dependencies !== 'object') fail('packed package.json missing dependencies')
   if (!j.peerDependencies || typeof j.peerDependencies !== 'object') fail('packed package.json missing peerDependencies')
   console.log(`packed package.json pruned ok: ${Object.keys(j).join(', ')}`)
-  console.log('tarball verify ok — only lib(2) + package.json(pruned) + LICENSE + cordis.patch.yml + README.md + CHANGELOG.md')
+  console.log(`tarball verify ok — ${REQUIRED.length} files: lib(2), locale(2), detail docs(2), manifest and package files`)
 }
 
 function verifyPayload(dir) {
@@ -114,8 +113,11 @@ function verifyPayload(dir) {
     .filter(Boolean)
   console.log(files.join('\n'))
   const rel = files.map(f => f.replace(abs + '/', ''))
-  if (files.length !== 7) fail(`payload file count ${files.length}, expected 7 (lib/index.js, lib/client.js + package.json/cordis.patch.yml/README.md/CHANGELOG.md/LICENSE)\n${rel.join('\n')}`)
-  const need = ['lib/index.js', 'lib/client.js', 'package.json', 'cordis.patch.yml', 'README.md', 'CHANGELOG.md', 'LICENSE']
+  const need = [
+    'lib/index.js', 'lib/client.js', 'package.json', 'cordis.patch.yml', 'icon.svg', 'README.md', 'CHANGELOG.md', 'LICENSE',
+    'locale/en.json', 'locale/zh.json', 'docs/DETAIL.md', 'docs/DETAIL.en.md',
+  ]
+  if (files.length !== need.length) fail(`payload file count ${files.length}, expected ${need.length}\n${rel.join('\n')}`)
   for (const n of need) if (!rel.includes(n)) fail(`payload missing ${n}`)
   if (rel.some(p => p.includes('client.js.map'))) fail('payload contains client.js.map (should be no map)')
   if (rel.some(p => p.endsWith('.ts'))) fail(`payload contains .ts source:\n${rel.join('\n')}`)
@@ -127,7 +129,7 @@ function verifyPayload(dir) {
   if (!j.dependencies || typeof j.dependencies !== 'object') fail('payload package.json missing dependencies')
   if (!j.peerDependencies || typeof j.peerDependencies !== 'object') fail('payload package.json missing peerDependencies')
   if (pkgJson.includes('"prepare"')) fail('prepare still in payload package.json')
-  console.log('payload verify ok — only lib(2) + package.json(pruned) + LICENSE + cordis.patch.yml + README.md + CHANGELOG.md')
+  console.log(`payload verify ok — ${need.length} files`)
 }
 
 function main() {

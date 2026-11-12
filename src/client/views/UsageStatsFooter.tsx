@@ -12,16 +12,15 @@
 import { IconDataOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useRef, useState } from 'react';
 
-
-import { cacheTotal, goLevelOf, goPercent, goResetsAt, QUOTA_CREDENTIAL_KEYS } from '../../utils.ts';
+import { cacheTotal, clamp, goLevelOf, goPercent, goResetsAt, QUOTA_CREDENTIAL_KEYS } from '../../utils.ts';
 import { HintCard } from '../components/HintCard.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
+import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../hooks/useQuota.ts';
+import { useSnapshot } from '../hooks/useSnapshot.ts';
+import { useUsageSettings } from '../hooks/useUsageSettings.ts';
 import { replaceUsageSettings } from '../settings.ts';
 import { avgPerCall, dayTotal, fmt, fmtFull, pctOf, todayOf } from '../stats.ts';
-import { useDeepSeekBalance, useGoQuota, useZaiQuota, type GoWindow, type ZaiWindow } from '../useQuota.ts';
-import { useSnapshot } from '../useSnapshot.ts';
-import { useUsageSettings } from '../useUsageSettings.ts';
 
 import css from './UsageStatsFooter.module.css';
 import { UsageStatsPanel } from './UsageStatsPanel.tsx';
@@ -97,7 +96,7 @@ function QuotaTipRow({ label, pct, level, reset, value, points }: {
   points?: string
 }) {
   const color = TIP_LEVEL_COLOR[level];
-  const width = `${Math.max(0, Math.min(100, pct))}%`;
+  const width = `${clamp(pct, 0, 100)}%`;
   return (
     <div className={shared.tipCard}>
       <div className={shared.tipCardHead}>
@@ -468,8 +467,8 @@ export function UsageStatsFooter({ wide, t }: UsageStatsFooterProps) {
           {zai.webSearches && (
             <QuotaTipRow
               label={t('zai.webSearches')}
-              pct={Math.max(0, Math.min(100, zai.webSearches.percent))}
-              level={goLevelOf(Math.max(0, Math.min(100, zai.webSearches.percent)))}
+              pct={clamp(zai.webSearches.percent, 0, 100)}
+              level={goLevelOf(clamp(zai.webSearches.percent, 0, 100))}
               reset={webReset}
               value={t('zai.webSearchesCount', { used: zai.webSearches.used, limit: zai.webSearches.limit })}
             />

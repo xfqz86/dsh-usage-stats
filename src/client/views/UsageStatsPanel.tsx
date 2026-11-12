@@ -1,5 +1,6 @@
 /**
  * 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，头部 + Tab 栏 + 内容区。
+ * 模型表分组与模型页、日期页共用时间范围的选择落偏好设置、下次打开保持。
  *
  * 六个 Tab 各由独立文件承载（OverviewTab/DatesTab/SessionsTab/ModelsTab/SettingsTab/AboutTab），
  * 条件渲染：切走即卸载，Tab 内视图状态（日期曲线范围、会话展开等）不跨切换保留。
@@ -21,21 +22,21 @@ import { useState, useMemo, type ComponentType } from 'react';
 
 import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
-import { redirectModels } from '../stats.ts';
-import { useUpdateCheck } from '../useUpdateCheck.ts';
+import { useUpdateCheck } from '../hooks/useUpdateCheck.ts';
+import { redirectModels, type ModelGroupMode, type TimeRange } from '../stats.ts';
 
-import { AboutTab } from './AboutTab.tsx';
-import { DatesTab } from './DatesTab.tsx';
-import { ModelsTab } from './ModelsTab.tsx';
-import { OverviewTab } from './OverviewTab.tsx';
-import { SessionsTab } from './SessionsTab.tsx';
-import { SettingsTab } from './SettingsTab.tsx';
+import { AboutTab } from './about/AboutTab.tsx';
+import { DatesTab } from './dates/DatesTab.tsx';
+import { ModelsTab } from './models/ModelsTab.tsx';
+import { OverviewTab } from './overview/OverviewTab.tsx';
+import { SessionsTab } from './sessions/SessionsTab.tsx';
+import { SettingsTab } from './settings/SettingsTab.tsx';
 import css from './UsageStatsPanel.module.css';
 
 import type { DeepSeekBalance, UsageSettings, ZaiQuota } from '../../types.ts';
+import type { GoQuota } from '../hooks/useQuota.ts';
+import type { UsageSnapshot } from '../hooks/useSnapshot.ts';
 import type { UsageStatsKey } from '../locales.ts';
-import type { GoQuota } from '../useQuota.ts';
-import type { UsageSnapshot } from '../useSnapshot.ts';
 import type { IconProps } from '@deepseek-ai/dsh-client-ui-primitives';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 
@@ -165,12 +166,36 @@ export function UsageStatsPanel({
             zaiEnabled={settings.zaiEnabled}
           />
         )}
-        {active === 'dates' && <DatesTab series={value.series.all} rules={settings.modelRedirects} t={t} />}
+        {active === 'dates' && (
+          <DatesTab
+            series={value.series.all}
+            rules={settings.modelRedirects}
+            groupMode={settings.modelGroupMode}
+            onGroupModeChange={(m: ModelGroupMode) => onUpdateSettings({ modelGroupMode: m })}
+            range={settings.timeRange}
+            onRangeChange={(r: TimeRange) => onUpdateSettings({ timeRange: r })}
+            t={t}
+          />
+        )}
         {active === 'sessions' && (
-          <SessionsTab sessionsList={value.sessionsList} rules={settings.modelRedirects} t={t} />
+          <SessionsTab
+            sessionsList={value.sessionsList}
+            rules={settings.modelRedirects}
+            groupMode={settings.modelGroupMode}
+            onGroupModeChange={(m: ModelGroupMode) => onUpdateSettings({ modelGroupMode: m })}
+            t={t}
+          />
         )}
         {active === 'models' && (
-          <ModelsTab models={redirect.models} mergedSources={redirect.mergedSources} t={t} />
+          <ModelsTab
+            models={redirect.models}
+            mergedSources={redirect.mergedSources}
+            groupMode={settings.modelGroupMode}
+            onGroupModeChange={(m: ModelGroupMode) => onUpdateSettings({ modelGroupMode: m })}
+            range={settings.timeRange}
+            onRangeChange={(r: TimeRange) => onUpdateSettings({ timeRange: r })}
+            t={t}
+          />
         )}
         {active === 'settings' && (
           <SettingsTab

@@ -47,7 +47,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
 ## 3. 代码规范
 - **不使用 `any`**；`ctx` 用 harness 类型，业务数据用明确接口；类型仅定义 harness 未提供的（如 `UsageSnapshot`）。
 - **风格与检查**：遵循 **Google TypeScript Style Guide**；`eslint.config.mjs`（flat config，`eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic`，分 `host/client/scripts` 三类 overrides）为唯一事实来源；新增代码须 `npx eslint .` 零 `errors`。
-- 文件归属：纯逻辑置于无 React 模块（`src/utils.ts`/`src/host/agg.ts`/`src/client/stats.ts`）便于测试；**tsx 一组件一文件**；**协议类型集中 `src/types.ts`**（零运行时，host/client 各自 re-export），`src/utils.ts` 仅纯函数与共享常量；可复用通用组件归 `src/client/components`，`src/client/views` 放 Tab 级视图及其专属子视图与入口壳。
+- 文件归属：纯逻辑置于无 React 模块（`src/utils.ts`/`src/host/agg.ts`/`src/client/stats.ts`）便于测试；**tsx 一组件一文件**；**协议类型集中 `src/types.ts`**（零运行时，host/client 各自 re-export），`src/utils.ts` 仅纯函数与共享常量；可复用通用组件归 `src/client/components`；可复用 hook 归 `src/client/hooks/use*.ts`；`src/client/views` 根只放插槽入口壳，Tab 级视图与其专属子视图按 Tab 分目录（`views/<tab>/`）。
 - **样式用 CSS Modules**（`*.module.css` + `import css`），与 `ui-sidebar/primitives` 一致；界面静态颜色优先 `var(--dsw-alias-*)`，固定语义的静态色/阴影用 `--dsw-static-*`/`--dsw-shadow-*`；不新增自定义属性兜底（见 `docs/STYLE.md` §8）；图表数据驱动调色板（`MODEL_PALETTE`/`DATE_TOKEN_META`/`HIT_RATE_COLOR`，集中定义于 `src/client/stats.ts`，`fill` 属性不解析 `var()`）是数据色豁免；禁止字符串 CSS（编译内联机制见 `docs/ARCHITECTURE.md` §6）。
 - **注释中文**，标识符/类型/错误消息英文；文档中文。
 
@@ -69,15 +69,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - **偏好设置走 harness 用户设置体系，禁止 localStorage**：Host 以插件条目 Config 声明 `usage-stats` schema（`src/host/settings.ts`，字段须 `.volatile()`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `configForms` 按条目 id 绑定读写（`src/client/settings.ts`）；字段语义与旧版迁移（含基座导入失败后的 settings.yaml.imported 回收）见 `docs/API.md` §5。
 
 ## 9. 验证
-- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上跑类型检查、生产构建、样式契约与冒烟测试、`prepare` 与打包校验，交给 CI 兜底；纯文档/注释改动不必跑检查。
+- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上跑类型检查、目录结构新鲜度、生产构建、样式契约与冒烟测试、`prepare` 与打包校验，交给 CI 兜底；纯文档/注释改动不必跑检查。
 - **发版前（打 tag 前）必须本地全量跑通**，这是发版硬门槛：
 ```bash
 npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
+pnpm tree:check           # docs/STRUCTURE.md 与真实结构一致（CI 同款门禁）
 pnpm build
 node --experimental-strip-types test/pure.mjs
+node --experimental-strip-types test/speed.mjs
 node --experimental-strip-types test/smoke.mjs
 node --experimental-strip-types test/styles.mjs
+node test/plugin-page.mjs
 node test/client-bundle.mjs
 node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产构建 + 出 tarball + 包内容与 Remote 签名校验
 ```

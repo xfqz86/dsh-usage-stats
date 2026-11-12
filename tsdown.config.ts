@@ -9,6 +9,8 @@
  *   重命名参数会让请求被判 gateway/arguments-invalid 拒收（回归见 test/smoke.mjs）。
  * - client 端 `externals` 是浏览器 shell 的冻结模块表（react 系 + cordis + store / slots /
  *   primitives / dockkit），其余全部内联；生产构建压缩且无 sourcemap。
+ * - 「关于」页品牌图标经 `*.svg?raw` 在构建期内联包根 icon.svg（scripts/svg-raw.mjs），
+ *   与插件列表共用同一文件，不手写第二份图形。
  * - 装饰器降级：@Remote 等标准装饰器经 decoratorLowering()（TypeScript transpileModule，
  *   与 harness typert 生成器插件同原理）降为 __esDecorate 辅助后打包，否则产物保留原生
  *   装饰器语法、Node 22 无法解析；只处理含装饰器的 TS 源文件。
@@ -18,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 
 import { cssModulesInline } from './scripts/css-modules-inline.mjs';
+import { svgRaw } from './scripts/svg-raw.mjs';
 
 
 import type { UserConfig } from 'tsdown';
@@ -103,7 +106,7 @@ export default [
     sourcemap: !isProd,
     clean: false,
     minify: isProd,
-    plugins: [cssModulesInline()],
+    plugins: [svgRaw(), cssModulesInline()],
     deps: {
       neverBundle: [...CLIENT_EXTERNALS],
       alwaysBundle: (id: string) => !CLIENT_EXTERNALS.includes(id),
