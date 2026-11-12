@@ -1,7 +1,8 @@
 {
   "name": "@xfqz86/dsh-usage-stats",
-  "version": "0.5.2",
-  "description": "DSH web plugin: token usage stats in the sidebar footer — today badge opening a tabbed panel (overview, daily trend + heatmap, per-model and per-session breakdowns with drill-down) plus DeepSeek / OpenCode Go / Z.ai quota monitoring",
+  "version": "0.6.0",
+  "description": "DSH web plugin: token usage stats in the sidebar footer — today badge opening a tabbed panel (overview, daily trend + heatmap, per-model and per-session breakdowns with drill-down) plus DeepSeek / OpenCode Go / Z.ai quota monitoring; per-session TTFT/ATPS readings in the composer",
+  "icon": "icon.svg",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -11,13 +12,18 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
     "cordis.patch.yml",
+    "icon.svg",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "locale",
+    "docs/DETAIL.md",
+    "docs/DETAIL.en.md"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -25,9 +31,11 @@
   "dsh": {
     "client": {
       "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-ui-settings"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots"
       ],
       "platform": "web"
     },
