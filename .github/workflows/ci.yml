@@ -38,6 +38,9 @@ jobs:
       - name: Styles — theme token contract (no harness checkout needed)
         run: node test/styles.mjs
 
+      - name: Speed — model speed pure logic
+        run: node --experimental-strip-types test/speed.mjs
+
       - name: Smoke — host (node:sqlite ledger + api)
         run: node test/smoke.mjs
 
