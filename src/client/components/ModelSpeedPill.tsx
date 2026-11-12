@@ -1,7 +1,7 @@
 /**
  * 输入区状态行上的模型速度读数：常驻显示当前会话的平均 TTFT / ATPS，点击弹出详情卡。
  *
- * 数据来自本会话的事件窗口（events.ts 把 `step/start`、`assistant/attempt` 与
+ * 数据来自本会话的事件窗口（modelSpeed.ts 把 `step/start`、`assistant/attempt` 与
  * `assistant/message` 折算成每次调用样本），刷新页面后历史会话同样可复现。详情卡 portal
  * 到 body，用 fixed 坐标向上展开并按视口夹紧，避免被输入框卡片裁剪；点外部或 Esc 关闭。
  * 口径见 docs/ARCHITECTURE.md §7。
@@ -19,13 +19,17 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { type NS } from '../locales.ts';
+import {
+  formatRate,
+  formatTtft,
+  type MetricSummary,
+  type SessionPhase,
+  type SpeedSnapshot,
+} from '../modelSpeed.ts';
 
 import css from './ModelSpeedPill.module.css';
 import { SpeedChart } from './SpeedChart.tsx';
-import { formatRate, formatTtft, type MetricSummary } from './stats.ts';
 
-import type { SpeedSnapshot } from './events.ts';
-import type { SessionPhase } from './phase.ts';
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 // 类型侧合并：ui-conversation 声明 conversation.composer.dock 插槽与会话标准属性。
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';

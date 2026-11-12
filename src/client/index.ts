@@ -19,7 +19,7 @@ import { SessionIdBadge } from './components/SessionIdBadge.tsx';
 import { NS, zh, en } from './locales.ts';
 import { mountUsageStatsRemote } from './remote.ts';
 import { attachUsageSettings, detachUsageSettings, migrateLegacySettings } from './settings.ts';
-import { createSpeedInjection, ModelSpeedDock } from './speed/ModelSpeedDock.tsx';
+import { createSpeedInjection, ModelSpeedDock } from './views/ModelSpeedDock.tsx';
 import { UsageStatsFooter } from './views/UsageStatsFooter.tsx';
 
 import type { UsageSettings } from '../types.ts';

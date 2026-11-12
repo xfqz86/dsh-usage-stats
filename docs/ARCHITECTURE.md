@@ -133,4 +133,4 @@
   （依赖 `assistant/message` 持久化的 stream）。窗口整体替换/前插时全量重建，追加时增量折叠；
   流式 chunk 不触发重算，只在调用完成或阶段变化时刷新界面。
 - 阶段（生成中/工具调用中/压缩中/压缩完成/空闲）只看 durable 事件与 `binding.session.running`，
-  判定器在 `client/speed/phase.ts`。
+  判定器在 `client/modelSpeed.ts`。

@@ -63,12 +63,16 @@ dsh-usage-stats/
 │   │   │   ├── ModelGroupBar.tsx ← 模型表分组切换条：不分组 / 按厂商 / 按模型三段 chips。
 │   │   │   ├── ModelPieChart.module.css ← 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
+│   │   │   ├── ModelSpeedPill.module.css ← 输入区状态行的常驻读数，以及点击后弹出的详情卡。
+│   │   │   ├── ModelSpeedPill.tsx ← 输入区状态行上的模型速度读数：常驻显示当前会话的平均 TTFT / ATPS，点击弹出详情卡。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
 │   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
 │   │   │   ├── SessionIdBadge.module.css ← 会话 ID 徽标（SessionIdBadge）：会话标题右侧工具区的等宽徽标与悬停复制按钮。
 │   │   │   ├── SessionIdBadge.tsx ← 会话 ID 徽标：会话标题右侧工具区的等宽 sessionId 展示与悬停复制。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用描边色填充， on 用成功绿，滑块用前景色（token 配色，深色模式随之翻转）。
 │   │   │   ├── SettingsSwitch.tsx ← 设置 Tab 的开关控件（role="switch"）。
+│   │   │   ├── SpeedChart.module.css ← 详情卡顶部的双轴小图表：ATPS 柱 + TTFT 折线。
+│   │   │   ├── SpeedChart.tsx ← 详情卡顶部的模型速度小图表：每次调用一根 ATPS 柱，TTFT 用折线叠加（两套纵轴各自缩放）。
 │   │   │   ├── StackedBar.module.css ← 堆叠柱状图（StackedBar）：两种模式共用外壳样式，图例最大宽度按模式用变体类区分（date 70% / model 60%）。
 │   │   │   ├── StackedBar.tsx ← 堆叠柱状图 StackedBar：date 模式按 token 类型（输入/输出/缓存）堆叠并叠加缓存命中率折线， model 模式按模型堆叠；每日一柱，横向滚动。
 │   │   │   ├── ThSortable.module.css ← 可排序表头按钮（ThSortable）：整列可点击，右对齐数值列，首列左对齐；颜色全部使用设计 token。
@@ -76,16 +80,6 @@ dsh-usage-stats/
 │   │   │   ├── Tooltip.module.css ← 自实现 Tooltip：视觉完全复刻 dsh 自带的 Tooltip.module.css（size m、无箭头）。
 │   │   │   ├── Tooltip.tsx ← 富内容 Tooltip：为需要多行排版或跟随鼠标的气泡提供 `content` 插槽与 `follow` 定位。
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、Tab 栏、通用提示等。
-│   │   ├── speed/
-│   │   │   ├── chart.ts ← 详情卡小图表的纯几何计算：每次调用一根 ATPS 柱 + TTFT 折线，两套纵轴各自缩放。
-│   │   │   ├── events.ts ← 会话事件窗口 → 速度汇总的折叠与增量存储。
-│   │   │   ├── ModelSpeedDock.tsx ← 输入区状态行读数条目的入口：按设置门控，并在挂载期间维护一个会话速度存储。
-│   │   │   ├── ModelSpeedPill.module.css ← 输入区状态行的常驻读数，以及点击后弹出的详情卡。
-│   │   │   ├── ModelSpeedPill.tsx ← 输入区状态行上的模型速度读数：常驻显示当前会话的平均 TTFT / ATPS，点击弹出详情卡。
-│   │   │   ├── phase.ts ← 会话阶段判定：状态行图标和详情卡状态文案共用这一套口径。
-│   │   │   ├── SpeedChart.module.css ← 详情卡顶部的双轴小图表：ATPS 柱 + TTFT 折线。
-│   │   │   ├── SpeedChart.tsx ← 详情卡顶部的模型速度小图表：每次调用一根 ATPS 柱，TTFT 用折线叠加（两套纵轴各自缩放）。
-│   │   │   └── stats.ts ← 模型速度纯计算：把会话事件窗口折算成每次模型调用的样本与统计量。
 │   │   ├── views/
 │   │   │   ├── AboutTab.module.css ← 「关于」Tab AboutTab：品牌区、数据与隐私 / 链接双栏卡片、统计口径条与页脚， 尺寸按 960x640 设计稿换算；颜色全部使用设计 token，窄视口（≤800px）双栏改单列。
 │   │   │   ├── AboutTab.tsx ← 「关于」Tab：品牌区、数据与隐私、外链入口、统计口径条与构建信息。
@@ -105,6 +99,7 @@ dsh-usage-stats/
 │   │   │   ├── ModelDetailSessions.tsx ← 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，表与会话 Tab 完全同款—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃）、 子代理折叠到主会话并带 + 展开、默认按「最近活跃」降序、可排序、每页 15 条； 分组与排序比较走 stats.ts 的共用实现（groupSessions / compareSessionGroup）。
 │   │   │   ├── ModelRedirectEditor.module.css ← 模型统计重定向规则编辑器 ModelRedirectEditor：规则行（来源 → 目标）、 删除按钮、添加按钮与提示文字。
 │   │   │   ├── ModelRedirectEditor.tsx ← 模型统计重定向规则编辑器：设置 Tab 的专属子视图。
+│   │   │   ├── ModelSpeedDock.tsx ← 输入区状态行读数条目的入口：按设置门控，并在挂载期间维护一个会话速度存储。
 │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
 │   │   │   ├── ModelsTab.tsx ← 模型 Tab：模型/Provider 拆分表 + 顶部饼图与堆叠柱 + 靠右的时间范围筛选（默认 1 年）。
 │   │   │   ├── OverviewTab.module.css ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行），颜色全部使用设计 token。
@@ -131,6 +126,7 @@ dsh-usage-stats/
 │   │   ├── configTransfer.ts ← 配置串编解码：把整份偏好打包成可复制粘贴的 Base64 文本，并反向解析。
 │   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）、会话标题旁的 session-id 徽标与输入区状态行的模型速度读数。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
+│   │   ├── modelSpeed.ts ← 模型速度纯逻辑：把会话事件窗口折叠成每次调用的 TTFT / ATPS 样本与汇总，附带阶段判定与详情卡图表几何。
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口：apply 内挂载手写贡献，hooks 经 usageStatsRemote() 取服务。
 │   │   ├── settings.ts ← 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
 │   │   ├── stats.ts ← 用量统计界面的纯函数：格式化、分桶、曲线与热力图几何、模型统计重定向归并。

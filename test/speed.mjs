@@ -6,10 +6,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { buildChartGeometry } from '../src/client/speed/chart.ts';
-import { createSpeedStore, SpeedFold, summarizeEvents } from '../src/client/speed/events.ts';
-import { PhaseTracker } from '../src/client/speed/phase.ts';
-import { firstTokenTimeOf, formatRate, formatTtft, summarizeSamples } from '../src/client/speed/stats.ts';
+import {
+  buildChartGeometry,
+  createSpeedStore,
+  firstTokenTimeOf,
+  formatRate,
+  formatTtft,
+  PhaseTracker,
+  SpeedFold,
+  summarizeEvents,
+  summarizeSamples,
+} from '../src/client/modelSpeed.ts';
 
 /** durable step/start 条目。 */
 function step(turn, stepNo, time) {

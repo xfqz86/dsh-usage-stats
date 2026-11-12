@@ -9,10 +9,9 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { type NS } from '../locales.ts';
+import { buildChartGeometry, formatRate, formatTtft, type SpeedSample } from '../modelSpeed.ts';
 
-import { buildChartGeometry } from './chart.ts';
 import css from './SpeedChart.module.css';
-import { formatRate, formatTtft, type SpeedSample } from './stats.ts';
 
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots';
 
