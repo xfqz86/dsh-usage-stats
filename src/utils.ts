@@ -2,13 +2,13 @@
  * 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
  *
  * 只放纯函数与数值常量（协议类型在 types.ts）：本地日划分、JSON 行解析、错误消息提取、
- * 模型键拆分、额度档位、偏好默认值与夹取、重定向规则归一化。
+ * 模型键拆分与拼接、用量计数、数值夹取、额度档位、偏好默认值与夹取、重定向规则归一化。
  *
  * 设计约束：只允许 Date/Math/JSON/String 等纯 JS 能力；禁止 import node 内置、react 或
  * harness 包（会破坏另一端 bundle；import type 构建时剥离）。聚合与账本、日志发现、
  * 客户端图表几何仍留在各自模块。
  */
-import type { ModelGroupMode, ModelRedirect, GoWindow, TimeRange, UsageSettings } from './types.ts';
+import type { ModelGroupMode, ModelRedirect, GoWindow, TimeRange, UsageSettings, UsageAgg } from './types.ts';
 
 /** 时间戳对应的本地零点，避免 UTC 漂移，host 折叠与会话图共用同一套日划分。 */
 export function startOfDay(timeMs: number): number {
@@ -22,6 +22,16 @@ export function dateKeyOf(t: number): string {
   const d = new Date(t);
   const pad = (v: number): string => String(v).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 把数值夹到 [min, max]；上下界倒置时贴 min（浮层在窄视口里也不会被推成负坐标）。 */
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
+/** 四舍五入到一位小数（百分比、图表坐标共用）。 */
+export function round1(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 /** 任意异常 → 可读消息字符串，Error 取 message，对象取 message 字段，其余原样字符串化。 */
@@ -79,6 +89,11 @@ export function parseJsonLine(line: string): unknown {
   }
 }
 
+/** 模型键：provider 与 model 以 `\0` 分隔，账本、快照与浏览器端共用同一口径。 */
+export function joinModelKey(provider: string, model: string): string {
+  return provider + '\u0000' + model;
+}
+
 /** 把 `provider\0model` 键拆回 provider 与 model，无分隔符时都记 unknown。 */
 export function splitModelKey(key: string): { provider: string; model: string } {
   const sep = key.indexOf('\u0000');
@@ -88,7 +103,7 @@ export function splitModelKey(key: string): { provider: string; model: string } 
 
 /** 用量百分比四舍五入并夹在 0..100，底部角标与模态窗进度条共用。 */
 export function goPercent(win: GoWindow): number {
-  return Math.round(Math.max(0, Math.min(100, win.percent)));
+  return Math.round(clamp(win.percent, 0, 100));
 }
 
 /** 额度档位：≥100% 超支、≥80% 预警、其余正常。 */
@@ -119,7 +134,7 @@ export const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;
  */
 export function effectiveQuotaTtl(intervalMinutes?: number): number {
   if (typeof intervalMinutes === 'number' && Number.isFinite(intervalMinutes)) {
-    return Math.min(QUOTA_CACHE_TTL_MS, Math.max(QUOTA_MIN_FETCH_MS, Math.round(intervalMinutes * 60 * 1000)));
+    return clamp(Math.round(intervalMinutes * 60 * 1000), QUOTA_MIN_FETCH_MS, QUOTA_CACHE_TTL_MS);
   }
   return QUOTA_CACHE_TTL_MS;
 }
@@ -141,6 +156,21 @@ export function goResetsAt(
 /** 每日缓存总量 cacheRead + cacheWrite，角标与热力图 tooltip 共用。 */
 export function cacheTotal(b: { cacheRead?: number | null; cacheWrite?: number | null }): number {
   return (b.cacheRead || 0) + (b.cacheWrite || 0);
+}
+
+/** 空用量计数：各汇总的零值起点，host 折叠与 client 展示共用。 */
+export function emptyUsage(): UsageAgg {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+}
+
+/** token 总数：input + output + cacheRead + cacheWrite，reasoning 不计入（缺省/坏值按 0）。 */
+export function tokensTotal(
+  input?: number | null,
+  output?: number | null,
+  cacheRead?: number | null,
+  cacheWrite?: number | null,
+): number {
+  return (input || 0) + (output || 0) + (cacheRead || 0) + (cacheWrite || 0);
 }
 
 // ---- 插件偏好设置：插件条目 id、默认值、夹取与字段级归一化 ----
@@ -186,10 +216,10 @@ export const USAGE_SETTINGS_DEFAULTS: UsageSettings = {
 };
 
 /**
- * 偏好字段比较：数组按 JSON 比——每次归一化都会新建数组，引用比较永远判为不同，
+ * 字段值比较：数组按 JSON 比——每次归一化都会新建数组，引用比较永远判为不同，
  * 迁移时会把空规则表当作用户改动写进配置文档。
  */
-export function settingsValueEqual(a: UsageSettings[keyof UsageSettings], b: UsageSettings[keyof UsageSettings]): boolean {
+export function settingsValueEqual(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) || Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b);
   return a === b;
 }
@@ -208,22 +238,24 @@ export function diffFromDefaults(settings: UsageSettings): Partial<UsageSettings
   return patch;
 }
 
+/** 抓取间隔的公共夹取：非法值回退默认值，再取整分钟且不低于下限。 */
+function clampFetchMinutes(value: number, min: number, fallback: number): number {
+  return Math.max(min, Math.round(Number.isFinite(value) ? value : fallback));
+}
+
 /** 把任意数值夹成合法抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
 export function clampGoFetchMinutes(value: number): number {
-  const n = Number.isFinite(value) ? value : GO_FETCH_DEFAULT_MINUTES;
-  return Math.max(GO_FETCH_MIN_MINUTES, Math.round(n));
+  return clampFetchMinutes(value, GO_FETCH_MIN_MINUTES, GO_FETCH_DEFAULT_MINUTES);
 }
 
 /** 把任意数值夹成合法 DeepSeek 抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
 export function clampDeepSeekFetchMinutes(value: number): number {
-  const n = Number.isFinite(value) ? value : DEEPSEEK_FETCH_DEFAULT_MINUTES;
-  return Math.max(DEEPSEEK_FETCH_MIN_MINUTES, Math.round(n));
+  return clampFetchMinutes(value, DEEPSEEK_FETCH_MIN_MINUTES, DEEPSEEK_FETCH_DEFAULT_MINUTES);
 }
 
 /** 把任意数值夹成合法 Z.ai 抓取间隔：整数分钟、不低于下限，非法值回退为默认值。 */
 export function clampZaiFetchMinutes(value: number): number {
-  const n = Number.isFinite(value) ? value : ZAI_FETCH_DEFAULT_MINUTES;
-  return Math.max(ZAI_FETCH_MIN_MINUTES, Math.round(n));
+  return clampFetchMinutes(value, ZAI_FETCH_MIN_MINUTES, ZAI_FETCH_DEFAULT_MINUTES);
 }
 
 /**

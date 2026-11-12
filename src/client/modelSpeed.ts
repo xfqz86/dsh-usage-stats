@@ -12,6 +12,8 @@
  * 通知 React，调用完成才通知统计。
  */
 
+import { clamp, round1 } from '../utils.ts';
+
 import type { SessionEventSource, SessionEventLikeEntry, SessionEventWindow, SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client';
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store';
 import type { AssistantStreamRecord, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm';
@@ -196,7 +198,7 @@ export function formatTtft(ms: number): string {
 export function formatRate(rate: number): string {
   if (!Number.isFinite(rate)) return '—';
   const value = Math.max(0, rate);
-  return value >= 100 ? String(Math.round(value)) : String(Math.round(value * 10) / 10);
+  return value >= 100 ? String(Math.round(value)) : String(round1(value));
 }
 
 // ---- 阶段判定：状态行图标与详情卡状态文案共用的口径 ----
@@ -533,7 +535,7 @@ export function buildChartGeometry(
   }
   const baseline = PAD_TOP + plotHeight;
   const slot = (width - PAD_X * 2) / samples.length;
-  const barWidth = Math.min(14, Math.max(2, slot * 0.54));
+  const barWidth = clamp(slot * 0.54, 2, 14);
 
   const hits: ChartHit[] = samples.map((_, index) => ({ x: PAD_X + slot * index, width: slot, sample: index }));
   const maxTtft = Math.max(1, ...samples.map((sample) => sample.ttftMs ?? 0)) * 1.08;
@@ -554,17 +556,17 @@ export function buildChartGeometry(
     if (sample.atps !== null) {
       const barHeight = Math.max(1, (sample.atps / maxAtps) * plotHeight);
       bars.push({
-        x: Math.round((center - barWidth / 2) * 10) / 10,
-        y: Math.round((baseline - barHeight) * 10) / 10,
-        width: Math.round(barWidth * 10) / 10,
-        height: Math.round(barHeight * 10) / 10,
+        x: round1(center - barWidth / 2),
+        y: round1(baseline - barHeight),
+        width: round1(barWidth),
+        height: round1(barHeight),
         sample: index,
       });
     }
     if (sample.ttftMs !== null) {
-      const y = Math.round((baseline - (sample.ttftMs / maxTtft) * plotHeight) * 10) / 10;
-      dots.push({ cx: Math.round(center * 10) / 10, cy: y, sample: index });
-      run.push(`${Math.round(center * 10) / 10},${y}`);
+      const y = round1(baseline - (sample.ttftMs / maxTtft) * plotHeight);
+      dots.push({ cx: round1(center), cy: y, sample: index });
+      run.push(`${round1(center)},${y}`);
     } else {
       flush();
     }

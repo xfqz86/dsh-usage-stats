@@ -18,6 +18,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { clamp } from '../../utils.ts';
 import { type NS } from '../locales.ts';
 import {
   formatRate,
@@ -59,11 +60,6 @@ interface PanelPosition {
   left: number
   top: number
   width: number
-}
-
-/** 夹在视口内。 */
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
 /** 状态行图标：沿用官方的「思考」「运行命令」「上下文压缩」图标。 */

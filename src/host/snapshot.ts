@@ -5,7 +5,7 @@
  * UsageAgg 单一定义在 types.ts，host 构建与 client 消费共用同一类型面，
  * 避免两端镜像漂移；splitModelKey 来自 utils.ts，host 与 client 共用。
  */
-import { SERIES_MAX_DAYS, splitModelKey } from '../utils.ts';
+import { SERIES_MAX_DAYS, clamp, emptyUsage, splitModelKey } from '../utils.ts';
 
 import { metaOf } from './store.ts';
 
@@ -13,7 +13,6 @@ import type { Agg } from './agg.ts';
 import type { Ledger } from './ledger.ts';
 import type { UsageStore } from './store.ts';
 import type { ModelStat, SeriesPoint, SessionStat, UsageAgg, UsageSnapshot } from '../types.ts';
-
 
 /** 按日序列点结构定义在 types.ts，与 client 端 SeriesPoint 统一。 */
 export type { SeriesPoint } from '../types.ts';
@@ -39,9 +38,6 @@ export function usageOf(agg: Agg): UsageAgg {
     cacheWrite: agg.cacheWrite, reasoning: agg.reasoning, total: agg.total,
   };
 }
-
-/** 无用量会话的占位 usage。 */
-const zeroUsage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
 
 /** 截断已排序序列至共享上限（`SERIES_MAX_DAYS`，与客户端 `all` 范围对齐），避免长历史下每 4s 全量序列化开销。 */
 function truncateSeries(series: SeriesPoint[]): SeriesPoint[] {
@@ -71,7 +67,7 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
   sessionsList.sort((a, b) => b.lastActive - a.lastActive);
   // 分页截断：避免上千会话时每 4 秒全量序列化开销；默认 200，可由客户端 limit 显式覆盖
   const rawLimit = opts?.limit;
-  const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? Math.max(1, Math.min(1000, Math.floor(rawLimit))) : 200;
+  const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? clamp(Math.floor(rawLimit), 1, 1000) : 200;
   const truncatedList = sessionsList.length > limit ? sessionsList.slice(0, limit) : sessionsList;
 
   const models: ModelStat[] = [];
@@ -93,7 +89,7 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
       current = { id: sessionId, calls: info.allAgg.calls, usage: usageOf(info.allAgg) };
       currentSeries = buildSeries(info.daily);
     } else {
-      current = { id: sessionId, calls: 0, usage: { ...zeroUsage } };
+      current = { id: sessionId, calls: 0, usage: emptyUsage() };
       currentSeries = [];
     }
   }

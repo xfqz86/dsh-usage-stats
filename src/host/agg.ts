@@ -1,11 +1,13 @@
 /**
  * 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、
- * modelKeyOf。本地日划分 startOfDay 在 utils.ts，host 与 client 共用。
+ * hasUsage 与 modelKeyOf。本地日划分 startOfDay、空计数与 token 合计在 utils.ts，host 与 client 共用。
  *
  * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测。只有 assistant/message 与
  * compaction/summary 两类计量事件可用（模型身份分别在 data.message.source 与
  * data.provider/model），数值归一在 ledger 层完成；口径见 docs/ARCHITECTURE.md §5。
  */
+import { emptyUsage, joinModelKey, tokensTotal } from '../utils.ts';
+
 import type { Agg } from '../types.ts';
 import type { TokenUsage } from '@deepseek-ai/dsh-llm';
 import type { SessionEvent } from '@deepseek-ai/dsh-session';
@@ -23,7 +25,7 @@ export interface SessionInfo {
 
 /** 新建空计数，所有字段归零。 */
 export function newAgg(): Agg {
-  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0, calls: 0 };
+  return { ...emptyUsage(), calls: 0 };
 }
 
 /** 把一次用量折进聚合，调用次数加一。 */
@@ -38,7 +40,7 @@ export function ink(agg: Agg, u: TokenUsage): void {
   agg.cacheRead += cacheRead;
   agg.cacheWrite += cacheWrite;
   agg.reasoning += reasoning;
-  agg.total += input + output + cacheRead + cacheWrite;
+  agg.total += tokensTotal(input, output, cacheRead, cacheWrite);
   agg.calls += 1;
 }
 
@@ -53,6 +55,11 @@ export type MeteredEvent = SessionEvent & { data: { usage: TokenUsage } };
  * 会在同一 turn/step 的 assistant/message 上再次出现，收进来即双计。
  */
 const METERED_TYPES: readonly string[] = ['assistant/message', 'compaction/summary'];
+
+/** 用量计数是否有任何 token（reasoning 也算）：全零事件不折叠，账本与内存聚合共用同一判定。 */
+export function hasUsage(u: { input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number }): boolean {
+  return tokensTotal(u.input, u.output, u.cacheRead, u.cacheWrite) + u.reasoning > 0;
+}
 
 /** 类型守卫：携带 usage 候选的计量事件（零用量也为 true，是否折叠由后续判断）。 */
 export function usable(event: SessionEvent): event is MeteredEvent {
@@ -72,5 +79,5 @@ export function modelKeyOf(event: MeteredEvent): string {
     ? data?.message?.source as { provider?: unknown; model?: unknown } | undefined
     : data as { provider?: unknown; model?: unknown } | undefined;
   const pick = (value: unknown): string => (typeof value === 'string' && value ? value : 'unknown');
-  return pick(source?.provider) + '\u0000' + pick(source?.model);
+  return joinModelKey(pick(source?.provider), pick(source?.model));
 }

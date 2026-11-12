@@ -7,6 +7,8 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
+import { clamp } from '../utils.ts';
+
 import type { SortDir } from './components/ThSortable.tsx';
 
 /** 排序分页状态：三表共用的键/方向/页码/切换/切片动作。 */
@@ -34,7 +36,7 @@ export function useSortTable<K extends string>(initialKey: K, rowCount: number, 
   };
   // 行数变化时夹取页码到有效范围
   useEffect(() => {
-    setPage((p) => Math.min(Math.max(1, p), totalPages));
+    setPage((p) => clamp(p, 1, totalPages));
   }, [totalPages]);
   const slice = useCallback(
     <T>(rows: T[]): T[] => rows.slice((page - 1) * pageSize, page * pageSize),

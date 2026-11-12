@@ -6,10 +6,11 @@
  * 不产生真实外网请求，快照截断用内存 store、不碰 sqlite。
  *
  * 覆盖范围：
- *   - utils：日期与键（startOfDay/dateKeyOf/splitModelKey）、共享常量、effectiveQuotaTtl 按 min/max 夹取；
+ *   - utils：日期与键（startOfDay/dateKeyOf/joinModelKey/splitModelKey）、共享常量、数值夹取与一位小数、
+ *     用量零值与合计、effectiveQuotaTtl 按 min/max 夹取；
  *   - 额度展示与文本：goPercent/goLevelOf/goResetsAt、parseJsonLine/errorMessage/cacheTotal；
  *   - agg 口径：newAgg/ink（reasoning 不计 total、缺字段归零仍计次）、usable 收对话与压缩调用、
- *     拒 assistant/attempt；modelKeyOf 两处取源；
+ *     拒 assistant/attempt；hasUsage 零用量判定；modelKeyOf 两处取源；
  *   - logs 行解析（坏行跳过不断流）；rawlog 代次识别与多帧 zstd（真实规模、明文、截断尾帧、坏帧）；
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
  *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与单日明细）；
@@ -29,7 +30,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { constants, zstdCompressSync } from 'node:zlib';
 
-import { ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
+import { hasUsage, ink, modelKeyOf, newAgg, usable } from '../src/host/agg.ts';
 import { fetchDeepSeekBalance, queryDeepSeekBalance } from '../src/host/deepseekBalance.ts';
 import { fetchGoQuota, queryGoQuota } from '../src/host/goquota.ts';
 import { parseLine, parseLogLines } from '../src/host/logs.ts';
@@ -114,11 +115,14 @@ import {
   ZAI_FETCH_DEFAULT_MINUTES,
   ZAI_FETCH_MIN_MINUTES,
   cacheTotal,
+  clamp,
   clampDeepSeekFetchMinutes,
   clampGoFetchMinutes,
   clampZaiFetchMinutes,
   dateKeyOf,
   effectiveQuotaTtl,
+  emptyUsage,
+  joinModelKey,
   errorMessage,
   goLevelOf,
   goPercent,
@@ -128,8 +132,11 @@ import {
   normalizeModelRedirects,
   normalizeUsageSettings,
   parseJsonLine,
+  round1,
+  settingsValueEqual,
   splitModelKey,
   startOfDay,
+  tokensTotal,
   updateRelation,
 } from '../src/utils.ts';
 
@@ -233,6 +240,11 @@ describe('utils：日期与键', () => {
     assert.deepEqual(splitModelKey(''), { provider: 'unknown', model: 'unknown' });
   });
 
+  it('joinModelKey 与 splitModelKey 互逆', () => {
+    assert.equal(joinModelKey('p', 'm'), 'p\0m');
+    assert.deepEqual(splitModelKey(joinModelKey('p', 'm')), { provider: 'p', model: 'm' });
+  });
+
   it('共享常量取值', () => {
     assert.equal(SERIES_MAX_DAYS, 366);
     assert.equal(DAY_MS, 86_400_000);
@@ -247,6 +259,39 @@ describe('utils：日期与键', () => {
     assert.equal(effectiveQuotaTtl(0), 180_000);
     assert.equal(effectiveQuotaTtl(5), 300_000);
     assert.equal(effectiveQuotaTtl(10), 300_000);
+  });
+});
+
+describe('utils：数值与计数', () => {
+  it('clamp 夹取，上下界倒置时贴下界', () => {
+    assert.equal(clamp(5, 0, 10), 5);
+    assert.equal(clamp(-1, 0, 10), 0);
+    assert.equal(clamp(11, 0, 10), 10);
+    assert.equal(clamp(5, 10, 0), 10);
+  });
+
+  it('round1 保留一位小数', () => {
+    assert.equal(round1(1.24), 1.2);
+    assert.equal(round1(1.25), 1.3);
+    assert.equal(round1(-1.24), -1.2);
+  });
+
+  it('tokensTotal 只算四类 token，缺省按 0', () => {
+    assert.equal(tokensTotal(1, 2, 3, 4), 10);
+    assert.equal(tokensTotal(undefined, null, 3), 3);
+  });
+
+  it('emptyUsage 每次返回独立零值', () => {
+    const a = emptyUsage();
+    assert.notEqual(a, emptyUsage());
+    assert.deepEqual(a, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 });
+  });
+
+  it('settingsValueEqual 比较标量与数组', () => {
+    assert.equal(settingsValueEqual(1, 1), true);
+    assert.equal(settingsValueEqual(1, 2), false);
+    assert.equal(settingsValueEqual([{ a: 1 }], [{ a: 1 }]), true);
+    assert.equal(settingsValueEqual([{ a: 1 }], [{ a: 2 }]), false);
   });
 });
 
@@ -321,6 +366,12 @@ describe('agg：口径', () => {
     assert.equal(usable({ type: 'compaction/summary' }), false);
     // assistant/attempt 的用量是流式中间态，会与同 turn 的 assistant/message 重复，不收
     assert.equal(usable({ type: 'assistant/attempt', data: { usage: {} } }), false);
+  });
+
+  it('hasUsage 全零为 false，reasoning 也算用量', () => {
+    assert.equal(hasUsage({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }), false);
+    assert.equal(hasUsage({ input: 1, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }), true);
+    assert.equal(hasUsage({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 1 }), true);
   });
 
   it('modelKeyOf 缺失记 unknown', () => {

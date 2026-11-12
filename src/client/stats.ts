@@ -6,7 +6,7 @@
  * types.ts，与 host 端共用，避免两端镜像漂移。
  */
 
-import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, isCompleteRedirect, splitModelKey, startOfDay } from '../utils.ts';
+import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, emptyUsage, isCompleteRedirect, joinModelKey, round1, splitModelKey, startOfDay, tokensTotal } from '../utils.ts';
 
 import type { LocaleFn } from './locales.ts';
 import type { ModelDetail, ModelGroupMode, ModelRedirect, ModelStat, SeriesPoint, SessionStat, TimeRange, UsageAgg } from '../types.ts';
@@ -72,7 +72,7 @@ export function shortId(id: string): string {
 
 /** total = input + output + cacheRead + cacheWrite，reasoning 不计入；缺省/坏值按 0。 */
 export function dayTotal(b: SeriesPoint | Partial<UsageAgg>): number {
-  return (b.input || 0) + (b.output || 0) + (b.cacheRead || 0) + (b.cacheWrite || 0);
+  return tokensTotal(b.input, b.output, b.cacheRead, b.cacheWrite);
 }
 
 export function usageTotal(u: UsageAgg): number {
@@ -370,11 +370,6 @@ export function modelRangeCutoff(range: TimeRange): number | null {
 // 当规则候选，改规则也要立刻重算，不必等下一次轮询或重启。
 // 规则表来自偏好设置（utils.ts 归一化，client/settings.ts 读写），模型页与日期、会话明细的按模型表消费。
 
-/** 模型键：与账本、快照同一口径 `provider\0model`，utils.ts 的 splitModelKey 拆回。 */
-function modelKeyOf(provider: string, model: string): string {
-  return provider + '\u0000' + model;
-}
-
 /** 归并结果：模型行（按 total 降序）+ 每个目标行并进来的来源键，供界面提示。 */
 export interface ModelRedirectResult {
   /** 归并后的模型行，无生效规则时原样返回入参数组。 */
@@ -428,8 +423,8 @@ function redirectIndexOf(rules: readonly ModelRedirect[]): Map<string, RedirectE
   const index = new Map<string, RedirectEdge>();
   for (const rule of rules) {
     if (!isCompleteRedirect(rule)) continue;
-    const from = modelKeyOf(rule.fromProvider, rule.fromModel);
-    const to = modelKeyOf(rule.toProvider, rule.toModel);
+    const from = joinModelKey(rule.fromProvider, rule.fromModel);
+    const to = joinModelKey(rule.toProvider, rule.toModel);
     if (from === to || index.has(from)) continue;
     index.set(from, { to, order: index.size });
   }
@@ -451,7 +446,7 @@ interface RedirectAcc {
  */
 export function redirectModels(models: ModelStat[], rules: readonly ModelRedirect[]): ModelRedirectResult {
   const index = redirectIndexOf(rules);
-  const keys = models.map((m) => modelKeyOf(m.provider, m.model));
+  const keys = models.map((m) => joinModelKey(m.provider, m.model));
   const targets = keys.map((key) => resolveRedirectKey(key, index));
   if (targets.every((target, i) => target === keys[i])) {
     return { models, mergedSources: new Map() };
@@ -465,7 +460,7 @@ export function redirectModels(models: ModelStat[], rules: readonly ModelRedirec
     let acc = accs.get(target);
     if (acc === undefined) {
       acc = {
-        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 },
+        usage: emptyUsage(),
         calls: 0,
         series: new Map(),
       };
@@ -524,7 +519,7 @@ export function mergeModelDetails(
   target: { provider: string; model: string },
 ): ModelDetail | null {
   if (details.length === 0) return null;
-  const usage: UsageAgg = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+  const usage: UsageAgg = emptyUsage();
   let calls = 0;
   const days = new Map<number, SeriesPoint>();
   const sessions = new Map<string, SessionStat>();
@@ -607,7 +602,7 @@ export function unusedRedirectSources(
 ): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const [provider, models] of catalog) {
-    const free = models.filter((model) => !used.has(modelKeyOf(provider, model)));
+    const free = models.filter((model) => !used.has(joinModelKey(provider, model)));
     if (free.length > 0) out.set(provider, free);
   }
   return out;
@@ -664,28 +659,32 @@ export interface ModelStack {
   maxTotal: number
   models: { provider: string; model: string }[]
 }
-export function buildModelStack(models: ModelStat[], range: TimeRange): ModelStack {
-  const filtered = filterModelsByRange(models, range);
-  // 维持与饼图一致的模型顺序，按过滤后 total 降序，堆叠自底向上按此顺序
-  const modelOrder = filtered.map((m) => ({ provider: m.provider, model: m.model }));
-  const byKey = new Map<string, ModelStat>();
-  for (const m of filtered) byKey.set(m.provider + '\u0000' + m.model, m);
-  // 生成日桶：与 buildDateStack 同款日历推进，避免 DST 漂移
+/**
+ * 堆叠图展示的日序列：给定范围 cutoff 时从它向后铺 count 天并补到今天（容忍 DST 边界），
+ * all 范围从数据最早一天铺到今天、最多 SERIES_MAX_DAYS 天；日历推进一律 setDate。
+ * @param cutoff - 范围起点（本地零点）；null 表示 all。
+ * @param count - 范围天数；all 时为 0。
+ * @param times - 参与建桶的序列时间戳，all 用它找最早一天。
+ * @param emptyAsToday - 没有任何时间戳时是否只画今天（模型堆叠有行无序列时用）。
+ */
+function stackDayList(
+  cutoff: number | null,
+  count: number,
+  times: Iterable<number | null | undefined>,
+  emptyAsToday: boolean,
+): number[] {
+  const todayStart = startOfDay(Date.now());
   const days: number[] = [];
-  const cutoff = modelRangeCutoff(range);
-  if (cutoff != null) {
+  if (cutoff !== null) {
     const d = new Date(cutoff);
-    const todayStart = startOfDay(Date.now());
-    const n = modelRangeToDays(range) ?? 0;
-    for (let i = 0; i < n; i += 1) {
+    for (let i = 0; i < count; i += 1) {
       days.push(d.getTime());
       d.setDate(d.getDate() + 1);
       if (d.getTime() > todayStart) break;
     }
-    // 保证包含今天
+    // 范围换算受 DST 影响可能差一天：补齐到今天
     if (days.length > 0 && days[days.length - 1] !== todayStart) {
-      // 若 n 计算与 cutoff 略有偏差，补齐到今天，极少数 DST 边界
-      const last = days[days.length - 1];
+      const last = days[days.length - 1] as number;
       const diff = Math.round((todayStart - last) / DAY_MS);
       if (diff > 0 && diff < 3) {
         for (let k = 1; k <= diff; k += 1) {
@@ -695,39 +694,46 @@ export function buildModelStack(models: ModelStat[], range: TimeRange): ModelSta
         }
       }
     }
-  } else {
-    // all：从最早一天到今天
-    let earliest = Infinity;
-    for (const m of filtered) {
-      const s = (m as { series?: SeriesPoint[] }).series ?? [];
-      for (const pt of s) if (pt.t < earliest) earliest = pt.t;
-    }
-    if (!Number.isFinite(earliest)) {
-      // 无过滤后数据时回落到全量最早日或今天
-      if (filtered.length === 0) return { days: [], maxTotal: 1, models: [] };
-      earliest = startOfDay(Date.now());
-    } else {
-      earliest = startOfDay(earliest);
-    }
-    const todayStart = startOfDay(Date.now());
-    let span = Math.max(1, Math.round((todayStart - earliest) / DAY_MS) + 1);
-    // 限制最多一年宽度（共享上限，闰年 366 天），避免“全部”范围过宽
-    if (span > SERIES_MAX_DAYS) {
-      span = SERIES_MAX_DAYS;
-      const d0 = new Date(todayStart);
-      d0.setDate(d0.getDate() - (SERIES_MAX_DAYS - 1));
-      earliest = d0.getTime();
-    }
-    const d = new Date(earliest);
-    for (let i = 0; i < span; i += 1) {
-      days.push(d.getTime());
-      d.setDate(d.getDate() + 1);
-    }
+    return days;
   }
+  let earliest = Infinity;
+  for (const t of times) if (t != null && t < earliest) earliest = t;
+  if (!Number.isFinite(earliest)) {
+    if (!emptyAsToday) return [];
+    earliest = todayStart;
+  } else {
+    earliest = startOfDay(earliest);
+  }
+  let span = Math.max(1, Math.round((todayStart - earliest) / DAY_MS) + 1);
+  // 限制最多一年宽度（共享上限，闰年 366 天），避免“全部”范围过宽
+  if (span > SERIES_MAX_DAYS) {
+    span = SERIES_MAX_DAYS;
+    const d0 = new Date(todayStart);
+    d0.setDate(d0.getDate() - (SERIES_MAX_DAYS - 1));
+    earliest = d0.getTime();
+  }
+  const d = new Date(earliest);
+  for (let i = 0; i < span; i += 1) {
+    days.push(d.getTime());
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
+export function buildModelStack(models: ModelStat[], range: TimeRange): ModelStack {
+  const filtered = filterModelsByRange(models, range);
+  // 维持与饼图一致的模型顺序，按过滤后 total 降序，堆叠自底向上按此顺序
+  const modelOrder = filtered.map((m) => ({ provider: m.provider, model: m.model }));
+  const byKey = new Map<string, ModelStat>();
+  for (const m of filtered) byKey.set(joinModelKey(m.provider, m.model), m);
+  // 生成日桶：与 buildDateStack 共用同一套日历推进，避免 DST 漂移
+  const cutoff = modelRangeCutoff(range);
+  const times = filtered.flatMap((m) => ((m as { series?: SeriesPoint[] }).series ?? []).map((pt) => pt.t));
+  const days = stackDayList(cutoff, modelRangeToDays(range) ?? 0, times, filtered.length > 0);
   // 按日构建堆叠
   const byModelDay = new Map<string, Map<number, number>>();
   for (const m of filtered) {
-    const key = m.provider + '\u0000' + m.model;
+    const key = joinModelKey(m.provider, m.model);
     const mp = new Map<number, number>();
     const s = (m as { series?: SeriesPoint[] }).series ?? [];
     for (const pt of s) mp.set(pt.t, dayTotal(pt));
@@ -739,7 +745,7 @@ export function buildModelStack(models: ModelStat[], range: TimeRange): ModelSta
     const segs: ModelStackDay['segments'] = [];
     let total = 0;
     for (const m of filtered) {
-      const key = m.provider + '\u0000' + m.model;
+      const key = joinModelKey(m.provider, m.model);
       const mp = byModelDay.get(key);
       const v = mp?.get(t) ?? 0;
       if (v > 0) segs.push({ provider: m.provider, model: m.model, total: v, calls: 0 });
@@ -747,7 +753,7 @@ export function buildModelStack(models: ModelStat[], range: TimeRange): ModelSta
     }
     // 填充 calls，可选，tooltip 用
     for (const seg of segs) {
-      const key = seg.provider + '\u0000' + seg.model;
+      const key = joinModelKey(seg.provider, seg.model);
       const mm = byKey.get(key);
       const s = (mm as { series?: SeriesPoint[] })?.series ?? [];
       const pt = s.find((p) => p.t === t);
@@ -806,11 +812,7 @@ export function avgPerCall(total: number, calls: number): number | null {
 export function getDateTokenMeta(t?: LocaleFn): readonly { key: DateTokenKey; label: string; color: string }[] {
   if (!t) return DATE_TOKEN_META;
   try {
-    return [
-      { key: 'input', label: t('table.input'), color: '#4d6bfe' },
-      { key: 'output', label: t('table.output'), color: '#00b894' },
-      { key: 'cacheRead', label: t('table.cacheRead'), color: '#fdcb6e' },
-    ];
+    return DATE_TOKEN_META.map((meta) => ({ ...meta, label: t(`table.${meta.key}`) }));
   } catch {
     return DATE_TOKEN_META;
   }
@@ -845,51 +847,9 @@ export interface DateStack {
 export function buildDateStack(series: SeriesPoint[], range: DateRange, localeT?: LocaleFn): DateStack {
   const byDate = new Map<number, SeriesPoint>();
   for (const p of series) if (p?.t != null) byDate.set(p.t, p);
-  const days: number[] = [];
-  const cutoff = dateRangeCutoff(range);
-  if (cutoff != null) {
-    const d = new Date(cutoff);
-    const todayStart = startOfDay(Date.now());
-    const n = dateRangeToDays(range) ?? 0;
-    for (let i = 0; i < n; i += 1) {
-      days.push(d.getTime());
-      d.setDate(d.getDate() + 1);
-      if (d.getTime() > todayStart) break;
-    }
-    if (days.length > 0 && days[days.length - 1] !== todayStart) {
-      const last = days[days.length - 1];
-      const diff = Math.round((todayStart - last) / DAY_MS);
-      if (diff > 0 && diff < 3) {
-        for (let k = 1; k <= diff; k += 1) {
-          const dd = new Date(last);
-          dd.setDate(dd.getDate() + k);
-          days.push(dd.getTime());
-        }
-      }
-    }
-  } else {
-    // all：从最早一天到今天
-    let earliest = Infinity;
-    for (const p of series) if (p.t != null && p.t < earliest) earliest = p.t;
-    if (!Number.isFinite(earliest)) {
-      return { days: [], maxTotal: 1 };
-    }
-    earliest = startOfDay(earliest);
-    const todayStart = startOfDay(Date.now());
-    let span = Math.max(1, Math.round((todayStart - earliest) / DAY_MS) + 1);
-    // 与模型堆叠同款一年上限（共享常量），避免“全部”范围过宽
-    if (span > SERIES_MAX_DAYS) {
-      span = SERIES_MAX_DAYS;
-      const d0 = new Date(todayStart);
-      d0.setDate(d0.getDate() - (SERIES_MAX_DAYS - 1));
-      earliest = d0.getTime();
-    }
-    const d = new Date(earliest);
-    for (let i = 0; i < span; i += 1) {
-      days.push(d.getTime());
-      d.setDate(d.getDate() + 1);
-    }
-  }
+  // 日桶与模型堆叠共用同一套日历推进（含 all 的一年上限）
+  const days = stackDayList(dateRangeCutoff(range), dateRangeToDays(range) ?? 0, series.map((p) => p.t), false);
+  if (days.length === 0) return { days: [], maxTotal: 1 };
   const stackDays: DateStackDay[] = [];
   let maxTotal = 1;
   for (const t of days) {
@@ -979,7 +939,7 @@ export function largestRemainderPcts(raws: number[]): number[] {
   const shares = [...floors];
   for (let k = 0; k < remainingTenths && k < order.length; k += 1) {
     const idx = order[k].i;
-    shares[idx] = Math.round((shares[idx] + 0.1) * 10) / 10;
+    shares[idx] = round1(shares[idx] + 0.1);
   }
   return shares;
 }
@@ -1061,7 +1021,7 @@ export function groupModels(rows: { m: ModelStat; share: number }[], mode: 'prov
         key,
         label: key || '--',
         leaves: [],
-        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 },
+        usage: emptyUsage(),
         calls: 0,
         share: 0,
       };
@@ -1078,7 +1038,7 @@ export function groupModels(rows: { m: ModelStat; share: number }[], mode: 'prov
   }
   for (const group of groups.values()) {
     const sum = group.leaves.reduce((s, leaf) => s + (leaf.share || 0), 0);
-    group.share = Math.round(sum * 10) / 10;
+    group.share = round1(sum);
   }
   return [...groups.values()];
 }

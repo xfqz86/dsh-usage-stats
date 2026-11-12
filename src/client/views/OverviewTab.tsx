@@ -9,7 +9,7 @@ import {
   IconSparkleRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 
-import { goLevelOf, goPercent, goResetsAt, QUOTA_CREDENTIAL_KEYS } from '../../utils.ts';
+import { clamp, emptyUsage, goLevelOf, goPercent, goResetsAt, QUOTA_CREDENTIAL_KEYS } from '../../utils.ts';
 import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { dayTotal, fmt, fmtFull, todayOf } from '../stats.ts';
@@ -99,7 +99,7 @@ export function OverviewTab({
       reasoning: todayPoint.reasoning,
       total: dayTotal(todayPoint),
     }
-    : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+    : emptyUsage();
   const todayCalls = todayPoint?.calls ?? 0;
   const totalSide = `${fmtFull(value.sessions)} ${t('panel.summary.sessions')}`;
   const showGo = goEnabled;
@@ -276,9 +276,7 @@ export function OverviewTab({
               );
             })()}
             {zai.webSearches && (() => {
-              const pct = Math.round(
-                Math.max(0, Math.min(100, zai.webSearches.percent)),
-              );
+              const pct = Math.round(clamp(zai.webSearches.percent, 0, 100));
               const level = goLevelOf(pct);
               return (
                 <div className={css.goTileRow} key="webSearches">

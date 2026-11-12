@@ -14,7 +14,7 @@
 import { IconChevronRightOutlineRegular, IconPlusOutlineRegular, IconTrashOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
-import { MODEL_REDIRECT_MAX_RULES, isCompleteRedirect, normalizeModelRedirects } from '../../utils.ts';
+import { MODEL_REDIRECT_MAX_RULES, isCompleteRedirect, joinModelKey, normalizeModelRedirects, settingsValueEqual } from '../../utils.ts';
 import shared from '../components/UsageStatsCommon.module.css';
 import { modelCatalog, unusedRedirectSources } from '../stats.ts';
 
@@ -26,25 +26,10 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 /** 新增一行的初值：四项全空，归一化时丢弃，用户真填了字段才会落盘。 */
 const EMPTY_RULE: ModelRedirect = { fromProvider: '', fromModel: '', toProvider: '', toModel: '' };
 
-/** 规则数组逐字段比较：与当前设置文档一致时不再发起写入。 */
-function sameRules(a: readonly ModelRedirect[], b: readonly ModelRedirect[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((rule, i) => {
-    const other = b[i];
-    return rule.fromProvider === other.fromProvider && rule.fromModel === other.fromModel
-      && rule.toProvider === other.toProvider && rule.toModel === other.toModel;
-  });
-}
-
 /** 字段名映射：来源侧/目标侧 × 供应商/模型 → 规则里的字段名。 */
 function redirectFieldKey(side: 'from' | 'to', field: 'provider' | 'model'): keyof ModelRedirect {
   if (side === 'from') return field === 'provider' ? 'fromProvider' : 'fromModel';
   return field === 'provider' ? 'toProvider' : 'toModel';
-}
-
-/** 来源组合键：供应商 + 模型，与归并用的键同形（`\0` 分隔，文本里不会出现）。 */
-function pairKey(provider: string, model: string): string {
-  return provider + '\u0000' + model;
 }
 
 /** 空排除集：目标侧候选不排除任何组合。 */
@@ -69,7 +54,7 @@ export function ModelRedirectEditor({
 
   // 服务端取值变化时同步草稿：本组件自己的提交也会回到这里，界面因此与设置文档一致
   useEffect(() => {
-    if (sameRules(synced.current, rules)) return;
+    if (settingsValueEqual(synced.current, rules)) return;
     synced.current = rules;
     setDraft(rules);
   }, [rules]);
@@ -86,7 +71,7 @@ export function ModelRedirectEditor({
    */
   const otherSourceKeys = useMemo(() => {
     const keys = draft.map((rule) => (rule.fromProvider !== '' && rule.fromModel !== ''
-      ? pairKey(rule.fromProvider, rule.fromModel)
+      ? joinModelKey(rule.fromProvider, rule.fromModel)
       : null));
     return keys.map((_, i) => new Set(keys.filter((key, j): key is string => key !== null && j !== i)));
   }, [draft]);
@@ -96,7 +81,7 @@ export function ModelRedirectEditor({
     const name = provider.trim();
     const observed = free.get(name);
     if (observed !== undefined) return observed;
-    return allModels.filter((model) => !used.has(pairKey(name, model)));
+    return allModels.filter((model) => !used.has(joinModelKey(name, model)));
   };
 
   // 重复来源标记：同一来源只有最上面一条生效（stats.ts 的规则索引按列表顺序）
@@ -104,7 +89,7 @@ export function ModelRedirectEditor({
     const seen = new Set<string>();
     return draft.map((rule) => {
       const defined = rule.fromProvider !== '' && rule.fromModel !== '';
-      const key = rule.fromProvider + '\u0000' + rule.fromModel;
+      const key = joinModelKey(rule.fromProvider, rule.fromModel);
       const duplicate = defined && seen.has(key);
       if (defined) seen.add(key);
       return duplicate;
@@ -115,7 +100,7 @@ export function ModelRedirectEditor({
 
   /** 提交整表：与当前取值一致时跳过，避免空写。 */
   const commit = (next: ModelRedirect[]): void => {
-    if (sameRules(next, rules)) return;
+    if (settingsValueEqual(next, rules)) return;
     onChange(normalizeModelRedirects(next));
   };
 

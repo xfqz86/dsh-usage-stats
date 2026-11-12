@@ -14,7 +14,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 
-import { splitModelKey } from '../../utils.ts';
+import { joinModelKey, splitModelKey } from '../../utils.ts';
 import { ModelGroupBar } from '../components/ModelGroupBar.tsx';
 import { ModelPieChart } from '../components/ModelPieChart.tsx';
 import { Pagination } from '../components/Pagination.tsx';
@@ -109,7 +109,7 @@ export function ModelsTab({
   // 打开的行被范围过滤掉或模型消失时关闭弹窗，避免明细挂在不存在的行上
   useEffect(() => {
     if (detailKey === null) return;
-    if (!models.some((m) => m.provider + '\u0000' + m.model === detailKey)) setDetailKey(null);
+    if (!models.some((m) => joinModelKey(m.provider, m.model) === detailKey)) setDetailKey(null);
   }, [models, detailKey]);
 
   // 未分组排序：比较器收拢进 stats，保证与分组叶子同一顺序
@@ -257,7 +257,7 @@ export function ModelsTab({
               </thead>
               <tbody>
                 {groupMode === 'none'
-                  ? pageModels.map(({ m, share }) => renderLeafRow(m.provider + '\u0000' + m.model, m, share, false))
+                  ? pageModels.map(({ m, share }) => renderLeafRow(joinModelKey(m.provider, m.model), m, share, false))
                   : pageGroups.map((g) => {
                     const expanded = isExpanded(g.key);
                     const groupTotal = usageTotal(g.usage);
@@ -294,7 +294,7 @@ export function ModelsTab({
                           {/* 组头不开明细：子行展开后从叶子行打开，这里留空保持网格对齐 */}
                           <td className={shared.detailCell} />
                         </tr>
-                        {expanded && g.leaves.map((leaf) => renderLeafRow(leaf.m.provider + '\u0000' + leaf.m.model, leaf.m, leaf.share, true))}
+                        {expanded && g.leaves.map((leaf) => renderLeafRow(joinModelKey(leaf.m.provider, leaf.m.model), leaf.m, leaf.share, true))}
                       </Fragment>
                     );
                   })}

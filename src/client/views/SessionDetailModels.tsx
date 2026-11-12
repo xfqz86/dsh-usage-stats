@@ -15,7 +15,7 @@
 
 import { Fragment, useEffect, useMemo } from 'react';
 
-import { splitModelKey } from '../../utils.ts';
+import { joinModelKey, splitModelKey } from '../../utils.ts';
 import { ModelGroupBar } from '../components/ModelGroupBar.tsx';
 import { Pagination } from '../components/Pagination.tsx';
 import { ThSortable } from '../components/ThSortable.tsx';
@@ -131,7 +131,7 @@ export function SessionDetailModels({
                 const total = usageTotal(m.usage);
                 const hit = hitRateOfDay(m.usage);
                 const avg = avgPerCall(total, m.calls);
-                const key = m.provider + '\u0000' + m.model;
+                const key = joinModelKey(m.provider, m.model);
                 const sources = mergedSources.get(key) ?? [];
                 return (
                   <tr key={key}>
@@ -213,7 +213,7 @@ export function SessionDetailModels({
                       const total = usageTotal(m.usage);
                       const hit = hitRateOfDay(m.usage);
                       const avg = avgPerCall(total, m.calls);
-                      const key = m.provider + '\u0000' + m.model;
+                      const key = joinModelKey(m.provider, m.model);
                       const sources = mergedSources.get(key) ?? [];
                       return (
                         <tr key={key} className={shared.childRow}>

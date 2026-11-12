@@ -144,7 +144,7 @@ dsh-usage-stats/
 │   │   ├── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
 │   │   └── version.ts ← 本插件版本号：tsdown 构建时把 package.json 的 version 注入 DSH_USAGE_STATS_VERSION， 「关于」页的版本展示与更新比较都读这里，避免与包版本漂移。
 │   ├── host/
-│   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、 modelKeyOf。
+│   │   ├── agg.ts ← 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、 hasUsage 与 modelKeyOf。
 │   │   ├── deepseekBalance.ts ← DeepSeek 余额查询：通过 `GET https://api.deepseek.com/user/balance` 获取当前余额。
 │   │   ├── detail.ts ← 明细构建：把 usageStats/modelDetail、usageStats/dateDetail 与 usageStats/sessionDetail 的结果 value 从聚合缓存与账本整理出来，不触碰传输层与 ctx。
 │   │   ├── goquota.ts ← OpenCode Go 订阅额度查询：滚动 5 小时 / 本周 / 本月三档用量百分比 与重置时间，端点为 `GET https://opencode.ai/zen/go/v1/usage`。

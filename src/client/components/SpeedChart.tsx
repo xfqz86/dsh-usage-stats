@@ -8,6 +8,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { clamp } from '../../utils.ts';
 import { type NS } from '../locales.ts';
 import { buildChartGeometry, formatRate, formatTtft, type SpeedSample } from '../modelSpeed.ts';
 
@@ -87,17 +88,16 @@ export function SpeedChart({ samples, t }: SpeedChartProps) {
       const height = tipRef.current?.offsetHeight ?? TIP_HEIGHT;
       const right = panelRect.right + TIP_GAP;
       const left = panelRect.left - TIP_GAP - TIP_WIDTH;
-      const clampTop = (value: number): number => Math.min(Math.max(value, TIP_EDGE), Math.max(TIP_EDGE, window.innerHeight - height - TIP_EDGE));
       const rightFits = right + TIP_WIDTH <= window.innerWidth - TIP_EDGE;
       const leftFits = left >= TIP_EDGE;
       if (rightFits || leftFits) {
-        setTip({ left: rightFits ? right : left, top: clampTop(chartRect.top) });
+        setTip({ left: rightFits ? right : left, top: clamp(chartRect.top, TIP_EDGE, window.innerHeight - height - TIP_EDGE) });
         return;
       }
       // 两侧都放不下（窗口很窄）：退到详情卡正上方，上方也没位置就放正下方，横向对齐图表。
       const above = panelRect.top - TIP_GAP - height;
       setTip({
-        left: Math.min(Math.max(chartRect.left, TIP_EDGE), window.innerWidth - TIP_WIDTH - TIP_EDGE),
+        left: clamp(chartRect.left, TIP_EDGE, window.innerWidth - TIP_WIDTH - TIP_EDGE),
         top: above >= TIP_EDGE ? above : panelRect.bottom + TIP_GAP,
       });
     };

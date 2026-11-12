@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { clamp, joinModelKey } from '../../utils.ts';
 import { fmtFull, pctOf, pieSlicesOf, pieFullCircleOf  } from '../stats.ts';
 
 import css from './ModelPieChart.module.css';
@@ -37,9 +38,9 @@ export function ModelPieChart({
     const wrapW = wrapRef.current?.clientWidth ?? 120;
     const wrapH = wrapRef.current?.clientHeight ?? 120;
     let left = tip.x - w / 2;
-    left = Math.max(4, Math.min(left, wrapW - w - 4));
+    left = clamp(left, 4, wrapW - w - 4);
     let top = tip.y - h - 10;
-    top = Math.max(4, Math.min(top, wrapH - h - 4));
+    top = clamp(top, 4, wrapH - h - 4);
     setTipPos({ left, top });
   }, [tip]);
 
@@ -91,7 +92,7 @@ export function ModelPieChart({
             ) : (
               slices.map((s, i) => (
                 <path
-                  key={s.provider + '\u0000' + s.model + i}
+                  key={joinModelKey(s.provider, s.model) + i}
                   d={s.path}
                   fill={s.color}
                   stroke="var(--dsw-alias-bg-base)"
@@ -125,7 +126,7 @@ export function ModelPieChart({
         </div>
         <div className={css.legend}>
           {slices.map((s) => (
-            <div key={s.provider + '\u0000' + s.model} className={css.legendItem} title={`${s.model} · ${s.provider}`}>
+            <div key={joinModelKey(s.provider, s.model)} className={css.legendItem} title={`${s.model} · ${s.provider}`}>
               <span className={css.legendDot} style={{ background: s.color }} />
               <span className={css.legendText}>{s.model}</span>
               <span className={css.legendPct}>{pctOf(s.share)}</span>
