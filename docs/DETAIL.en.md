@@ -1,7 +1,5 @@
 Today's token usage in the sidebar, a panel with daily, per-session and per-model breakdowns, DeepSeek / OpenCode Go / Z.ai quota monitoring, and per-session model speed readings in the composer.
 
-![Overview](screenshot/01-overview.png)
-
 ## What it shows
 
 - **Today in the sidebar**: today's tokens, call count and an input / output / cache ratio bar; collapses to compact chips when the sidebar is narrow.
@@ -13,8 +11,6 @@ Today's token usage in the sidebar, a panel with daily, per-session and per-mode
 - **Quotas**: DeepSeek balance, OpenCode Go (rolling 5 hours / week / month), Z.ai (rolling 5 hours / week plus monthly web searches); each source can be switched on or off with its own fetch interval and sidebar visibility.
 - **Model speed**: average TTFT and ATPS for the current session in the composer status line, with a per-call chart and average / last / min / max on click.
 - **Session ID badge**: a short ID next to the session title, one click to copy.
-
-![Models](screenshot/04-models.png)
 
 ## Using it
 
@@ -46,4 +42,4 @@ Turning a source off stops requests to that provider. Quota requests carry only 
 - When About finds a newer version, upgrade in place and restart DSH once.
 - Uninstall with `dsh plugin --profile web remove @xfqz86/dsh-usage-stats`.
 
-Full install options, all screenshots and developer docs: [GitHub repository](https://github.com/xfqz86/dsh-usage-stats).
+Full install options and developer docs: [GitHub repository](https://github.com/xfqz86/dsh-usage-stats).

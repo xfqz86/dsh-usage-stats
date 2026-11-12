@@ -23,9 +23,7 @@
     "CHANGELOG.md",
     "locale",
     "docs/DETAIL.md",
-    "docs/DETAIL.en.md",
-    "docs/screenshot/01-overview.png",
-    "docs/screenshot/04-models.png"
+    "docs/DETAIL.en.md"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

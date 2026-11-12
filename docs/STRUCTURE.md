@@ -25,7 +25,7 @@ dsh-usage-stats/
 │   │   │   └── action.yml ← 统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装
 │   │   └── verify-pack/
 │   │       ├── action.yml ← 校验复合动作：交付物仅含白名单文件且 package.json 已剪枝
-│   │       └── verify.mjs ← 校验交付物仅含白名单文件（lib、locale、详情文档与截图等）且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
+│   │       └── verify.mjs ← 校验交付物仅含白名单文件（lib、locale 与详情文档）且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
 │       ├── ci.yml ← CI：类型检查 / 目录结构新鲜度 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）
 │       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
@@ -174,7 +174,7 @@ dsh-usage-stats/
 │   └── utils.ts ← 跨端共用的纯函数与共享常量，host 与 client 两个 bundle 各自内联所需子集。
 ├── test/
 │   ├── client-bundle.mjs ← 浏览器端 bundle 冒烟测试（模拟 window.__ModuleLoader__ + document）。
-│   ├── plugin-page.mjs ← 插件页资源单测：locale 元信息、分语言详情文档、文档图片与发布清单保持一致。
+│   ├── plugin-page.mjs ← 插件页资源单测：locale 元信息、分语言详情文档与发布清单保持一致。
 │   ├── pure.mjs ← 纯逻辑、账本折叠与协议/偏好逻辑的单测（node:test + 类型剥离直引源码）。
 │   ├── session-events.jsonl
 │   ├── smoke.mjs ← 用量统计服务端 Remote 方法的独立冒烟测试（账本模式，自管理 sqlite 介质）。

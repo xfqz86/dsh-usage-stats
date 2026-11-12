@@ -1,5 +1,5 @@
 /**
- * 插件页资源单测：locale 元信息、分语言详情文档、文档图片与发布清单保持一致。
+ * 插件页资源单测：locale 元信息、分语言详情文档与发布清单保持一致。
  * 运行 `node test/plugin-page.mjs`。
  *
  * 为什么单独测：这些文件不经过构建，也不参与运行时逻辑，缺文件或路径写错时
@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -24,9 +24,10 @@ function imagePaths(markdown) {
 describe('插件页：locale 元信息', () => {
   it('exports 暴露 locale 通配符，files 覆盖页面资源', () => {
     assert.equal(manifest.exports['./locale/*.json'], './locale/*.json');
-    for (const path of ['locale', 'docs/DETAIL.md', 'docs/DETAIL.en.md', 'docs/screenshot/01-overview.png', 'docs/screenshot/04-models.png']) {
+    for (const path of ['locale', 'docs/DETAIL.md', 'docs/DETAIL.en.md']) {
       assert.ok(manifest.files.includes(path), `package.json files 缺 ${path}`);
     }
+    assert.ok(!manifest.files.some((path) => path.startsWith('docs/screenshot/')), '插件详情文档不放截图，发布清单不必带截图');
   });
 
   for (const [language, file, detail] of [
@@ -46,18 +47,10 @@ describe('插件页：locale 元信息', () => {
 
 describe('插件页：详情文档', () => {
   for (const file of ['docs/DETAIL.md', 'docs/DETAIL.en.md']) {
-    it(`${file} 的图片都在包内`, () => {
+    it(`${file} 为纯文字说明`, () => {
       const markdown = readFileSync(join(ROOT, file), 'utf8');
       assert.ok(markdown.trim().length > 0, '文档不能为空');
-      const images = imagePaths(markdown);
-      assert.ok(images.length > 0, '至少引用一张截图');
-      for (const image of images) {
-        const target = resolve(ROOT, dirname(file), image);
-        const path = relative(ROOT, target);
-        assert.ok(!path.startsWith('..') && path.startsWith('docs/'), `图片越出 docs/：${image}`);
-        assert.ok(manifest.files.includes(path), `package.json files 缺图片 ${path}`);
-        assert.ok(existsSync(target), `图片不存在：${image}`);
-      }
+      assert.deepEqual(imagePaths(markdown), [], '插件详情文档不放截图：装好插件后可直接看实际界面');
     });
   }
 });

@@ -1,7 +1,5 @@
 在侧边栏底部常驻今日 token 用量，点开面板按日期、会话、模型查看明细；同时监控 DeepSeek、OpenCode Go 与 Z.ai 额度，并在输入区显示当前会话的模型速度。
 
-![概览](screenshot/01-overview.png)
-
 ## 能做什么
 
 - **侧边栏今日用量**：宽列显示今日 tokens、调用数与输入 / 输出 / 缓存占比条；收起侧边栏后收成紧凑芯片。
@@ -13,8 +11,6 @@
 - **额度监控**：DeepSeek 余额、OpenCode Go（滚动 5 小时 / 本周 / 本月）、Z.ai（滚动 5 小时 / 本周 / 每月 Web 搜索）；可单独开关、设置抓取间隔与是否显示在侧边栏。
 - **模型速度**：输入区状态行显示当前会话的平均 TTFT 与 ATPS，点开看每次调用的柱状图和平均 / 最近 / 最小 / 最大。
 - **会话 ID 徽标**：会话标题旁显示短 ID，点击复制。
-
-![模型](screenshot/04-models.png)
 
 ## 怎么用
 
@@ -46,4 +42,4 @@
 - 「关于」页发现新版本后可一键升级，升级后重启一次 DSH 生效。
 - 卸载：`dsh plugin --profile web remove @xfqz86/dsh-usage-stats`。
 
-更多安装方式、完整截图和开发文档见 [GitHub 仓库](https://github.com/xfqz86/dsh-usage-stats)。
+更多安装方式和开发文档见 [GitHub 仓库](https://github.com/xfqz86/dsh-usage-stats)。

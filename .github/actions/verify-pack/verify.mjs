@@ -1,5 +1,5 @@
 /**
- * 校验交付物仅含白名单文件（lib、locale、详情文档与截图等）且 package.json 已剪枝（仅供 GitHub Action 使用）
+ * 校验交付物仅含白名单文件（lib、locale 与详情文档）且 package.json 已剪枝（仅供 GitHub Action 使用）
  * 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
  */
 
@@ -77,7 +77,6 @@ function verifyTarball(tgzPath) {
     'package/cordis.patch.yml', 'package/icon.svg', 'package/README.md', 'package/CHANGELOG.md', 'package/LICENSE',
     'package/locale/en.json', 'package/locale/zh.json',
     'package/docs/DETAIL.md', 'package/docs/DETAIL.en.md',
-    'package/docs/screenshot/01-overview.png', 'package/docs/screenshot/04-models.png',
   ]
   for (const file of REQUIRED) if (!list.includes(file)) fail(`${file} missing in tarball`)
 
@@ -102,7 +101,7 @@ function verifyTarball(tgzPath) {
   if (!j.dependencies || typeof j.dependencies !== 'object') fail('packed package.json missing dependencies')
   if (!j.peerDependencies || typeof j.peerDependencies !== 'object') fail('packed package.json missing peerDependencies')
   console.log(`packed package.json pruned ok: ${Object.keys(j).join(', ')}`)
-  console.log(`tarball verify ok — ${REQUIRED.length} files: lib(2), locale(2), detail docs and screenshots(4), manifest and package files`)
+  console.log(`tarball verify ok — ${REQUIRED.length} files: lib(2), locale(2), detail docs(2), manifest and package files`)
 }
 
 function verifyPayload(dir) {
@@ -117,7 +116,6 @@ function verifyPayload(dir) {
   const need = [
     'lib/index.js', 'lib/client.js', 'package.json', 'cordis.patch.yml', 'icon.svg', 'README.md', 'CHANGELOG.md', 'LICENSE',
     'locale/en.json', 'locale/zh.json', 'docs/DETAIL.md', 'docs/DETAIL.en.md',
-    'docs/screenshot/01-overview.png', 'docs/screenshot/04-models.png',
   ]
   if (files.length !== need.length) fail(`payload file count ${files.length}, expected ${need.length}\n${rel.join('\n')}`)
   for (const n of need) if (!rel.includes(n)) fail(`payload missing ${n}`)
