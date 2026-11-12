@@ -236,6 +236,7 @@ export function ModelSpeedPill({ useSpeed, t }: SpeedPillProps) {
               </table>
             </>
           )}
+          <div className={css.credit}>{t('speed.panel.credit')}</div>
         </div>,
         document.body,
       )}
