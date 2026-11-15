@@ -57,7 +57,7 @@ dsh-usage-stats/
 │   ├── en.json ← 插件页英文元信息（标题 / 简介 / 详情文档路径），package.json exports 暴露
 │   └── zh.json ← 插件页中文元信息（标题 / 简介 / 详情文档路径），package.json exports 暴露
 ├── scripts/
-│   ├── css-modules-inline.mjs ← rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 样式内联注入」的 JS 模块。
+│   ├── css-modules-inline.mjs ← rolldown 插件：把 *.module.css 编译成「scoped 类名映射 + 双轨样式交付」的 JS 模块。
 │   ├── gen-tree.mjs ← 生成 docs/STRUCTURE.md：反射仓库真实结构，避免目录树手写漂移。
 │   └── svg-raw.mjs ← rolldown 插件：把带 raw 后缀的 SVG import 编译成「导出 SVG 文本」的 JS 模块。
 ├── src/

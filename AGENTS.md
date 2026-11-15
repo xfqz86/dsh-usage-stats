@@ -61,7 +61,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
 - 精确口径唯一权威是 `docs/ARCHITECTURE.md` §5；统计口径变化必须递增账本 `user_version`（见该文件 §2），本文件不复述。
 
 ## 7. 构建
-- 产物形态与 CSS 内联机制见 `docs/ARCHITECTURE.md` §6；构建命令见 §9。
+- 产物形态与 CSS 内联机制见 `docs/ARCHITECTURE.md` §6；构建命令见 §9。样式必须双轨交付（`meta().stylesheets` + 旧版自注入），只留一条会在新版或旧版基座之一掉样式。
 
 ## 8. 运行时与 Remote API
 - **注入**：`static inject=['sessionQuery', 'sessionPersistence']`（全必需）；`credentials` 可选不进 inject，调用处 `ctx.get` 判空，缺席时额度查询直接返回 `no-key`，不读 env 与文件；偏好设置靠条目自带 `static Config`，不需注入 `settings`。先挂实时监听再 `bootstrap`。
