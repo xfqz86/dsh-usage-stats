@@ -8,9 +8,11 @@
  *   点击打开模态窗详情；数据经 usageStatsRemote() 取命名空间服务调用 usageStats/snapshot。
  * - 样式：新版 shell 按 meta().stylesheets 在挂载期安装，旧版 shell 在 apply 时探测模块系统能力后
  *   由 src/client/legacyStyles.ts 自注入同一份样式（新版不再插一遍再撤）。
- * - 偏好设置（三额度开关/展示/间隔、会话徽标、模型速度读数、模型重定向规则）来自服务端 profile 配置文档：
- *   表单取自 ctx.configForms 的 `usage-stats` 条目（schema 在 src/host/settings.ts），组件经
- *   useUsageSettings 读写；旧版本 localStorage 偏好由 migrateLegacySettings 一次性迁移。
+ * - 配置类偏好（三额度开关/展示/间隔、会话徽标、模型速度读数、模型重定向规则）来自服务端
+ *   profile 配置文档：表单取自 ctx.configForms 的 `usage-stats` 条目（schema 在 src/host/settings.ts），
+ *   组件经 useUsageSettings 读写；旧版本 localStorage 偏好由 migrateLegacySettings 一次性迁移。
+ * - 浏览习惯（模型表分组、时间范围、分组折叠）存浏览器 localStorage（见 src/client/viewPrefs.ts），
+ *   组件经 useViewPrefs 订阅，刷新页面保持；旧配置残留的两项由 adoptLegacyViewPrefs 种入。
  */
 
 import { createElement } from 'react';
@@ -22,6 +24,7 @@ import { installLegacyStyles } from './legacyStyles.ts';
 import { NS, zh, en } from './locales.ts';
 import { mountUsageStatsRemote } from './remote.ts';
 import { attachUsageSettings, detachUsageSettings, migrateLegacySettings } from './settings.ts';
+import { attachViewPrefs } from './viewPrefs.ts';
 import { createSpeedInjection, ModelSpeedDock } from './views/ModelSpeedDock.tsx';
 import { UsageStatsFooter } from './views/UsageStatsFooter.tsx';
 
@@ -42,6 +45,8 @@ export const inject = ['slots', 'locale', 'remote', 'configForms', 'sessions'];
 export async function apply(ctx: ClientContext): Promise<void> {
   // 旧版 shell 的样式兜底：新版会按 meta 在挂载期安装，这里探测能力后直接返回。
   installLegacyStyles(ctx);
+  // 浏览器本地视图偏好：绑定 localStorage 一次（存储不可用时内部静默回落默认值）。
+  ctx.effect(() => attachViewPrefs(), 'dsh-usage-stats: 视图偏好');
   // 先挂载再注册界面：轮询与按钮回调只在挂载完成后发起调用。
   const disposeMount = await mountUsageStatsRemote(ctx);
   ctx.effect(() => disposeMount, 'dsh-usage-stats: remote 挂载');
@@ -52,6 +57,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // 清理带表单身份：热重载时新表单已挂上，旧清理不得把它抹掉。
   ctx.effect(() => () => detachUsageSettings(settingsForm), 'dsh-usage-stats: 偏好设置表单');
   // 旧 localStorage 偏好迁移到配置文档；失败不影响界面（仍按服务端取值为准）。
+  // 旧键里的分组与时间范围由 migrateLegacySettings 内部先种进本地视图偏好（见 viewPrefs.ts）。
   void migrateLegacySettings(settingsForm).catch(() => { /* 迁移失败：保持服务端取值 */ });
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-usage-stats: 文案字典');

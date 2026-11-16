@@ -15,12 +15,15 @@
  *   - fork 继承前缀：inheritedCountOf/inheritedPrefixOf/liveEventsOf；
  *   - 手写严格贡献：方法表、收发合法拒非法、信封成功/错误分支（含模型明细与单日明细）；
  *   - 命名空间句柄：经 get 取、不暂存 ctx.remote；
- *   - 偏好设置：归一化与夹取（含分组与范围记忆、模型速度开关）、路径写入只带显式字段、表单视图引用稳定、解绑带表单身份
+ *   - 偏好设置：归一化与夹取（含模型速度开关与徽标开关）、路径写入只带显式字段、表单视图引用稳定、解绑带表单身份
  *     （热重载不误清新表单）、不可用或只读时不发注定被拒的写入、旧 localStorage 迁移
  *     （等表单落定、成功写入才删旧键、不可用时保留）；配置串编解码（与独立 Base64 实现互通、
  *     容错与逐码失败语义、解码归一化、改动字段清单）与整份替换写入（默认值字段 unset、
  *     改动字段 set 且夹取、同一套写入守卫）；服务端条目 schema（字段全 volatile、解析值等于
  *     共享默认值、条目 id 与浏览器端常量一致）；
+ *   - 视图偏好：浏览器本地存储（默认值、归一化与折叠键过滤/trim/去重/条数上限、读写往返、
+ *     仅变化时通知、收起/展开、死键清理、旧配置种入、存储不可用或抛错时静默）；
+ *   - 旧设置文档回收含已移出 schema 的分组/范围字段时忽略它们；
  *   - stats：格式化 / 会话分组与排序比较 / 时间范围 / 图表几何 / 模型范围与堆叠 / 最近活跃自然日 /
  *     快照构建与截断 / 会话明细聚合 / 模型明细合并 / 模型统计重定向（归一化、归并、候选过滤）/ 模型分组；
  *   - 三额度 fixture：无 key、无 plan、非法归一、key 回退、go 缓存单飞。
@@ -60,6 +63,20 @@ import {
   updateUsageSettings,
   usageSettingsView,
 } from '../src/client/settings.ts';
+import {
+  VIEW_PREFS_DEFAULTS,
+  VIEW_PREFS_STORAGE_KEY,
+  adoptLegacyViewPrefs,
+  attachViewPrefs,
+  normalizeViewPrefs,
+  pruneCollapsedGroups,
+  readViewPrefs,
+  setModelGroupMode,
+  setTimeRange,
+  subscribeViewPrefs,
+  toggleGroupCollapsed,
+  viewPrefsSnapshot,
+} from '../src/client/viewPrefs.ts';
 import { installLegacyStyles, supportsModuleStyles } from '../src/client/legacyStyles.ts';
 import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
 import { createStore, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from '../src/host/store.ts';
@@ -1682,12 +1699,22 @@ function fakeScope(initial) {
   };
 }
 
-/** localStorage 替身：只有 getItem/removeItem 两个被用到的能力。 */
-function fakeStorage(initial) {
+/** localStorage 替身：记录写操作，可模拟隐私模式下的读写异常。 */
+function fakeStorage(initial, options = {}) {
   const map = new Map(Object.entries(initial ?? {}));
+  const writes = [];
   return {
     store: map,
-    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    writes,
+    getItem: (key) => {
+      if (options.getItemThrows === true) throw new Error('storage unavailable');
+      return map.has(key) ? map.get(key) : null;
+    },
+    setItem: (key, value) => {
+      if (options.setItemThrows === true) throw new Error('storage unavailable');
+      writes.push([key, value]);
+      map.set(key, value);
+    },
     removeItem: (key) => { map.delete(key); },
     has: (key) => map.has(key),
   };
@@ -1736,21 +1763,20 @@ describe('偏好设置：归一化与写入操作', () => {
     assert.equal(clampZaiFetchMinutes(2), ZAI_FETCH_MIN_MINUTES);
   });
 
-  it('分组与范围记忆：合法值保留，非法值回落默认', () => {
-    assert.equal(USAGE_SETTINGS_DEFAULTS.modelGroupMode, 'none');
-    assert.equal(USAGE_SETTINGS_DEFAULTS.timeRange, '365d');
-    assert.equal(normalizeUsageSettings({ modelGroupMode: 'provider' }).modelGroupMode, 'provider');
-    assert.equal(normalizeUsageSettings({ modelGroupMode: 'model' }).modelGroupMode, 'model');
-    assert.equal(normalizeUsageSettings({ modelGroupMode: 'other' }).modelGroupMode, 'none');
-    assert.equal(normalizeUsageSettings({ modelGroupMode: '' }).modelGroupMode, 'none');
-    assert.equal(normalizeUsageSettings({ timeRange: '7d' }).timeRange, '7d');
-    assert.equal(normalizeUsageSettings({ timeRange: 'all' }).timeRange, 'all');
-    assert.equal(normalizeUsageSettings({ timeRange: '30' }).timeRange, '365d');
-    assert.equal(normalizeUsageSettings({ timeRange: 30 }).timeRange, '365d');
-    // diff 行为：等于默认值不算改动，改过才进补丁。
-    assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, modelGroupMode: 'provider' }), { modelGroupMode: 'provider' });
-    assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, timeRange: '7d' }), { timeRange: '7d' });
+  it('分组与范围已移出设置 schema：归一化与迁移都忽略这两个键', () => {
+    // 视图偏好改存浏览器本地（viewPrefs），配置文档与配置串不再承载它们。
+    assert.equal(Object.prototype.hasOwnProperty.call(USAGE_SETTINGS_DEFAULTS, 'modelGroupMode'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(USAGE_SETTINGS_DEFAULTS, 'timeRange'), false);
+    const normalized = normalizeUsageSettings({ modelGroupMode: 'provider', timeRange: '7d' });
+    assert.equal(Object.prototype.hasOwnProperty.call(normalized, 'modelGroupMode'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(normalized, 'timeRange'), false);
+    assert.equal(normalized.modelGroupMode, undefined);
+    assert.equal(normalized.timeRange, undefined);
+    // diff 只按仍在 schema 里的字段比较：旧对象带着这两个键也不产生补丁。
+    assert.deepEqual(diffFromDefaults({ ...USAGE_SETTINGS_DEFAULTS, modelGroupMode: 'provider', timeRange: '7d' }), {});
+    // 旧设置文档里残留的键在回收时同样被丢弃（合法值与非法值都一样）。
     assert.deepEqual(legacySettingsPatch({ modelGroupMode: 'bad', timeRange: 'bad' }), {});
+    assert.deepEqual(legacySettingsPatch({ modelGroupMode: 'provider', timeRange: '7d' }), {});
   });
 
   it('局部偏好只生成显式字段的路径写入，间隔先夹取', () => {
@@ -1785,12 +1811,16 @@ describe('偏好设置：配置串编解码', () => {
     const at = new Date('2026-10-13T00:00:00.000Z');
     const text = encodeConfigTransfer(USAGE_SETTINGS_DEFAULTS, at);
     // 独立实现（Buffer）解出载荷：编码结果不能只靠被测解码器自证。
-    assert.deepEqual(JSON.parse(Buffer.from(text, 'base64').toString('utf8')), {
+    const payload = JSON.parse(Buffer.from(text, 'base64').toString('utf8'));
+    assert.deepEqual(payload, {
       format: CONFIG_TRANSFER_FORMAT,
       version: CONFIG_TRANSFER_VERSION,
       exportedAt: '2026-10-13T00:00:00.000Z',
       settings: USAGE_SETTINGS_DEFAULTS,
     });
+    // 视图偏好不随配置串迁移：载荷里没有这两个键。
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.settings, 'modelGroupMode'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.settings, 'timeRange'), false);
     // 标准字母表带填充：单行、长度为 4 的倍数、只含 A-Za-z0-9+/ 与末尾填充。
     assert.match(text, /^[A-Za-z0-9+/]+={0,2}$/);
     assert.equal(text.length % 4, 0);
@@ -1914,6 +1944,20 @@ describe('偏好设置：配置串编解码', () => {
     assert.deepEqual(decodeConfigTransfer(numeric), { ok: true, settings: USAGE_SETTINGS_DEFAULTS, exportedAt: null });
   });
 
+  it('旧配置串里残留的分组与范围字段在解码时被忽略', () => {
+    // 老版本导出的配置串可能带着这两个键：归一化只认仍在 schema 里的字段。
+    const legacy = configTextOf({
+      format: CONFIG_TRANSFER_FORMAT,
+      version: CONFIG_TRANSFER_VERSION,
+      settings: { showSessionId: false, modelGroupMode: 'provider', timeRange: '7d' },
+    });
+    const decoded = decodeConfigTransfer(legacy);
+    assert.equal(decoded.ok, true);
+    assert.deepEqual(decoded.settings, { ...USAGE_SETTINGS_DEFAULTS, showSessionId: false });
+    assert.equal(decoded.settings.modelGroupMode, undefined);
+    assert.equal(decoded.settings.timeRange, undefined);
+  });
+
   it('changedSettingFields 按默认值键序给出改动字段', () => {
     const base = normalizeUsageSettings(null);
     assert.deepEqual(changedSettingFields(base, base), []);
@@ -1940,9 +1984,8 @@ describe('偏好设置：配置串编解码', () => {
       showZaiInSidebar: false,
       zaiFetchMinutes: 9,
       showSessionId: false,
+      modelSpeedEnabled: false,
       modelRedirects: rules,
-      modelGroupMode: 'provider',
-      timeRange: '7d',
     };
     assert.deepEqual(changedSettingFields(base, all), Object.keys(USAGE_SETTINGS_DEFAULTS));
     assert.deepEqual(changedSettingFields(all, base), Object.keys(USAGE_SETTINGS_DEFAULTS));
@@ -2058,8 +2101,6 @@ describe('偏好设置：整份替换写入', () => {
       { op: 'set', path: ['showSessionId'], value: false },
       { op: 'unset', path: ['modelSpeedEnabled'] },
       { op: 'set', path: ['modelRedirects'], value: rules },
-      { op: 'unset', path: ['modelGroupMode'] },
-      { op: 'unset', path: ['timeRange'] },
     ]);
   });
 
@@ -2087,8 +2128,6 @@ describe('偏好设置：整份替换写入', () => {
       { op: 'unset', path: ['showZaiInSidebar'] },
       { op: 'unset', path: ['modelSpeedEnabled'] },
       { op: 'unset', path: ['modelRedirects'] },
-      { op: 'unset', path: ['modelGroupMode'] },
-      { op: 'unset', path: ['timeRange'] },
     ]);
   });
 
@@ -2193,6 +2232,307 @@ describe('偏好设置：旧 localStorage 迁移', () => {
     // clearLegacySettings 幂等且存储缺席时不抛错
     clearLegacySettings(storage);
     clearLegacySettings(undefined);
+  });
+});
+
+// ---- 视图偏好：浏览器本地存储（分组/时间范围/折叠状态；不进配置文档与配置串）----
+
+describe('视图偏好：浏览器本地存储', () => {
+  /** 当前用例绑定的 detach：reset 后调用，避免存储替身串场。 */
+  let detachAttached = () => {};
+  afterEach(() => { detachAttached(); detachAttached = () => {}; });
+
+  /** 绑定一份存储替身并登记解绑。 */
+  function bind(storage) {
+    detachAttached = attachViewPrefs(storage);
+    return storage;
+  }
+
+  it('未绑定存储时快照就是默认值（同一引用），存储键名固定', () => {
+    assert.equal(VIEW_PREFS_STORAGE_KEY, 'dsh-usage-stats.view');
+    assert.equal(viewPrefsSnapshot(), VIEW_PREFS_DEFAULTS);
+    assert.equal(VIEW_PREFS_DEFAULTS.modelGroupMode, 'none');
+    assert.equal(VIEW_PREFS_DEFAULTS.timeRange, '365d');
+    for (const scope of ['models', 'dateDetail', 'sessionDetail']) {
+      for (const mode of ['provider', 'model']) {
+        assert.deepEqual(VIEW_PREFS_DEFAULTS.collapsed[scope][mode], [], scope + '/' + mode + ' 默认应为空');
+      }
+    }
+  });
+
+  it('normalizeViewPrefs：非对象、缺字段与未知键都回到默认值', () => {
+    for (const raw of [undefined, null, 42, 'x', [], [1], true]) {
+      assert.deepEqual(normalizeViewPrefs(raw), VIEW_PREFS_DEFAULTS, '非普通对象应整体回落默认值：' + JSON.stringify(raw));
+    }
+    assert.deepEqual(normalizeViewPrefs({}), VIEW_PREFS_DEFAULTS, '缺字段应回落默认值');
+    const unknownOnly = normalizeViewPrefs({ version: 9, bogus: true, collapsed: { nope: { provider: ['x'] } } });
+    assert.deepEqual(unknownOnly, VIEW_PREFS_DEFAULTS, '未知键/未知 scope 应丢弃');
+    assert.equal(Object.prototype.hasOwnProperty.call(unknownOnly, 'version'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(unknownOnly, 'bogus'), false);
+  });
+
+  it('normalizeViewPrefs：枚举非法回落默认值，合法值保留', () => {
+    assert.equal(normalizeViewPrefs({ modelGroupMode: 'other' }).modelGroupMode, 'none');
+    assert.equal(normalizeViewPrefs({ modelGroupMode: '' }).modelGroupMode, 'none');
+    assert.equal(normalizeViewPrefs({ modelGroupMode: 1 }).modelGroupMode, 'none');
+    assert.equal(normalizeViewPrefs({ modelGroupMode: 'provider' }).modelGroupMode, 'provider');
+    assert.equal(normalizeViewPrefs({ modelGroupMode: 'model' }).modelGroupMode, 'model');
+    assert.equal(normalizeViewPrefs({ timeRange: '30' }).timeRange, '365d');
+    assert.equal(normalizeViewPrefs({ timeRange: 30 }).timeRange, '365d');
+    for (const range of ['7d', '14d', '30d', '90d', '180d', '365d', 'all']) {
+      assert.equal(normalizeViewPrefs({ timeRange: range }).timeRange, range);
+    }
+  });
+
+  it('normalizeViewPrefs：collapsed 丢弃未知 scope/mode、trim、去重并保留出现顺序', () => {
+    const normalized = normalizeViewPrefs({
+      collapsed: {
+        models: { provider: [' a ', 'a', '', '  ', 7, null, 'b', ' b ', 'c'], model: '不是数组', other: ['x'] },
+        dateDetail: { provider: ['x'], model: ['y'] },
+        sessionDetail: { provider: [], model: [] },
+        unknownScope: { provider: ['z'] },
+      },
+    });
+    assert.deepEqual(normalized.collapsed.models, { provider: ['a', 'b', 'c'], model: [] });
+    assert.deepEqual(normalized.collapsed.dateDetail, { provider: ['x'], model: ['y'] });
+    assert.deepEqual(normalized.collapsed.sessionDetail, { provider: [], model: [] });
+    assert.deepEqual(Object.keys(normalized.collapsed).sort(), ['dateDetail', 'models', 'sessionDetail']);
+    // collapsed 非对象整体按空；单个 scope 非对象同样按空。
+    assert.deepEqual(normalizeViewPrefs({ collapsed: 'x' }).collapsed, VIEW_PREFS_DEFAULTS.collapsed);
+    assert.deepEqual(normalizeViewPrefs({ collapsed: { models: 'x' } }).collapsed.models, { provider: [], model: [] });
+  });
+
+  it('normalizeViewPrefs：单个折叠数组最多 200 条（先 trim/去重再截断）', () => {
+    const many = Array.from({ length: 250 }, (_, index) => ' g' + index + ' ');
+    const keys = normalizeViewPrefs({ collapsed: { models: { provider: many } } }).collapsed.models.provider;
+    assert.equal(keys.length, 200, '超长折叠数组应截断到 200');
+    assert.equal(keys[0], 'g0');
+    assert.equal(keys[199], 'g199');
+    const duplicates = normalizeViewPrefs({ collapsed: { models: { provider: Array.from({ length: 250 }, () => 'same') } } });
+    assert.deepEqual(duplicates.collapsed.models.provider, ['same'], '重复键去重后不应占满上限');
+  });
+
+  it('readViewPrefs：无键、坏 JSON、非对象与存储抛错都回落默认值常量', () => {
+    assert.equal(readViewPrefs(), VIEW_PREFS_DEFAULTS);
+    assert.equal(readViewPrefs(fakeStorage({})), VIEW_PREFS_DEFAULTS);
+    assert.equal(readViewPrefs(fakeStorage({ [VIEW_PREFS_STORAGE_KEY]: '{oops' })), VIEW_PREFS_DEFAULTS);
+    assert.equal(readViewPrefs(fakeStorage({ [VIEW_PREFS_STORAGE_KEY]: 'null' })), VIEW_PREFS_DEFAULTS);
+    assert.equal(readViewPrefs(fakeStorage({ [VIEW_PREFS_STORAGE_KEY]: '[]' })), VIEW_PREFS_DEFAULTS);
+    assert.equal(readViewPrefs(fakeStorage({ [VIEW_PREFS_STORAGE_KEY]: '42' })), VIEW_PREFS_DEFAULTS);
+    assert.equal(readViewPrefs(fakeStorage({}, { getItemThrows: true })), VIEW_PREFS_DEFAULTS);
+  });
+
+  it('readViewPrefs：有效记录逐字段归一化读取', () => {
+    const storage = fakeStorage({
+      [VIEW_PREFS_STORAGE_KEY]: JSON.stringify({ version: 1, modelGroupMode: 'provider', timeRange: '30d' }),
+    });
+    const prefs = readViewPrefs(storage);
+    assert.equal(prefs.modelGroupMode, 'provider');
+    assert.equal(prefs.timeRange, '30d');
+    assert.deepEqual(prefs.collapsed, VIEW_PREFS_DEFAULTS.collapsed);
+  });
+
+  it('attachViewPrefs：读到存储值同步进快照并通知，detach 只解绑存储不清空内存', () => {
+    bind(fakeStorage({}));
+    assert.equal(viewPrefsSnapshot(), VIEW_PREFS_DEFAULTS);
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    const second = fakeStorage({
+      [VIEW_PREFS_STORAGE_KEY]: JSON.stringify({ version: 1, ...VIEW_PREFS_DEFAULTS, modelGroupMode: 'model' }),
+    });
+    const detachSecond = attachViewPrefs(second);
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'model', 'attach 读到不同值应同步快照');
+    assert.equal(notified, 1, 'attach 读到变化应通知订阅者');
+    detachSecond();
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'model', 'detach 不应清空内存快照');
+    unsubscribe();
+  });
+
+  it('setModelGroupMode/setTimeRange 把整份偏好写进假存储（version 与折叠状态一并落盘）', () => {
+    const storage = bind(fakeStorage({}));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    setModelGroupMode('provider');
+    setTimeRange('30d');
+    assert.equal(storage.writes.length, 2, '两次变化各写一次盘');
+    const payload = JSON.parse(storage.getItem(VIEW_PREFS_STORAGE_KEY));
+    assert.equal(payload.version, 1);
+    assert.equal(payload.modelGroupMode, 'provider');
+    assert.equal(payload.timeRange, '30d');
+    assert.deepEqual(payload.collapsed, VIEW_PREFS_DEFAULTS.collapsed);
+    assert.deepEqual(viewPrefsSnapshot(), { ...VIEW_PREFS_DEFAULTS, modelGroupMode: 'provider', timeRange: '30d' });
+    assert.equal(notified, 2);
+    unsubscribe();
+  });
+
+  it('订阅只在快照实际变化时通知（同值重复设置不通知）', () => {
+    bind(fakeStorage({}));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    setModelGroupMode('provider');
+    assert.equal(notified, 1);
+    setModelGroupMode('provider');
+    assert.equal(notified, 1, '同值不应重复通知');
+    setTimeRange('30d');
+    assert.equal(notified, 2);
+    setTimeRange('30d');
+    assert.equal(notified, 2, '同值不应重复通知');
+    unsubscribe();
+    setTimeRange('7d');
+    assert.equal(notified, 2, '退订后不再通知');
+  });
+
+  it('toggleGroupCollapsed：收起落盘、再点展开；key 先 trim、空串忽略', () => {
+    const storage = bind(fakeStorage({}));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    toggleGroupCollapsed('models', 'provider', '  alpha  ');
+    assert.deepEqual(viewPrefsSnapshot().collapsed.models.provider, ['alpha']);
+    assert.deepEqual(JSON.parse(storage.getItem(VIEW_PREFS_STORAGE_KEY)).collapsed.models.provider, ['alpha']);
+    assert.equal(storage.writes.length, 1);
+    toggleGroupCollapsed('models', 'provider', 'alpha');
+    assert.deepEqual(viewPrefsSnapshot().collapsed.models.provider, []);
+    assert.equal(storage.writes.length, 2);
+    toggleGroupCollapsed('models', 'provider', '   ');
+    assert.equal(storage.writes.length, 2, '空 key 不写盘');
+    assert.equal(notified, 2, '空 key 也不通知');
+    unsubscribe();
+  });
+
+  it('toggleGroupCollapsed：单个数组到 200 条后不再追加，已有键仍可移除', () => {
+    const full = Array.from({ length: 200 }, (_, index) => 'g' + index);
+    const storage = bind(fakeStorage({
+      [VIEW_PREFS_STORAGE_KEY]: JSON.stringify({
+        version: 1,
+        modelGroupMode: 'provider',
+        timeRange: '365d',
+        collapsed: { ...VIEW_PREFS_DEFAULTS.collapsed, models: { provider: full, model: [] } },
+      }),
+    }));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    toggleGroupCollapsed('models', 'provider', 'overflow');
+    assert.equal(viewPrefsSnapshot().collapsed.models.provider.length, 200);
+    assert.equal(storage.writes.length, 0, '达到上限后不再写盘');
+    assert.equal(notified, 0);
+    toggleGroupCollapsed('models', 'provider', ' g0 ');
+    assert.equal(viewPrefsSnapshot().collapsed.models.provider.length, 199);
+    assert.equal(viewPrefsSnapshot().collapsed.models.provider.includes('g0'), false);
+    assert.equal(storage.writes.length, 1, '展开已有键仍可落盘');
+    assert.equal(notified, 1);
+    unsubscribe();
+  });
+
+  it('pruneCollapsedGroups：只删死键并落盘，无死键不写不通知', () => {
+    const storage = bind(fakeStorage({}));
+    toggleGroupCollapsed('models', 'provider', 'a');
+    toggleGroupCollapsed('models', 'provider', 'b');
+    const writesAfterToggle = storage.writes.length;
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    pruneCollapsedGroups('models', 'provider', ['a']);
+    assert.deepEqual(viewPrefsSnapshot().collapsed.models.provider, ['a']);
+    assert.equal(storage.writes.length, writesAfterToggle + 1);
+    assert.equal(notified, 1);
+    const writesAfterPrune = storage.writes.length;
+    pruneCollapsedGroups('models', 'provider', ['a']);
+    assert.equal(storage.writes.length, writesAfterPrune, '没有死键不写盘');
+    assert.equal(notified, 1, '没有死键不通知');
+    pruneCollapsedGroups('models', 'provider', []);
+    assert.deepEqual(viewPrefsSnapshot().collapsed.models.provider, []);
+    assert.equal(storage.writes.length, writesAfterPrune + 1);
+    unsubscribe();
+  });
+
+  it('adoptLegacyViewPrefs：本地无显式值时种入合法字段并落盘', () => {
+    const storage = bind(fakeStorage({}));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    adoptLegacyViewPrefs({ modelGroupMode: 'provider', timeRange: '30d' });
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'provider');
+    assert.equal(viewPrefsSnapshot().timeRange, '30d');
+    assert.equal(notified, 1);
+    const payload = JSON.parse(storage.getItem(VIEW_PREFS_STORAGE_KEY));
+    assert.equal(payload.modelGroupMode, 'provider');
+    assert.equal(payload.timeRange, '30d');
+    unsubscribe();
+  });
+
+  it('adoptLegacyViewPrefs：存储已有显式记录时整体跳过', () => {
+    const existing = { version: 1, modelGroupMode: 'model', timeRange: '7d', collapsed: VIEW_PREFS_DEFAULTS.collapsed };
+    const storage = bind(fakeStorage({ [VIEW_PREFS_STORAGE_KEY]: JSON.stringify(existing) }));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    adoptLegacyViewPrefs({ modelGroupMode: 'provider', timeRange: '30d' });
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'model');
+    assert.equal(viewPrefsSnapshot().timeRange, '7d');
+    assert.equal(storage.writes.length, 0, '已有显式值不应被旧值覆盖');
+    assert.equal(notified, 0);
+    unsubscribe();
+  });
+
+  it('adoptLegacyViewPrefs：存储里有可解析对象（归一后等于默认）也算已有显式值', () => {
+    const storage = bind(fakeStorage({ [VIEW_PREFS_STORAGE_KEY]: '{}' }));
+    adoptLegacyViewPrefs({ modelGroupMode: 'provider', timeRange: '30d' });
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'none');
+    assert.equal(viewPrefsSnapshot().timeRange, '365d');
+    assert.equal(storage.writes.length, 0);
+  });
+
+  it('adoptLegacyViewPrefs：非法旧值与非法形状都不动作', () => {
+    const storage = bind(fakeStorage({}));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    for (const legacy of [null, [], 'x', 42, true, { modelGroupMode: 'bad', timeRange: '30' }]) {
+      adoptLegacyViewPrefs(legacy);
+    }
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'none');
+    assert.equal(viewPrefsSnapshot().timeRange, '365d');
+    assert.equal(storage.writes.length, 0);
+    assert.equal(notified, 0);
+    unsubscribe();
+  });
+
+  it('adoptLegacyViewPrefs：逐字段校验，只种入合法的那一项', () => {
+    const storage = bind(fakeStorage({}));
+    adoptLegacyViewPrefs({ modelGroupMode: 'bad', timeRange: '90d' });
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'none');
+    assert.equal(viewPrefsSnapshot().timeRange, '90d');
+    assert.equal(JSON.parse(storage.getItem(VIEW_PREFS_STORAGE_KEY)).timeRange, '90d');
+  });
+
+  it('adoptLegacyViewPrefs：本次会话已改过分组/范围时旧值不再覆盖', () => {
+    const storage = bind(fakeStorage({}));
+    setModelGroupMode('provider');
+    const writesAfterSet = storage.writes.length;
+    adoptLegacyViewPrefs({ timeRange: '7d' });
+    assert.equal(viewPrefsSnapshot().timeRange, '365d', '已有本次会话选择时旧范围不得覆盖');
+    assert.equal(storage.writes.length, writesAfterSet);
+  });
+
+  it('adoptLegacyViewPrefs：种入值等于当前快照时不写盘也不通知', () => {
+    const storage = bind(fakeStorage({}));
+    let notified = 0;
+    const unsubscribe = subscribeViewPrefs(() => { notified += 1; });
+    adoptLegacyViewPrefs({ modelGroupMode: 'none', timeRange: '365d' });
+    assert.equal(storage.writes.length, 0);
+    assert.equal(notified, 0);
+    unsubscribe();
+  });
+
+  it('存储抛错静默：getItem 抛错读默认值，setItem 抛错不影响内存快照', () => {
+    const readFail = fakeStorage({}, { getItemThrows: true });
+    const detachRead = attachViewPrefs(readFail);
+    assert.equal(viewPrefsSnapshot(), VIEW_PREFS_DEFAULTS);
+    setModelGroupMode('provider');
+    assert.equal(viewPrefsSnapshot().modelGroupMode, 'provider', '读不到存储时内存仍更新');
+    detachRead();
+    const writeFail = fakeStorage({}, { setItemThrows: true });
+    detachAttached = attachViewPrefs(writeFail);
+    setTimeRange('7d');
+    assert.equal(viewPrefsSnapshot().timeRange, '7d', '写失败不影响内存快照');
+    assert.equal(writeFail.writes.length, 0);
+    assert.equal(writeFail.has(VIEW_PREFS_STORAGE_KEY), false);
   });
 });
 
@@ -2438,24 +2778,24 @@ describe('偏好设置：乐观更新', () => {
     const { scope, inbox, accept, applyRemote } = deferredScope();
     attachUsageSettings(scope);
     const seen = [];
-    const unsubscribe = subscribeUsageSettings(() => { seen.push(usageSettingsView().settings.modelGroupMode); });
+    const unsubscribe = subscribeUsageSettings(() => { seen.push(usageSettingsView().settings.showSessionId); });
     try {
-      updateUsageSettings({ modelGroupMode: 'provider' });
+      updateUsageSettings({ showSessionId: false });
       // 当拍即新值：不等服务端往返；后台只收到一次写入。
-      assert.equal(usageSettingsView().settings.modelGroupMode, 'provider');
+      assert.equal(usageSettingsView().settings.showSessionId, false);
       assert.equal(inbox.length, 1);
-      assert.deepEqual(inbox[0].ops, [{ op: 'set', path: ['modelGroupMode'], value: 'provider' }]);
+      assert.deepEqual(inbox[0].ops, [{ op: 'set', path: ['showSessionId'], value: false }]);
       // mutate 尚在途中：服务端快照仍是旧值，全靠本地猜测撑住显示。
-      assert.equal(scope.getSnapshot().value.modelGroupMode, 'none');
-      assert.deepEqual(seen, ['provider']);
+      assert.equal(scope.getSnapshot().value.showSessionId, true);
+      assert.deepEqual(seen, [false]);
       // 服务端落定并推送：猜测与快照一致即消掉，显示保持新值且不再打扰界面。
       accept(0);
-      assert.equal(usageSettingsView().settings.modelGroupMode, 'provider');
+      assert.equal(usageSettingsView().settings.showSessionId, false);
       assert.equal(seen.length, 1);
       // 猜测已消：之后服务端从别处改了同一字段，显示跟服务端走。
-      applyRemote({ ...USAGE_SETTINGS_DEFAULTS, modelGroupMode: 'model' });
-      assert.equal(usageSettingsView().settings.modelGroupMode, 'model');
-      assert.deepEqual(seen, ['provider', 'model']);
+      applyRemote({ ...USAGE_SETTINGS_DEFAULTS, showSessionId: true });
+      assert.equal(usageSettingsView().settings.showSessionId, true);
+      assert.deepEqual(seen, [false, true]);
     } finally {
       unsubscribe();
     }
@@ -2468,12 +2808,12 @@ describe('偏好设置：乐观更新', () => {
     attachUsageSettings(scope);
     const unsubscribe = subscribeUsageSettings(() => {});
     try {
-      updateUsageSettings({ timeRange: '7d' });
-      assert.equal(usageSettingsView().settings.timeRange, '7d');
+      updateUsageSettings({ zaiFetchMinutes: 9 });
+      assert.equal(usageSettingsView().settings.zaiFetchMinutes, 9);
       inbox[0].reject(new Error('offline'));
       await tick();
-      assert.equal(usageSettingsView().settings.timeRange, '365d');
-      assert.equal(scope.getSnapshot().value.timeRange, '365d');
+      assert.equal(usageSettingsView().settings.zaiFetchMinutes, ZAI_FETCH_DEFAULT_MINUTES);
+      assert.equal(scope.getSnapshot().value.zaiFetchMinutes, ZAI_FETCH_DEFAULT_MINUTES);
     } finally {
       console.warn = realWarn;
       unsubscribe();
@@ -2487,18 +2827,18 @@ describe('偏好设置：乐观更新', () => {
     attachUsageSettings(scope);
     const unsubscribe = subscribeUsageSettings(() => {});
     try {
-      updateUsageSettings({ timeRange: '7d' });
-      updateUsageSettings({ timeRange: '30d' });
-      assert.equal(usageSettingsView().settings.timeRange, '30d');
+      updateUsageSettings({ zaiFetchMinutes: 9 });
+      updateUsageSettings({ zaiFetchMinutes: 11 });
+      assert.equal(usageSettingsView().settings.zaiFetchMinutes, 11);
       assert.equal(inbox.length, 2);
       // 第一笔被拒：本地已是第二笔的值，不回滚。
       inbox[0].reject(new Error('boom'));
       await tick();
-      assert.equal(usageSettingsView().settings.timeRange, '30d');
+      assert.equal(usageSettingsView().settings.zaiFetchMinutes, 11);
       // 第二笔落定：服务端确认后猜测消掉。
       accept(1);
-      assert.equal(usageSettingsView().settings.timeRange, '30d');
-      assert.equal(scope.getSnapshot().value.timeRange, '30d');
+      assert.equal(usageSettingsView().settings.zaiFetchMinutes, 11);
+      assert.equal(scope.getSnapshot().value.zaiFetchMinutes, 11);
     } finally {
       console.warn = realWarn;
       unsubscribe();

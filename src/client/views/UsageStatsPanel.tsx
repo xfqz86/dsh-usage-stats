@@ -1,6 +1,6 @@
 /**
  * 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，头部 + Tab 栏 + 内容区。
- * 模型表分组与模型页、日期页共用时间范围的选择落偏好设置、下次打开保持。
+ * 模型表分组与模型页、日期页共用时间范围的选择落浏览器本地视图偏好（useViewPrefs）、下次打开保持。
  *
  * 六个 Tab 各由独立文件承载（OverviewTab/DatesTab/SessionsTab/ModelsTab/SettingsTab/AboutTab），
  * 条件渲染：切走即卸载，Tab 内视图状态（日期曲线范围、会话展开等）不跨切换保留。
@@ -23,7 +23,9 @@ import { useState, useMemo, type ComponentType } from 'react';
 import { HintCard } from '../components/HintCard.tsx';
 import shared from '../components/UsageStatsCommon.module.css';
 import { useUpdateCheck } from '../hooks/useUpdateCheck.ts';
-import { redirectModels, type ModelGroupMode, type TimeRange } from '../stats.ts';
+import { useViewPrefs } from '../hooks/useViewPrefs.ts';
+import { redirectModels } from '../stats.ts';
+import { setModelGroupMode, setTimeRange } from '../viewPrefs.ts';
 
 import { AboutTab } from './about/AboutTab.tsx';
 import { DatesTab } from './dates/DatesTab.tsx';
@@ -114,6 +116,8 @@ export function UsageStatsPanel({
   t,
 }: UsageStatsPanelProps) {
   const [active, setActive] = useState<TabKey>('overview');
+  // 浏览习惯来自浏览器本地视图偏好：分组与时间范围三处模型表共用，改后写回本地并订阅刷新。
+  const viewPrefs = useViewPrefs();
   // 更新检查在面板层持有：关于页与 Tab 栏蓝点共用同一份状态，打开面板时自动查一次。
   const update = useUpdateCheck(open);
   const updateVersion = update.state.status === 'update' ? update.state.latest : null;
@@ -170,10 +174,10 @@ export function UsageStatsPanel({
           <DatesTab
             series={value.series.all}
             rules={settings.modelRedirects}
-            groupMode={settings.modelGroupMode}
-            onGroupModeChange={(m: ModelGroupMode) => onUpdateSettings({ modelGroupMode: m })}
-            range={settings.timeRange}
-            onRangeChange={(r: TimeRange) => onUpdateSettings({ timeRange: r })}
+            groupMode={viewPrefs.modelGroupMode}
+            onGroupModeChange={setModelGroupMode}
+            range={viewPrefs.timeRange}
+            onRangeChange={setTimeRange}
             t={t}
           />
         )}
@@ -181,8 +185,8 @@ export function UsageStatsPanel({
           <SessionsTab
             sessionsList={value.sessionsList}
             rules={settings.modelRedirects}
-            groupMode={settings.modelGroupMode}
-            onGroupModeChange={(m: ModelGroupMode) => onUpdateSettings({ modelGroupMode: m })}
+            groupMode={viewPrefs.modelGroupMode}
+            onGroupModeChange={setModelGroupMode}
             t={t}
           />
         )}
@@ -190,10 +194,10 @@ export function UsageStatsPanel({
           <ModelsTab
             models={redirect.models}
             mergedSources={redirect.mergedSources}
-            groupMode={settings.modelGroupMode}
-            onGroupModeChange={(m: ModelGroupMode) => onUpdateSettings({ modelGroupMode: m })}
-            range={settings.timeRange}
-            onRangeChange={(r: TimeRange) => onUpdateSettings({ timeRange: r })}
+            groupMode={viewPrefs.modelGroupMode}
+            onGroupModeChange={setModelGroupMode}
+            range={viewPrefs.timeRange}
+            onRangeChange={setTimeRange}
             t={t}
           />
         )}

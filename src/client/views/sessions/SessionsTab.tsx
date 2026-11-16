@@ -1,6 +1,6 @@
 /**
  * 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开；
- * 明细里模型表分组的选择落偏好设置、下次打开保持。
+ * 明细里模型表分组的选择落浏览器本地视图偏好、下次打开保持。
  * 展示快照下发的会话（最多 SNAPSHOT_LIMIT 条，默认按最近活跃倒序）。
  * 独立成文件，一个组件一个文件。
  * 列顺序：会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃 | 明细；
@@ -36,9 +36,9 @@ export function SessionsTab({
   sessionsList: SessionStat[]
   /** 模型统计重定向规则，透传给会话明细弹窗的按模型子视图。 */
   rules: readonly ModelRedirect[]
-  /** 模型表分组模式，来自偏好设置，三处模型表共用。 */
+  /** 模型表分组模式，来自浏览器本地视图偏好，三处模型表共用。 */
   groupMode: ModelGroupMode
-  /** 分组模式切换，写回偏好设置。 */
+  /** 分组模式切换，写回浏览器本地视图偏好。 */
   onGroupModeChange: (m: ModelGroupMode) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {

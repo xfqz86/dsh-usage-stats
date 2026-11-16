@@ -1,7 +1,7 @@
 /**
  * 会话明细弹窗（SessionDetail）：会话页主会话行末尾的「明细」链接打开的二级弹窗，
  * 含标题（会话标题 + 合计）、按日期 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮，
- * 按模型分组的选择落偏好设置、下次打开保持。
+ * 按模型分组的选择落浏览器本地视图偏好、下次打开保持。
  *
  * chrome 与模型/日期明细同一套（UsageStatsCommon 的 detail* 类）：用 headless Modal 自建，
  * 基座 Modal 自带层级栈（只给最上层 Escape 与焦点、点遮罩关自己），叠在详情面板之上时
@@ -44,9 +44,9 @@ export function SessionDetail({
   title: string
   /** 模型统计重定向规则，只作用于按模型子视图。 */
   rules: readonly ModelRedirect[]
-  /** 模型表分组模式，来自偏好设置，三处模型表共用。 */
+  /** 模型表分组模式，来自浏览器本地视图偏好，三处模型表共用。 */
   groupMode: ModelGroupMode
-  /** 分组模式切换，写回偏好设置。 */
+  /** 分组模式切换，写回浏览器本地视图偏好。 */
   onGroupModeChange: (m: ModelGroupMode) => void
   state: SessionDetailState
   onClose: () => void

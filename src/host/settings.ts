@@ -9,6 +9,9 @@
  *
  * 旧设置文档（`$DSH_HOME/settings.yaml.imported`）里本插件那段的回收见
  * {@link recoverLegacyUsageSettings}。
+ *
+ * 模型表分组、时间范围与分组折叠这类浏览习惯存浏览器端（src/client/viewPrefs.ts），
+ * 不进本 schema，也不进 profile 配置文档。
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -64,10 +67,6 @@ export const UsageSettingsSchema = Schema.object({
     toProvider: Schema.string().default(''),
     toModel: Schema.string().default(''),
   })).default([]).volatile(),
-  // 模型表分组记忆：三处模型表共用同一分组选择。
-  modelGroupMode: Schema.string().default(USAGE_SETTINGS_DEFAULTS.modelGroupMode).volatile(),
-  // 时间范围记忆：模型页与日期页共用同一选择。
-  timeRange: Schema.string().default(USAGE_SETTINGS_DEFAULTS.timeRange).volatile(),
 });
 
 /** 废弃的用户设置文档文件名（旧版本偏好所在），回收只读它的 .imported 遗留副本。 */

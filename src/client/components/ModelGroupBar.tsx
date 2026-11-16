@@ -1,5 +1,7 @@
 /**
  * 模型表分组切换条：不分组 / 按厂商 / 按模型三段 chips。
+ *
+ * 选择由调用方写回浏览器本地视图偏好（src/client/viewPrefs.ts），本组件只负责展示与回调。
  */
 
 import shared from './UsageStatsCommon.module.css';

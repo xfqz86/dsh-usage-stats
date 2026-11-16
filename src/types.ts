@@ -383,8 +383,4 @@ export interface UsageSettings {
    * 由浏览器端在模型页与日期、会话明细的按模型表归并，见 `src/client/stats.ts` 的 redirectModels。
    */
   modelRedirects: ModelRedirect[]
-  /** 模型表分组记忆：三处模型表（模型页与日期、会话明细）共用同一分组选择。 */
-  modelGroupMode: ModelGroupMode
-  /** 时间范围记忆：模型页与日期页共用同一选择。 */
-  timeRange: TimeRange
 }

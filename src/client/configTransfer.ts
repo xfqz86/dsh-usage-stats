@@ -3,8 +3,10 @@
  *
  * 纯浏览器端能力——不新增 Remote 方法、不走线路、不落账本；写入落点由
  * settings.ts 的整份替换负责，界面接线在设置 Tab 的配置迁移区。载荷格式与
- * 失败语义的唯一权威是 docs/API.md §5.1。编解码只用 TextEncoder/TextDecoder
- * 与 btoa/atob（浏览器与 Node 22 都有），不引 Buffer，两个运行时都能直跑。
+ * 失败语义的唯一权威是 docs/API.md §5.1。视图偏好（分组、时间范围与折叠状态）
+ * 属于单浏览器的看表习惯，不进配置串，见 src/client/viewPrefs.ts。
+ * 编解码只用 TextEncoder/TextDecoder 与 btoa/atob（浏览器与 Node 22 都有），
+ * 不引 Buffer，两个运行时都能直跑。
  *
  * 纯逻辑模块，无 React，可单测。
  */

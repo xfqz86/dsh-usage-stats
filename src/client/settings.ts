@@ -1,7 +1,7 @@
 /**
- * 浏览器端插件偏好存储：绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
+ * 浏览器端插件偏好存储：配置类偏好绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
  *
- * 偏好的事实来源是 profile 配置文档，浏览器端只是它的一个视图：`apply` 时经
+ * 配置类偏好的事实来源是 profile 配置文档，浏览器端只是它的一个视图：`apply` 时经
  * `ctx.configForms.get` 取到本条目的表单（attachUsageSettings），组件经
  * subscribeUsageSettings 订阅、经 updateUsageSettings 路径写入显式改过的字段
  * （未改的字段继续跟随 schema 默认值）；取值经 normalizeUsageSettings 归一化并夹取，
@@ -11,8 +11,9 @@
  *
  * 配置串导入走整份覆盖（replaceUsageSettings）：与默认值相等的字段 unset，其余逐字段 set。
  *
- * 旧版本把偏好存在 localStorage，本模块保留一次性迁移：表单就绪、可写、用户片段不存在时，
- * 把与默认值不同的旧字段写进配置文档并删除旧键；没有可靠落点时保留旧键。
+ * 旧版本把偏好存在 localStorage，本模块保留一次性迁移：旧键里的模型分组与时间范围先种进
+ * 浏览器本地视图偏好（adoptLegacyViewPrefs，见 viewPrefs.ts），其余与默认值不同的旧字段
+ * 在表单就绪、可写、用户片段不存在时写进配置文档并删除旧键；没有可靠落点时保留旧键。
  *
  * 纯逻辑模块，无 React，可单测；React 绑定在 useUsageSettings.ts。
  */
@@ -26,6 +27,8 @@ import {
   settingsValueEqual,
   USAGE_SETTINGS_DEFAULTS,
 } from '../utils.ts';
+
+import { adoptLegacyViewPrefs } from './viewPrefs.ts';
 
 import type { UsageSettings } from '../types.ts';
 import type { SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client';
@@ -105,6 +108,17 @@ export function readLegacySettings(storage?: Pick<Storage, 'getItem'>): UsageSet
     return normalizeUsageSettings(JSON.parse(raw) as Partial<UsageSettings>);
   } catch {
     return null;
+  }
+}
+
+/** 旧键的原始解析值：adoptLegacyViewPrefs 从中挑模型分组与时间范围；无键或坏 JSON 时返回 undefined。 */
+function readLegacySettingsRaw(storage?: Pick<Storage, 'getItem'>): unknown {
+  try {
+    const store = storage ?? (typeof window === 'undefined' ? undefined : window.localStorage);
+    const raw = store?.getItem(LEGACY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -205,6 +219,9 @@ export async function migrateLegacySettings(
   storage?: Pick<Storage, 'getItem' | 'removeItem'>,
   timeoutMs = 10_000,
 ): Promise<boolean> {
+  // 旧键里还带着上一版的模型分组与时间范围（现在属于浏览器本地视图偏好）：先种进去，
+  // 本地已有显式值时 adopt 自己跳过，再按原流程迁移其余配置类字段。
+  adoptLegacyViewPrefs(readLegacySettingsRaw(storage));
   const legacy = readLegacySettings(storage);
   if (legacy === null) return false;
   const snapshot = await settleUsageSettings(bound, timeoutMs);

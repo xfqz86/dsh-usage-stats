@@ -1,7 +1,7 @@
 /**
  * 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐——
  * 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比，
- * 分组选择落偏好设置、下次打开保持。
+ * 分组选择与组折叠状态落浏览器本地视图偏好、刷新保持。
  * 默认按「总计」降序、可排序、每页 15 条；占比以集合这张表的总和为分母，
  * 用 stats.largestRemainderPcts 配分（与模型页同一口径，1 位小数总和恰为 100）。
  * 另支持按供应商 / 模型名分组：同名模型跨厂商合并一行，默认不分组、分组后默认全展开。
@@ -54,9 +54,9 @@ export function SessionDetailModels({
   models: ModelStat[]
   /** 目标行键（`provider\0model`）→ 并进来的来源键，未配重定向时为空（模型页同一份）。 */
   mergedSources: ReadonlyMap<string, string[]>
-  /** 模型表分组模式，来自偏好设置，三处模型表共用。 */
+  /** 模型表分组模式，来自浏览器本地视图偏好，三处模型表共用。 */
   groupMode: ModelGroupMode
-  /** 分组模式切换，写回偏好设置。 */
+  /** 分组模式切换，写回浏览器本地视图偏好。 */
   onGroupModeChange: (m: ModelGroupMode) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
@@ -66,7 +66,7 @@ export function SessionDetailModels({
   // 占比随行：配分收拢进 stats.withModelShares（与模型页同一口径）；分母为 0 时整列 0
   const withShares = useMemo(() => withModelShares(models), [models]);
 
-  // 分组模式来自偏好设置；provider 按供应商归组，model 按模型名归组（同名跨厂商合并）
+  // 分组模式来自浏览器本地视图偏好；provider 按供应商归组，model 按模型名归组（同名跨厂商合并）
   const groups = useMemo(
     () => (groupMode === 'none' ? [] : groupModels(withShares, groupMode)),
     [withShares, groupMode],
@@ -85,8 +85,8 @@ export function SessionDetailModels({
     setPage(1);
   }, [groupMode, setPage]);
 
-  // 折叠态：默认全展开（明细行数少，一眼看全优于逐个点开）
-  const { isExpanded, toggle } = useCollapsedGroups(groups.map((g) => g.key));
+  // 折叠态：存浏览器本地视图偏好，默认全展开（明细行数少，一眼看全优于逐个点开），按组键记忆
+  const { isExpanded, toggle } = useCollapsedGroups('sessionDetail', groupMode, groups.map((g) => g.key));
 
   // 不分组排序：比较函数收拢进 stats（与模型页同一列同一比较，分页前执行）
   const sortedModels = useMemo(() => stableSort(withShares, (a, b) => compareModelRow(sortKey, a, b), sortDir), [withShares, sortKey, sortDir]);

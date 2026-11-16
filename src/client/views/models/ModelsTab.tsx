@@ -1,6 +1,6 @@
 /**
  * 模型 Tab：模型/Provider 拆分表 + 顶部饼图与堆叠柱 + 靠右的时间范围筛选（默认 1 年）。
- * 分组与时间范围的选择落偏好设置、下次打开保持。
+ * 分组、时间范围与组折叠状态落浏览器本地视图偏好（src/client/viewPrefs.ts）、刷新保持。
  * 分组栏在不分组 / 按供应商 / 按同名模型三种模式间切换，默认不分组，分组默认全部展开。
  * 过滤基于模型的按日 series，图表与表格共用同一过滤后切片；表头可排序，分页 20/页。
  *
@@ -54,13 +54,13 @@ export function ModelsTab({
   models: ModelStat[]
   /** 归并来源：目标行键（`provider\0model`）→ 并进来的来源键，未配重定向时为空。 */
   mergedSources?: ReadonlyMap<string, string[]>
-  /** 模型表分组模式，来自偏好设置，三处模型表共用。 */
+  /** 模型表分组模式，来自浏览器本地视图偏好，三处模型表共用。 */
   groupMode: ModelGroupMode
-  /** 分组模式切换，写回偏好设置。 */
+  /** 分组模式切换，写回浏览器本地视图偏好。 */
   onGroupModeChange: (m: ModelGroupMode) => void
-  /** 时间范围，来自偏好设置，模型页与日期页共用。 */
+  /** 时间范围，来自浏览器本地视图偏好，模型页与日期页共用。 */
   range: TimeRange
-  /** 时间范围切换，写回偏好设置。 */
+  /** 时间范围切换，写回浏览器本地视图偏好。 */
   onRangeChange: (r: TimeRange) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
@@ -90,8 +90,8 @@ export function ModelsTab({
     setPage(1);
   }, [range, groupMode, setPage]);
 
-  // 分组折叠态：默认全部展开，key 为组键（供应商名或模型名）
-  const { isExpanded, toggle } = useCollapsedGroups(groups.map((g) => g.key));
+  // 分组折叠态：存浏览器本地视图偏好，默认全部展开，key 为组键（供应商名或模型名）
+  const { isExpanded, toggle } = useCollapsedGroups('models', groupMode, groups.map((g) => g.key));
 
   // 明细弹窗当前打开的行键（`provider\0model`），null 表示没有打开
   const [detailKey, setDetailKey] = useState<string | null>(null);

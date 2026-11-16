@@ -25,7 +25,7 @@
  *   - 压缩调用计入回归（独立 DSH_HOME）：compaction/summary 的用量计入总量与模型拆分，
  *     缺 usage / 零用量不入账，实时路径同样接纳；
  *   - 偏好设置条目接入与落盘（独立 DSH_HOME，真实 app-boot Loader + ConfigEditor/SettingsForms）：
- *     describe 列出该命名空间且解析值为默认值、schema 可 JSON 序列化；浏览器端 settings.mutate
+ *     describe 列出该命名空间且解析值为默认值、不含视图偏好字段、schema 可 JSON 序列化；浏览器端 settings.mutate
  *     只把显式改过的字段写进 profile 补丁文档，规则表整表落成 YAML 列表并原样读回；
  *   - 旧设置文档迁移两路（flow 风格真实片段）：基座自动导入尚存的 settings.yaml；基座导入失败后
  *     的现场（只剩 settings.yaml.imported）由插件回收，两路都只写与默认值不同的字段；回收只跑一次，
@@ -1250,10 +1250,11 @@ await mounted.dispose()
 }
 
 // ===== 偏好设置：条目接入、落盘与旧设置文档迁移（独立 DSH_HOME，不触碰上面的 394 基线）=====
-// 偏好设置不存 localStorage、不注册独立命名空间：条目自己声明 Config
+// 配置类偏好不存 localStorage、不注册独立命名空间：条目自己声明 Config
 // schema（src/host/settings.ts 的 UsageSettingsSchema），harness 设置服务把它
 // 投影成设置表单，浏览器端经 ctx.configForms 按条目 id 读写，改动落到 profile
-// 补丁文档。
+// 补丁文档。纯浏览习惯（模型分组、时间范围、分组折叠）不进配置文档与配置串，
+// 存浏览器 localStorage（src/client/viewPrefs.ts），下面的用例不覆盖它们。
 // 四个用例都走真实链路（app-boot Loader + ConfigEditor + SettingsForms）。
 
 /** 旧版设置文档里的 `usage-stats` 段：从本机真实 settings.yaml.imported 裁剪而来（flow 风格、未加引号），回收必须能吃下这种写法。 */
@@ -1372,6 +1373,13 @@ const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b)
   for (const [field, expected] of Object.entries(USAGE_SETTINGS_DEFAULTS)) {
     if (!sameValue(entry.value[field], expected)) {
       console.error(`FAIL: 默认值不一致 ${field}=${JSON.stringify(entry.value[field])}，应为 ${JSON.stringify(expected)}`)
+      process.exit(1)
+    }
+  }
+  // 视图偏好（分组/时间范围/折叠）只存浏览器本地：配置条目的解析值不应再有这两个字段。
+  for (const absent of ['modelGroupMode', 'timeRange']) {
+    if (Object.prototype.hasOwnProperty.call(entry.value, absent)) {
+      console.error(`FAIL: 条目解析值不应包含视图偏好字段 ${absent}，实际 ${JSON.stringify(entry.value[absent])}`)
       process.exit(1)
     }
   }

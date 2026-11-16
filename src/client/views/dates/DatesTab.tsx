@@ -1,6 +1,6 @@
 /**
  * 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
- * 明细里模型表分组与时间范围（与模型页共用）的选择落偏好设置、下次打开保持。
+ * 明细里模型表分组与时间范围（与模型页共用）的选择落浏览器本地视图偏好、下次打开保持。
  * 顶部为按输入、输出、缓存三段堆叠的每日柱状图并叠加缓存命中率折线，使用 StackedBar mode="date" 横向滚动；
  * 柱高仅按展示三段求和（不含缓存写入与推理），tooltip 与表格的 total 仍为全口径 dayTotal；
  * 中间为靠右的范围 chips，含 7d、14d、30d、90d、180d、365d 与全部，默认1年，位于图表与表格之间；
@@ -51,13 +51,13 @@ export function DatesTab({
   series: SeriesPoint[]
   /** 模型统计重定向规则，原样转给日期明细的按模型标签；服务端明细始终是原始行，归并只在浏览器端做。 */
   rules: readonly ModelRedirect[]
-  /** 模型表分组模式，来自偏好设置，三处模型表共用。 */
+  /** 模型表分组模式，来自浏览器本地视图偏好，三处模型表共用。 */
   groupMode: ModelGroupMode
-  /** 分组模式切换，写回偏好设置。 */
+  /** 分组模式切换，写回浏览器本地视图偏好。 */
   onGroupModeChange: (m: ModelGroupMode) => void
-  /** 时间范围，来自偏好设置，模型页与日期页共用。 */
+  /** 时间范围，来自浏览器本地视图偏好，模型页与日期页共用。 */
   range: TimeRange
-  /** 时间范围切换，写回偏好设置。 */
+  /** 时间范围切换，写回浏览器本地视图偏好。 */
   onRangeChange: (r: TimeRange) => void
   t: PropsLocale<'dsh-usage-stats'>['t']
 }) {
