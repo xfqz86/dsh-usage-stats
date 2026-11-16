@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-16
+
 ### 修复
 
 - 插件市场不再把本插件标成只支持 DSH 0.2.0-rc.2：0.1.7-alpha.1 到 0.2.x 的 dsh 都可正常安装，不再提示不兼容
@@ -220,7 +222,8 @@
 - 首次启动自动统计全部历史会话，之后实时增量，重启不丢数据
 - OpenCode Go 额度：滚动 5 小时 / 本周 / 本月三档剩余额度，偏好支持总开关与抓取间隔
 
-[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/xfqz86/dsh-usage-stats/compare/v0.5.0...v0.5.1
