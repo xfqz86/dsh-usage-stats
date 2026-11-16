@@ -8,7 +8,7 @@ harness 每个包已导出完整精确的类型（`Context`/`ClientContext`/`Ses
 
 依赖声明（`package.json` 三段，版本以它为准、文档不抄写；`import type` 打包时剥离）：
 - `dependencies`：随包安装的第三方运行时库（`@deepseek-ai/schemastery`、旧设置文档回收用的 `yaml`、基座路径解析用的 `dsh-home-paths`）。
-- `peerDependencies`：由 dsh 安装包提供的框架单例（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/dsh-credentials`），不随包安装，`devDependencies` 内必须镜像同 range。
+- `peerDependencies`：由 dsh 安装包提供的框架单例（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/dsh-credentials`），不随包安装，`devDependencies` 内镜像同 range（例外：`dsh-credentials` / `dsh-typert-protocol` 的 peer 承担跨版本兼容声明，dev 固定当前宿主版本）。
 - `devDependencies`：其余（构建/测试/纯类型）全进这里，直接安装、无 `paths` 映射。
 
 值导入（`tsdown` host 侧 `neverBundle` 不打包）运行时解析：`dependencies` 走随包安装的副本，`peerDependencies` 走安装包单例；服务端除声明过的依赖外只引 Node 内置与本地模块，浏览器端只 `require` 冻结表模块（`react` 系 + `cordis` + `slots/primitives/dockkit/store`）；Client 贡献内联的 `zod` 构建期来自 dev、随浏览器 bundle 打包。
@@ -46,7 +46,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
 
 ## 3. 代码规范
 - **不使用 `any`**；`ctx` 用 harness 类型，业务数据用明确接口；类型仅定义 harness 未提供的（如 `UsageSnapshot`）。
-- **风格与检查**：遵循 **Google TypeScript Style Guide**；`eslint.config.mjs`（flat config，`eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic`，分 `host/client/scripts` 三类 overrides）为唯一事实来源；新增代码须 `npx eslint .` 零 `errors`。
+- **风格与检查**：遵循 **Google TypeScript Style Guide**；`eslint.config.mjs`（flat config，`eslint 10 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic`，分 `host/client/scripts` 三类 overrides）为唯一事实来源；新增代码须 `npx eslint .` 零 `errors`。
 - 文件归属：纯逻辑置于无 React 模块（`src/utils.ts`/`src/host/agg.ts`/`src/client/stats.ts`）便于测试；**tsx 一组件一文件**；**协议类型集中 `src/types.ts`**（零运行时，host/client 各自 re-export），`src/utils.ts` 仅纯函数与共享常量；可复用通用组件归 `src/client/components`；可复用 hook 归 `src/client/hooks/use*.ts`；`src/client/views` 根只放插槽入口壳，Tab 级视图与其专属子视图按 Tab 分目录（`views/<tab>/`）。
 - **样式用 CSS Modules**（`*.module.css` + `import css`），与 `ui-sidebar/primitives` 一致；界面静态颜色优先 `var(--dsw-alias-*)`，固定语义的静态色/阴影用 `--dsw-static-*`/`--dsw-shadow-*`；不新增自定义属性兜底（见 `docs/STYLE.md` §8）；图表数据驱动调色板（`MODEL_PALETTE`/`DATE_TOKEN_META`/`HIT_RATE_COLOR`，集中定义于 `src/client/stats.ts`，`fill` 属性不解析 `var()`）是数据色豁免；禁止字符串 CSS（编译内联机制见 `docs/ARCHITECTURE.md` §6）。
 - **注释中文**，标识符/类型/错误消息英文；文档中文。
