@@ -1,7 +1,7 @@
 # Remote API 与运行时协议（API.md）
 
 > 本文件是 `usageStats` 命名空间 Remote **线路协议**与**偏好设置协议**的唯一权威：方法表、
-> 请求/响应、状态语义、TTL 与缓存、偏好字段与配置串格式。类型单一事实来源是 `src/types.ts`，
+> 请求/响应、状态语义、TTL 与缓存、偏好字段、视图偏好与配置串格式。类型单一事实来源是 `src/types.ts`，
 > Client 严格编解码在 `src/remote/contribution.ts`；运行机制见 `docs/ARCHITECTURE.md`。
 
 ## 1. 通用约定
@@ -155,11 +155,11 @@
   预统计，通常无需手动调用。**写操作并发**：
   `rebuild`/`clear`/`seal` 在扫描或重建进行中一律 `usageStats/busy` 拒绝（`details.operation` 为方法名）。
 
-## 5. 偏好设置（`usage-stats` 插件条目）
+## 5. 偏好设置（`usage-stats` 条目与浏览器端视图）
 
-偏好命名空间就是本插件的 profile 条目 id（`cordis.patch.yml` 的 `usage-stats` 行），也是浏览器端取设置表单的键。
+配置类偏好的命名空间就是本插件的 profile 条目 id（`cordis.patch.yml` 的 `usage-stats` 行），也是浏览器端取设置表单的键。
 
-- **事实来源**：该条目的 Config 在服务端 profile 配置文档里的片段——偏好属部署而非某个浏览器；文档只存显式改过的字段，其余按 schema 默认值解析。偏好不落账本（账本只记用量）。
+- **事实来源**：该条目的 Config 在服务端 profile 配置文档里的片段——配置类偏好属部署而非某个浏览器；文档只存显式改过的字段，其余按 schema 默认值解析。模型分组、时间范围与分组折叠是纯浏览习惯，另存浏览器存储（§5.2），不进这里。偏好不落账本（账本只记用量）。
 - **服务端**：`src/host/settings.ts` 的 `UsageSettingsSchema` 由 `UsageStatsService.Config` 声明，harness
   设置服务（`ctx.settings`）据此投影成设置表单。**每个字段必须标 `.volatile()`**：volatile 字段才被投影、
   才接受写入；条目没声明 schema 时该命名空间不出现，浏览器端只显示默认值、写入被丢弃（设置页提示改动不会保存）。
@@ -177,8 +177,6 @@
   | `showSessionId` | `true` | 会话标题右侧 session-id 徽标开关：关闭后 `conversation.session.header.utilities` 的徽标 entry 渲染空 |
   | `modelSpeedEnabled` | `true` | 输入区状态行的模型速度读数开关，门控与口径见 `docs/ARCHITECTURE.md` §7 |
   | `modelRedirects` | `[]` | 模型统计重定向规则表，见下 |
-  | `modelGroupMode` | `'none'` | 模型表分组记忆，三处模型表共用同一选择；只收三值之一，非法回落 `'none'` |
-  | `timeRange` | `'365d'` | 时间范围记忆，模型页与日期页共用同一选择；只收七值之一，非法回落 `'365d'` |
 
 - **模型统计重定向**（浏览器端归并，服务端快照与各明细保持原始行）：模型页、日期明细与会话明细的「按模型」
   三处共用 `src/client/stats.ts` 的 `redirectModels`。匹配按 `provider + model` 精确比较（trim 后、区分
@@ -189,11 +187,12 @@
   截断到上限；自动完成候选由快照 `models` 经 `modelCatalog` 建表，来源侧排除其他行已配过的组合（`unusedRedirectSources`）。
 
 - **读取路径**：表单快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔、间隔只收有限数并夹取、规则表
-  按 `normalizeModelRedirects` 清洗、分组只收三值范围只收七值否则回默认值）→ 缺字段回退默认值；表单未就绪同样回退默认值。读不到或写不了配置文档
+  按 `normalizeModelRedirects` 清洗）→ 缺字段回退默认值；表单未就绪同样回退默认值。读不到或写不了配置文档
   时，设置页在表格上方挂状态提示卡。
 - **旧版 localStorage 迁移**（key `dsh-usage-stats.settings`，升级后首次挂载一次性）：等表单落定；就绪可写且
   条目尚无用户片段时把与默认值不同的字段写入文档并删除旧键，已有用户片段时只删旧键；服务端设置缺席或只读时
-  **保留**旧键（没有可靠落点，删掉等于丢设置）。
+  **保留**旧键（没有可靠落点，删掉等于丢设置）。旧键里的模型分组与时间范围属视图偏好，只种入 §5.2 的
+  浏览器存储、不写入配置文档。
 - **旧版 `settings.yaml` 命名空间迁移**（两路，都只写与默认值不同的字段、都经 `normalizeUsageSettings` 归一化）：
   1. **基座自动导入**：升级到 0.1.7 基座时把 `$DSH_HOME/settings.yaml` 的同名段导入 profile 条目（文档改名
      `settings.yaml.imported`）；插件此刻已声明 Config schema，旧偏好继续生效。
@@ -208,9 +207,9 @@
 
 ### 5.1 配置串（导出 / 导入）
 
-- **目的与边界**：把整份偏好搬走再搬回（换机器、备份）。纯浏览器端能力——**不新增 Remote 方法**、不走线路、不落
-  账本，落点仍是同一个 profile 条目；实现见 `src/client/configTransfer.ts`（编解码）与 `src/client/settings.ts`
-  （`replacementOps` / `replaceUsageSettings`）。
+- **目的与边界**：把整份偏好搬走再搬回（换机器、备份），**载荷只含服务端偏好**、视图偏好（§5.2）不参与。
+  纯浏览器端能力——**不新增 Remote 方法**、不走线路、不落账本，落点仍是同一个 profile 条目；实现见
+  `src/client/configTransfer.ts`（编解码）与 `src/client/settings.ts`（`replacementOps` / `replaceUsageSettings`）。
 - **形态**：载荷 JSON `{ format: 'dsh-usage-stats', version: 1, exportedAt: <ISO>, settings: <整份偏好> }` →
   UTF-8 → 标准 Base64（带填充）单行文本；`settings` 经 `normalizeUsageSettings` 归一化（含默认值字段），
   「导出 → 导入」逐字段还原；`exportedAt` 只作诊断，非字符串按 `null`。
@@ -220,6 +219,38 @@
 - **导入语义**：**整份覆盖**——与默认值相同的字段发 `unset`（继续跟随 schema 默认值），不同的发 `set`（间隔
   字段夹到下限 3），一次 `mutate` 提交；写入守卫同单字段（表单不可用或只读时不写入，导出只读）。覆盖后字段
   全为默认值时条目用户片段整段消失——那只是配置覆盖层，装载记录在 profile 的 `package.json`，插件照旧加载。
+
+### 5.2 浏览器端视图偏好（localStorage）
+
+- **范围与共用**：模型表分组模式、时间范围与分组折叠状态是纯浏览习惯——只影响当前浏览器、不同步设备，刷新后
+  保持；分组模式由三处模型表共用同一选择，时间范围由模型页与日期页共用同一选择。不进 profile 配置文档，也不进
+  §5.1 配置串。
+- **键与结构**：`dsh-usage-stats.view`，值为 JSON：
+
+  ```json
+  {
+    "version": 1,
+    "modelGroupMode": "none",
+    "timeRange": "365d",
+    "collapsed": {
+      "models": { "provider": [], "model": [] },
+      "dateDetail": { "provider": [], "model": [] },
+      "sessionDetail": { "provider": [], "model": [] }
+    }
+  }
+  ```
+
+  `modelGroupMode` 取 `'none'|'provider'|'model'`，`timeRange` 取
+  `'7d'|'14d'|'30d'|'90d'|'180d'|'365d'|'all'`。
+- **默认值**：`modelGroupMode` 为 `'none'`、`timeRange` 为 `'365d'`、折叠全空（全部展开）。
+- **归一化**：键/字段缺失、JSON 非法或取值不在枚举内，逐字段回落默认值；`collapsed` 逐 scope 只留字符串、
+  去重，上限 200。
+- **失败静默**：存储不可用（如隐私模式）时不报错、不提示，偏好只在本次会话内生效。
+- **折叠 scope**：模型 Tab、日期明细、会话明细三处按各自模型表分开记（scope 隔离），同一处再按分组模式
+  （`provider`/`model`）分开记；新出现的组为展开，用户收起的组刷新后仍收起。
+- **旧值兼容**：旧版本留在 profile 配置文档里的 `modelGroupMode` 与 `timeRange` 不再生效、不写回配置，也
+  不种入本地存储（schema 已不声明，设置表单投影后的值读不到）——升级后这两项按默认值重新记；旧 localStorage
+  键 `dsh-usage-stats.settings` 里的这两项仍在首次挂载时种入本地存储（本地已有显式值时不覆盖）。
 
 ## 6. usageStats/checkUpdate
 
