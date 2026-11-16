@@ -1,6 +1,6 @@
 {
   "name": "@xfqz86/dsh-usage-stats",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "DSH web plugin: token usage stats in the sidebar footer — today badge opening a tabbed panel (overview, daily trend + heatmap, per-model and per-session breakdowns with drill-down) plus DeepSeek / OpenCode Go / Z.ai quota monitoring; per-session TTFT/ATPS readings in the composer",
   "icon": "icon.svg",
   "type": "module",
@@ -49,7 +49,7 @@
     "url": "git+https://github.com/xfqz86/dsh-usage-stats.git"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-home-paths": "0.2.0-rc.2",
+    "@deepseek-ai/dsh-home-paths": "0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2 || >=0.2.0-rc.1 <0.3.0-0",
     "@deepseek-ai/schemastery": "3.18.3",
     "yaml": "^2.9.0"
   },
