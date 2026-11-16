@@ -9,6 +9,7 @@
  *   重命名参数会让请求被判 gateway/arguments-invalid 拒收（回归见 test/smoke.mjs）。
  * - client 端 `externals` 是浏览器 shell 的冻结模块表（react 系 + cordis + store / slots /
  *   primitives / dockkit），其余全部内联；生产构建压缩且无 sourcemap。
+ * - client 端样式的两条交付（自注入 + `meta().stylesheets`）见 docs/ARCHITECTURE.md §6。
  * - 「关于」页品牌图标经 `*.svg?raw` 在构建期内联包根 icon.svg（scripts/svg-raw.mjs），
  *   与插件列表共用同一文件，不手写第二份图形。
  * - 装饰器降级：@Remote 等标准装饰器经 decoratorLowering()（TypeScript transpileModule，
@@ -19,7 +20,7 @@ import { readFileSync } from 'node:fs';
 
 import ts from 'typescript';
 
-import { cssModulesInline } from './scripts/css-modules-inline.mjs';
+import { cssModulesInline, MODULE_META_BLOCK, MODULE_STYLES_BANNER, MODULE_STYLES_KEY, MODULE_STYLES_REGISTRY, MODULE_STYLES_VARIABLE } from './scripts/css-modules-inline.mjs';
 import { svgRaw } from './scripts/svg-raw.mjs';
 
 
@@ -106,7 +107,7 @@ export default [
     sourcemap: !isProd,
     clean: false,
     minify: isProd,
-    plugins: [svgRaw(), cssModulesInline()],
+    plugins: [svgRaw(), cssModulesInline({ pluginId: PLUGIN_ID })],
     deps: {
       neverBundle: [...CLIENT_EXTERNALS],
       alwaysBundle: (id: string) => !CLIENT_EXTERNALS.includes(id),
@@ -114,6 +115,8 @@ export default [
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       DSH_USAGE_STATS_VERSION: JSON.stringify(PLUGIN_VERSION),
+      // 全局样式表注册表的 Symbol 键：footer 写入、src/client/legacyStyles.ts 读取，两处同源。
+      DSH_USAGE_STATS_STYLES_KEY: JSON.stringify(MODULE_STYLES_KEY),
     },
     inputOptions: {
       resolve: {
@@ -122,9 +125,24 @@ export default [
     },
     outputOptions: {
       entryFileNames: 'client.js',
-      banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (require) => {`,
-      footer: 'return module.exports; } });',
+      // banner / footer 的占位符由 css-modules-inline 的 renderChunk 换成同一份样式表对象的三处引用
+      // （对象本体 + meta + 全局注册表），产物里的 CSS 文本只存一份；机制见 docs/ARCHITECTURE.md §6。
+      banner: [
+        ';(function () {',
+        `  var ${MODULE_STYLES_VARIABLE} = ${MODULE_STYLES_BANNER};`,
+        '  window.__ModuleLoader__.load({',
+        `    id: ${JSON.stringify(PLUGIN_ID)},`,
+        '    factory: (require) => {',
+      ].join('\n'),
       intro: 'var module = { exports: {} }; var exports = module.exports;',
+      footer: [
+        'return module.exports;',
+        '},',
+        MODULE_META_BLOCK,
+        '});',
+        MODULE_STYLES_REGISTRY,
+        '})();',
+      ].join('\n'),
       codeSplitting: false,
     },
   },

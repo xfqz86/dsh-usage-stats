@@ -111,8 +111,17 @@
   其余内联；`production` 压缩且无 sourcemap，非 production 不压缩并保留 sourcemap。
 - 版本号：tsdown 构建时从 `package.json` 读取 `version`，以 `DSH_USAGE_STATS_VERSION` 注入
   浏览器 bundle；「关于」页展示与更新比较共用这一常量，发版不需要手改界面数字。
-- CSS：`scripts/css-modules-inline.mjs`（lightningcss）把 `*.module.css` 编译为 scoped 映射 +
-  `<style data-plugin-css>` 注入（源码仍是真实 CSS Modules）。
+- CSS：`scripts/css-modules-inline.mjs`（lightningcss）把 `*.module.css` 编译为 scoped 映射，
+  同一份文本按两条轨交付（源码仍是真实 CSS Modules），产物里只存一份：
+  1. `__ModuleLoader__.load` 的 `meta: () => ({ stylesheets })` 交给新版 shell 的模块样式机制——
+     它在挂载期按 owner 排序安装，依赖先于依赖者、整体排在 shell 自身样式之后，插件对 shell
+     组件的同特异性覆盖（如 `Modal` 的 `.modal` 对 `.dialog`）才成立；
+  2. 同一份样式表对象挂到 `Symbol.for('dsh-usage-stats:stylesheets')`（构建期注入的键）全局注册表，
+     旧版 shell 由 `src/client/legacyStyles.ts` 在 `apply` 时探测模块系统能力
+     （`subscribeModules`/`activeRecords`，新版才有）后按需自注入 `<style data-plugin data-path>`，
+     属性与 shell 用 meta 安装的模块样式表一致；新版探测命中直接返回，不自插 DOM。
+     `meta()` 会顺手撤掉历史版本留下的自注入标签。
+  只交付一条轨会在旧版或新版 shell 之一掉样式。
 - 品牌图：`scripts/svg-raw.mjs` 把 `icon.svg?raw` 编译成导出 SVG 文本的模块，「关于」页在构建期
   内联包根 `icon.svg`，与插件列表共用同一文件；改图标后重建客户端即可同步（列表侧由 Host 实时读文件）。
 
