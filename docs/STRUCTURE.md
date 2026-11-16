@@ -149,6 +149,7 @@ dsh-usage-stats/
 │   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定：调用前经 usageStatsRemote() 取命名空间服务。
 │   │   ├── configTransfer.ts ← 配置串编解码：把整份偏好打包成可复制粘贴的 Base64 文本，并反向解析。
 │   │   ├── index.ts ← 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）、会话标题旁的 session-id 徽标与输入区状态行的模型速度读数。
+│   │   ├── legacyStyles.ts ← 旧版 shell 的样式兜底：新版 shell 在挂载期按 `meta().stylesheets` 安装模块样式表，旧版不会。
 │   │   ├── locales.ts ← 用量统计界面文案字典，类型化写法与 harness 的 ui-cordis 命名空间一致。
 │   │   ├── modelSpeed.ts ← 模型速度纯逻辑：把会话事件窗口折叠成每次调用的 TTFT / ATPS 样本与汇总，附带阶段判定与详情卡图表几何。
 │   │   ├── remote.ts ← usageStats 命名空间的浏览器端挂载与调用入口：apply 内挂载手写贡献，hooks 经 usageStatsRemote() 取服务。

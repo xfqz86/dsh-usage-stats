@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 
 import ts from 'typescript';
 
-import { cssModulesInline, MODULE_STYLES_BANNER, MODULE_META_BLOCK, MODULE_STYLES_VARIABLE, MODULE_LEGACY_STYLE_BLOCK } from './scripts/css-modules-inline.mjs';
+import { cssModulesInline, MODULE_META_BLOCK, MODULE_STYLES_BANNER, MODULE_STYLES_KEY, MODULE_STYLES_REGISTRY, MODULE_STYLES_VARIABLE } from './scripts/css-modules-inline.mjs';
 import { svgRaw } from './scripts/svg-raw.mjs';
 
 
@@ -115,6 +115,8 @@ export default [
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       DSH_USAGE_STATS_VERSION: JSON.stringify(PLUGIN_VERSION),
+      // 全局样式表注册表的 Symbol 键：footer 写入、src/client/legacyStyles.ts 读取，两处同源。
+      DSH_USAGE_STATS_STYLES_KEY: JSON.stringify(MODULE_STYLES_KEY),
     },
     inputOptions: {
       resolve: {
@@ -123,8 +125,8 @@ export default [
     },
     outputOptions: {
       entryFileNames: 'client.js',
-      // banner / footer 的占位符由 css-modules-inline 的 renderChunk 换成同一份样式表对象的两处引用
-      // （meta + 旧版 shell 的自注入），产物里的 CSS 文本只存一份；机制见 docs/ARCHITECTURE.md §6。
+      // banner / footer 的占位符由 css-modules-inline 的 renderChunk 换成同一份样式表对象的三处引用
+      // （对象本体 + meta + 全局注册表），产物里的 CSS 文本只存一份；机制见 docs/ARCHITECTURE.md §6。
       banner: [
         ';(function () {',
         `  var ${MODULE_STYLES_VARIABLE} = ${MODULE_STYLES_BANNER};`,
@@ -138,7 +140,7 @@ export default [
         '},',
         MODULE_META_BLOCK,
         '});',
-        MODULE_LEGACY_STYLE_BLOCK,
+        MODULE_STYLES_REGISTRY,
         '})();',
       ].join('\n'),
       codeSplitting: false,

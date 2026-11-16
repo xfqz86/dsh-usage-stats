@@ -9,16 +9,16 @@
  *     虚拟 id 的后缀不含 .css，绕开 tsdown 内置 css-guard 对 css 文件的拦截检查。
  *   - load 钩子用 lightningcss 的 cssModules 模式生成 scoped 类名与样式：模块只导出类名映射，
  *     样式文本按仓库相对路径收集，交给 renderChunk 统一交付。
- *   - 双轨交付：renderChunk 把 banner / footer 的占位符换成同一份样式表对象的两个引用，
+ *   - 双轨交付：renderChunk 把 banner / footer 的占位符换成同一份样式表对象的三个引用，
  *     产物里的 CSS 文本只存一份：
  *       1) 注册调用携带 meta().stylesheets——新版 shell 在挂载期按 owner 排序安装，依赖先于
  *          依赖者、整体排在 shell 自身样式之后，插件对 shell 组件的同特异性覆盖（如 Modal 的
  *          .modal 对 .dialog）才成立；
- *       2) 工厂外的自注入 <style data-plugin data-path>——旧版 shell 不读 meta，只有这条才生效；
- *          属性与 shell 自己安装的模块样式表完全一致（owner 包名 + 包内路径），两种模式下的
- *          DOM 对得上。
- *     meta 被调用即说明新 shell 接管了样式，顺手撤掉自注入标签，同一份 CSS 只装一遍。
- *     两处占位符缺失或重复都直接让构建失败：静默产出没有样式的 bundle 只会在页面上才暴露。
+ *       2) 把 { id, styles } 挂到 Symbol.for(MODULE_STYLES_KEY) 的全局注册表——运行时的
+ *          src/client/legacyStyles.ts 在 apply 时探测模块系统能力，只有旧版 shell（不读 meta）
+ *          才把注册表里的样式自注入成 <style data-plugin data-path>；新版不自插 DOM。
+ *     meta 被调用即说明新 shell 接管了样式，顺手撤掉历史版本留下的自注入标签。
+ *     三处占位符缺失或重复都直接让构建失败：静默产出没有样式的 bundle 只会在页面上才暴露。
  *   - 插件钩子可能在不同 rolldown 实例上下文中执行，模块级 Map 不可靠：虚拟 id → 真实路径
  *     的映射与编译文本都挂在 globalThis，load 只按 id 查表，不依赖调用顺序。
  *
@@ -43,8 +43,11 @@ export const MODULE_STYLES_VARIABLE = '__dshStyles'
 /** footer 第一处占位符：注册对象里的 meta，renderChunk 换成新版 shell 的样式表交付。 */
 export const MODULE_META_BLOCK = '/*__DSH_MODULE_META_BLOCK__*/'
 
-/** footer 第二处占位符：load 调用之后的自注入，旧版 shell 的兜底。 */
-export const MODULE_LEGACY_STYLE_BLOCK = '/*__DSH_MODULE_LEGACY_STYLE_BLOCK__*/'
+/** footer 第二处占位符：load 调用之后写全局样式表注册表，供旧版 shell 的 apply 自注入。 */
+export const MODULE_STYLES_REGISTRY = '/*__DSH_MODULE_STYLES_REGISTRY__*/'
+
+/** 全局注册表的 Symbol 键：bundle 写入 { id, styles }，客户端运行时按同一键读取。 */
+export const MODULE_STYLES_KEY = 'dsh-usage-stats:stylesheets'
 
 // 虚拟 id -> 真实路径的全局映射，解决 rolldown 多实例下模块级 Map 不共享的问题
 // 同时用哈希而非明文路径做 id，彻底避免把本地绝对路径（/Users/...）编码进产物变量名
@@ -80,14 +83,13 @@ function moduleStylesObject() {
 }
 
 /**
- * 生成 footer 的两段内容：注册对象里的 meta（新版 shell 的安装机制）与 load 调用后的兼容注入。
+ * 生成 footer 的两段内容：注册对象里的 meta（新版 shell 的安装机制）与全局样式表注册表
+ * （旧版 shell 由 src/client/legacyStyles.ts 在 apply 时探测能力后自注入）。
  * 两段都引用 banner 里的同一个样式表对象，产物不重复存 CSS 文本；选择器在运行时用
  * JSON.stringify 拼出，生成代码里不嵌转义引号。
- * 自注入标签只用 data-plugin（owner 包名）与 data-path（包内路径），和 shell 用 meta 安装的
- * 模块样式表同属性，两种模式下 DOM 一致。
  * @param {string} styles - banner 里样式表对象的变量名。
- * @param {string} pluginId - 插件包名，也是模块样式表的 owner。
- * @returns {{ meta: string, legacy: string }} 注册对象内的 meta 片段与 load 调用后的自注入片段。
+ * @param {string} pluginId - 插件包名，也是模块样式表的 owner 与自注入标签的 data-plugin。
+ * @returns {{ meta: string, registry: string }} 注册对象内的 meta 片段与 load 调用后的注册表片段。
  */
 function moduleStylesFooter(styles, pluginId) {
   const owner = JSON.stringify(pluginId)
@@ -95,23 +97,13 @@ function moduleStylesFooter(styles, pluginId) {
     'meta: () => {',
     '  const stylesheets = {};',
     '  for (const path of Object.keys(' + styles + ')) stylesheets[path] = { text: () => ' + styles + '[path] };',
-    '  // 新 shell 接管样式：撤掉自注入的标签，同一份 CSS 只装一遍。',
+    '  // 新 shell 接管样式：撤掉历史版本留下的自注入标签，同一份 CSS 只装一遍。',
     '  if (typeof document !== "undefined") for (const el of document.querySelectorAll("style[data-plugin=" + JSON.stringify(' + owner + ') + "]")) el.remove();',
     '  return { stylesheets };',
     '}',
   ].join('\n')
-  const legacy = [
-    'for (const path of Object.keys(' + styles + ')) {',
-    '  if (typeof document === "undefined") break;',
-    '  if (document.querySelector("style[data-plugin=" + JSON.stringify(' + owner + ') + "][data-path=" + JSON.stringify(path) + "]")) continue;',
-    '  const el = document.createElement("style");',
-    '  el.setAttribute("data-plugin", ' + owner + ');',
-    '  el.setAttribute("data-path", path);',
-    '  el.textContent = ' + styles + '[path];',
-    '  if (document.head) document.head.appendChild(el);',
-    '}',
-  ].join('\n')
-  return { meta, legacy }
+  const registry = 'Reflect.set(globalThis, Symbol.for(' + JSON.stringify(MODULE_STYLES_KEY) + '), { id: ' + owner + ', styles: ' + styles + ' });'
+  return { meta, registry }
 }
 
 /**
@@ -172,11 +164,11 @@ export function cssModulesInline({ pluginId } = {}) {
     renderChunk(code) {
       const bannerAt = markerOffset(code, MODULE_STYLES_BANNER, 'module styles')
       let output = code.slice(0, bannerAt) + moduleStylesObject() + code.slice(bannerAt + MODULE_STYLES_BANNER.length)
-      const { meta, legacy } = moduleStylesFooter(MODULE_STYLES_VARIABLE, pluginId)
+      const { meta, registry } = moduleStylesFooter(MODULE_STYLES_VARIABLE, pluginId)
       const metaAt = markerOffset(output, MODULE_META_BLOCK, 'module meta')
       output = output.slice(0, metaAt) + meta + output.slice(metaAt + MODULE_META_BLOCK.length)
-      const legacyAt = markerOffset(output, MODULE_LEGACY_STYLE_BLOCK, 'legacy styles')
-      output = output.slice(0, legacyAt) + legacy + output.slice(legacyAt + MODULE_LEGACY_STYLE_BLOCK.length)
+      const registryAt = markerOffset(output, MODULE_STYLES_REGISTRY, 'module styles registry')
+      output = output.slice(0, registryAt) + registry + output.slice(registryAt + MODULE_STYLES_REGISTRY.length)
       return { code: output, map: null }
     },
   }

@@ -4,17 +4,20 @@
  * 加载 lib/client.js（CJS 形态的插件 bundle），验证：
  *   1. 顶层通过 window.__ModuleLoader__.load 注册，id 为 @xfqz86/dsh-usage-stats；
  *   2. factory(require) 可执行，exports.inject 含必需服务、exports.apply 为函数；
- *   3. CSS Modules 自注入（旧版 shell 的兜底）：每个 *.module.css 注入一个 <style>，属性与
- *      shell 用 meta 安装的模块样式表一致（data-plugin=包名、data-path=包内路径）；期望全集从
+ *   3. 加载期不碰 DOM：样式表以 { id, styles } 挂到全局注册表（Symbol.for(MODULE_STYLES_KEY)），
+ *      属性与 shell 用 meta 安装的模块样式表一致（data-plugin=包名、data-path=包内路径）；期望全集从
  *      src 目录动态枚举，新增样式文件自动纳入断言，且样式文本含 scoped 类名；
  *   4. 模块样式表（新版 shell 的安装机制）：load 的 handoff 携带 meta()，键覆盖同一批 *.module.css、
- *      文本与自注入同源；meta 被调用后自注入标签撤掉，同一份 CSS 只装一遍，且可重复调用。
+ *      文本与注册表同源；meta 只清理历史版本留下的标签，不新建节点，且可重复调用。
+ *   旧版 shell 的自注入（apply 里探测能力后注入）由 test/pure.mjs 直接测 legacyStyles 模块。
  */
 
 import { createRequire } from 'node:module'
 import { join, dirname, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readdirSync } from 'node:fs'
+
+import { MODULE_STYLES_KEY } from '../scripts/css-modules-inline.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const bundlePath = join(here, '../lib/client.js')
@@ -55,12 +58,6 @@ function makeDocument() {
           if (index >= 0) styles.splice(index, 1)
         },
       }
-    },
-    querySelector(sel) {
-      // 只支持 bundle 内用到的查询：style[data-plugin="<owner>"][data-path="<path>"]
-      const m = /^style\[data-plugin="([^"]+)"\]\[data-path="([^"]+)"\]$/.exec(sel ?? '')
-      if (m) return styles.find((s) => s.attributes['data-plugin'] === m[1] && s.attributes['data-path'] === m[2]) ?? null
-      return null
     },
     querySelectorAll(sel) {
       // meta() 撤标签用到的查询：style[data-plugin="<owner>"]
@@ -103,43 +100,43 @@ try {
   // require 即执行顶层 window.__ModuleLoader__.load(...)（注册，不执行 factory）
   nodeRequire(bundlePath)
 
-  assert(registered !== null, 'bundle 未通过 window.__ModuleLoader__.load 注册')
-  assert(registered.id === '@xfqz86/dsh-usage-stats', `注册 id 应为 @xfqz86/dsh-usage-stats，实际为 ${registered.id}`)
+  // 期望全集从源码目录动态枚举：新增 .module.css 自动纳入断言，防构建插件漏包或忘补测试。
+  const OWNER = '@xfqz86/dsh-usage-stats'
+  const expectedPaths = [...new Set(walkModuleCss(join(here, '../src'))
+    .map((file) => relative(join(here, '..'), file).split(sep).join('/')))]
+  assert(expectedPaths.length > 0, '源码目录未发现任何 *.module.css（枚举失效）')
+
+  // 加载期不碰 DOM：新版 shell 按 meta 安装，旧版由 apply 探测能力后自注入（src/client/legacyStyles.ts）。
+  assert(document.styles.length === 0, `bundle 加载时不应自注入 style 标签，实际 ${document.styles.length} 个`)
+
+  // 全局注册表：{ id, styles } 覆盖全部 *.module.css，供旧版 shell 的运行时取用。
+  const registry = globalThis[Symbol.for(MODULE_STYLES_KEY)]
+  assert(registry !== undefined, 'bundle 未写入全局样式表注册表')
+  assert(registry.id === OWNER, `注册表 id 应为 ${OWNER}，实际 ${registry.id}`)
+  assert(Object.keys(registry.styles).length === expectedPaths.length, `注册表样式应为 ${expectedPaths.length} 份，实际 ${Object.keys(registry.styles).length}`)
+  for (const path of expectedPaths) {
+    const css = registry.styles[path]
+    assert(typeof css === 'string' && css.length > 0, `注册表缺少 ${path} 的样式文本`)
+    assert(css.includes('_'), `${path} 的样式文本未 scoped`)
+  }
+  const panelCss = registry.styles['src/client/views/UsageStatsPanel.module.css'] ?? ''
+  // lightningcss 的 scoped 类名形如 `_<hash>_tabbar`，断言匹配 scoped 化后的选择器
+  assert(panelCss.includes('_modal'), 'UsageStatsPanel 样式应包含 scoped 的 .modal')
+  const commonCss = registry.styles['src/client/components/UsageStatsCommon.module.css'] ?? ''
+  assert(commonCss.includes('_cell'), 'UsageStatsCommon 样式应包含 scoped 的 .cell（统计磁贴基元）')
+  // Tab 栏是面板与模型明细弹窗共用的基元，落在 UsageStatsCommon
+  assert(commonCss.includes('_tabbar'), 'UsageStatsCommon 样式应包含 scoped 的 .tabbar（Tab 栏基元）')
 
   const exports = registered.factory(requireStub)
 
   assert(exports && typeof exports === 'object', 'factory 返回值应为对象')
   assert(Array.isArray(exports.inject), 'exports.inject 应为数组')
   assert(typeof exports.apply === 'function', 'exports.apply 应为函数')
-
-  // CSS 注入验证：每个 .module.css 注入一个 style 标签（按组件拆分的模块都在），属性与
-  // shell 用 meta 安装的模块样式表一致——data-plugin 为插件包名、data-path 为包内路径，
-  // 旧版与新版的 DOM 才对得上（见 scripts/css-modules-inline.mjs 的 moduleStylesFooter）。
-  const OWNER = '@xfqz86/dsh-usage-stats'
-  // 期望全集从源码目录动态枚举：新增 .module.css 自动纳入断言，防构建插件漏包或忘补测试。
-  const expectedPaths = [...new Set(walkModuleCss(join(here, '../src'))
-    .map((file) => relative(join(here, '..'), file).split(sep).join('/')))]
-  assert(expectedPaths.length > 0, '源码目录未发现任何 *.module.css（枚举失效）')
-  // 共享样式（UsageStatsCommon 被多个 Tab import）只应注入一次；总数相等 + 每个路径都在，
-  // 即每份样式恰好一个标签（按文件确定性虚拟 id 去重）。
-  assert(document.styles.length === expectedPaths.length, `自注入标签应为 ${expectedPaths.length} 个，实际 ${document.styles.length}`)
-  for (const el of document.styles) {
-    assert(el.attributes['data-plugin'] === OWNER, `自注入标签的 data-plugin 应为 ${OWNER}，实际 ${el.attributes['data-plugin']}`)
-    assert(el.attributes['data-path'] !== undefined, '自注入标签缺少 data-path')
-    assert(el.attributes['data-plugin-css'] === undefined, '自注入标签不应再带旧的 data-plugin-css')
-  }
-  const injectedCss = new Map(document.styles.map((s) => [s.attributes['data-path'], s.textContent]))
-  for (const path of expectedPaths) assert(injectedCss.has(path), `缺少 ${path} 的 style 标签`)
-  const panelCss = injectedCss.get('src/client/views/UsageStatsPanel.module.css') ?? ''
-  // lightningcss 的 scoped 类名形如 `_<hash>_tabbar`，断言匹配 scoped 化后的选择器
-  assert(panelCss.includes('_modal'), 'UsageStatsPanel 样式应包含 scoped 的 .modal')
-  const commonCss = injectedCss.get('src/client/components/UsageStatsCommon.module.css') ?? ''
-  assert(commonCss.includes('_cell'), 'UsageStatsCommon 样式应包含 scoped 的 .cell（统计磁贴基元）')
-  // Tab 栏是面板与模型明细弹窗共用的基元，落在 UsageStatsCommon
-  assert(commonCss.includes('_tabbar'), 'UsageStatsCommon 样式应包含 scoped 的 .tabbar（Tab 栏基元）')
+  // factory 只定义组件，同样不碰 DOM。
+  assert(document.styles.length === 0, `factory 执行后不应出现 style 标签，实际 ${document.styles.length} 个`)
 
   // 模块样式表：新版 shell 在挂载期按 meta 安装（依赖先于依赖者、整体排在 shell 样式之后），
-  // 键是包内相对路径；文本必须与自注入同源，否则两条交付会各自漂移。
+  // 键是包内相对路径；文本必须与注册表同源，否则两条交付会各自漂移。
   assert(typeof registered.meta === 'function', 'bundle 的 load handoff 未提供 meta()（新版 shell 靠它安装模块样式表）')
   const stylesheets = registered.meta().stylesheets
   assert(stylesheets !== null && typeof stylesheets === 'object', 'meta() 应返回 { stylesheets }')
@@ -147,21 +144,24 @@ try {
   for (const path of expectedPaths) {
     const sheet = stylesheets[path]
     assert(sheet !== undefined && typeof sheet.text === 'function', `meta 缺少 ${path} 的样式表`)
-    const text = sheet.text({ asset: (reference) => reference })
-    assert(text.length > 0 && text.includes('_'), `${path} 的样式文本为空或未 scoped`)
-    assert(text === injectedCss.get(path), `${path} 的 meta 文本与自注入不一致`)
+    assert(sheet.text({ asset: (reference) => reference }) === registry.styles[path], `${path} 的 meta 文本与注册表不一致`)
   }
-  // 新版 shell 接管后自注入标签撤掉：同一份 CSS 不在页面里装两遍。
-  assert(document.styles.length === 0, `meta 安装后应撤掉自注入标签，仍剩 ${document.styles.length} 个`)
-  // 渲染重挂载会再次调用 meta()：必须幂等，不能因标签已撤而返回空表。
+  // meta() 只清理历史版本留下的自注入标签，不新建节点；重挂载会再次调用，必须幂等。
+  const stale = document.createElement('style')
+  stale.setAttribute('data-plugin', OWNER)
+  stale.setAttribute('data-path', 'src/client/stale.module.css')
+  document.head.appendChild(stale)
   assert(Object.keys(registered.meta().stylesheets).length === expectedPaths.length, 'meta() 重复调用应返回完整样式表')
+  assert(!document.styles.includes(stale), 'meta() 应清理历史版本留下的自注入标签')
+  assert(document.styles.length === 0, `meta() 后仍不应出现 style 标签，实际 ${document.styles.length} 个`)
 
   console.log('CLIENT BUNDLE OK')
   console.log('  id:', registered.id)
   console.log('  inject:', exports.inject.join(', '))
   console.log('  apply:', typeof exports.apply)
-  console.log('  styles:', expectedPaths.join(', '))
+  console.log('  styles:', expectedPaths.length + ' module stylesheets')
 } finally {
+  Reflect.deleteProperty(globalThis, Symbol.for(MODULE_STYLES_KEY))
   // 还原全局，避免污染其他测试
   if (prevModuleLoaderDesc === undefined) delete globalThis.__ModuleLoader__
   else Object.defineProperty(globalThis, '__ModuleLoader__', prevModuleLoaderDesc)

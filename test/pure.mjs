@@ -60,6 +60,7 @@ import {
   updateUsageSettings,
   usageSettingsView,
 } from '../src/client/settings.ts';
+import { installLegacyStyles, supportsModuleStyles } from '../src/client/legacyStyles.ts';
 import { mountUsageStatsRemote, usageStatsRemote } from '../src/client/remote.ts';
 import { createStore, inheritedCountOf, inheritedPrefixOf, liveEventsOf } from '../src/host/store.ts';
 import { sessionDetail } from '../src/host/detail.ts';
@@ -2520,5 +2521,59 @@ describe('偏好设置：乐观更新', () => {
     } finally {
       unsubscribe();
     }
+  });
+});
+
+describe('旧版样式兜底：按 shell 能力决定是否自注入', () => {
+  /** 最小 document stub：记录 style 标签，支持按 owner + 路径查询。 */
+  function makeDoc() {
+    const tags = [];
+    return {
+      tags,
+      head: { appendChild(el) { tags.push(el); } },
+      createElement() {
+        return { attributes: {}, textContent: '', setAttribute(k, v) { this.attributes[k] = v; } };
+      },
+      querySelector(selector) {
+        const m = /^style\[data-plugin="([^"]+)"\]\[data-path="([^"]+)"\]$/.exec(selector);
+        if (m === null) return null;
+        return tags.find((el) => el.attributes['data-plugin'] === m[1] && el.attributes['data-path'] === m[2]) ?? null;
+      },
+    };
+  }
+  const KEY = 'dsh-usage-stats-test:stylesheets';
+  const SHEETS = { 'src/client/a.module.css': '._abc_a{color:red}' };
+  afterEach(() => { Reflect.deleteProperty(globalThis, Symbol.for(KEY)); });
+
+  it('新版模块系统（有订阅与记录枚举）不注入', () => {
+    const doc = makeDoc();
+    Reflect.set(globalThis, Symbol.for(KEY), { id: '@scope/plugin', styles: SHEETS });
+    installLegacyStyles({ get: () => ({ subscribeModules() {}, activeRecords() {} }) }, { key: KEY, document: doc });
+    assert.equal(doc.tags.length, 0);
+  });
+
+  it('旧版模块系统（缺能力）注入，属性与 shell 的模块样式表一致且重复 apply 幂等', () => {
+    const doc = makeDoc();
+    Reflect.set(globalThis, Symbol.for(KEY), { id: '@scope/plugin', styles: SHEETS });
+    installLegacyStyles({ get: () => ({}) }, { key: KEY, document: doc });
+    assert.equal(doc.tags.length, 1);
+    assert.equal(doc.tags[0].attributes['data-plugin'], '@scope/plugin');
+    assert.equal(doc.tags[0].attributes['data-path'], 'src/client/a.module.css');
+    assert.equal(doc.tags[0].textContent, SHEETS['src/client/a.module.css']);
+    installLegacyStyles({ get: () => ({}) }, { key: KEY, document: doc });
+    assert.equal(doc.tags.length, 1);
+  });
+
+  it('注册表或模块服务缺席时安全返回', () => {
+    const doc = makeDoc();
+    installLegacyStyles({ get: () => undefined }, { key: KEY, document: doc });
+    assert.equal(doc.tags.length, 0);
+  });
+
+  it('supportsModuleStyles 只认成对的方法', () => {
+    assert.equal(supportsModuleStyles(undefined), false);
+    assert.equal(supportsModuleStyles({}), false);
+    assert.equal(supportsModuleStyles({ subscribeModules() {} }), false);
+    assert.equal(supportsModuleStyles({ subscribeModules() {}, activeRecords() {} }), true);
   });
 });
