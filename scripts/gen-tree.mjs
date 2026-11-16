@@ -130,7 +130,7 @@ let ignoreSet = null
 function loadFallbackPatterns() {
   if (fallbackPatterns !== null) return fallbackPatterns
   fallbackPatterns = []
-  let content = ''
+  let content
   try {
     content = readFileSync(GITIGNORE_PATH, 'utf8')
   } catch {
@@ -181,7 +181,7 @@ function isIgnoredByFallback(relPosix) {
   let ignored = false
   const segments = relPosix.split('/')
   for (const p of patterns) {
-    let matched = false
+    let matched
     if (p.isBasename) {
       // 无斜杠模式匹配任意层级的段（目录忽略则其后代亦忽略，段匹配即代表忽略）
       matched = segments.some((seg) => p.regex.test(seg))

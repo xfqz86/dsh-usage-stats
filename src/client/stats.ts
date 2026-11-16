@@ -8,8 +8,8 @@
 
 import { DAY_MS, SERIES_MAX_DAYS, dateKeyOf, emptyUsage, isCompleteRedirect, joinModelKey, round1, splitModelKey, startOfDay, tokensTotal } from '../utils.ts';
 
-import type { LocaleFn } from './locales.ts';
 import type { ModelDetail, ModelGroupMode, ModelRedirect, ModelStat, SeriesPoint, SessionStat, TimeRange, UsageAgg } from '../types.ts';
+import type { LocaleFn } from './locales.ts';
 
 export type { ModelGroupMode, TimeRange };
 

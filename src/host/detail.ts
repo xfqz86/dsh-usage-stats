@@ -12,10 +12,10 @@ import { newAgg } from './agg.ts';
 import { buildSeries, usageOf } from './snapshot.ts';
 import { metaOf } from './store.ts';
 
+import type { DateDetail, ModelDetail, ModelStat, SessionDetail, SessionStat } from '../types.ts';
 import type { Agg } from './agg.ts';
 import type { Ledger } from './ledger.ts';
 import type { UsageStore } from './store.ts';
-import type { DateDetail, ModelDetail, ModelStat, SessionDetail, SessionStat } from '../types.ts';
 
 /**
  * 构建某模型的明细 value：按日取聚合缓存的该模型每日桶，按会话取账本聚合。

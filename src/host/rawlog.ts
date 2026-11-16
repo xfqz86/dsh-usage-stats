@@ -93,7 +93,7 @@ export function scanZstdFrames(buffer: Buffer, maxFrames = Number.POSITIVE_INFIN
     const checksum = (descriptor & 0x04) !== 0;
     const dictionaryFlag = descriptor & 0x03;
     const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag;
-    let contentSizeBytes = 0;
+    let contentSizeBytes: number;
     if (contentSizeFlag === 0) contentSizeBytes = singleSegment ? 1 : 0;
     else contentSizeBytes = 1 << contentSizeFlag;
     const remainingHeaderBytes = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes;
@@ -142,7 +142,7 @@ export function decodeSessionLog(buffer: Buffer, compression: SessionLogCompress
     try {
       parts.push(zstdDecompressSync(buffer.subarray(start, end)).toString('utf8'));
     } catch (e) {
-      throw new Error(`corrupt Zstandard session log: frame at byte ${start} failed validation: ${errorMessage(e)}`);
+      throw new Error(`corrupt Zstandard session log: frame at byte ${start} failed validation: ${errorMessage(e)}`, { cause: e });
     }
   }
   if (tornStart !== undefined) {

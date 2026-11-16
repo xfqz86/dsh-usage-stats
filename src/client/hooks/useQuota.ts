@@ -52,7 +52,7 @@ export function useQuota<T>(options: {
     let live = true;
     const load = async (force: boolean) => {
       const mine = ++seqRef.current;
-      let parsed: { ok?: boolean; value?: T } = {};
+      let parsed: { ok?: boolean; value?: T };
       try {
         const result = await invoke(force ? { intervalMinutes: minutes, force: true } : { intervalMinutes: minutes });
         parsed = result.ok ? { ok: true, value: result.value } : { ok: false };

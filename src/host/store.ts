@@ -264,14 +264,14 @@ export function metaOf(
   ledger: Ledger,
   id: string,
 ): {
-    title: string;
-    cwd: string;
-    createdAt: number;
-    lastActive: number;
-    parentSession: string;
-    origin: string;
-    delegationDepth: number;
-  } {
+  title: string;
+  cwd: string;
+  createdAt: number;
+  lastActive: number;
+  parentSession: string;
+  origin: string;
+  delegationDepth: number;
+} {
   const meta = ledger.getMeta(id);
   return meta ?? { title: '', cwd: '', createdAt: 0, lastActive: 0, parentSession: '', origin: '', delegationDepth: 0 };
 }

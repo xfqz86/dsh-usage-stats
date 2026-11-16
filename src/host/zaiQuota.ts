@@ -87,7 +87,7 @@ function classifyTokenWindow(entry: Record<string, unknown>): 'session' | 'weekl
   const unit = typeof unitRaw === 'number' && Number.isFinite(unitRaw) ? unitRaw : null;
   const number = typeof numberRaw === 'number' && Number.isFinite(numberRaw) ? numberRaw : null;
   if (unit === null || number === null || number <= 0) return null;
-  let unitMs: number | null = null;
+  let unitMs: number;
   switch (unit) {
     case 3: unitMs = 60 * 60 * 1000; break; // 小时
     case 4: unitMs = 24 * 60 * 60 * 1000; break; // 天

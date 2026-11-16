@@ -33,7 +33,7 @@ export function useSnapshot(intervalMs = SNAPSHOT_INTERVAL_MS): [UsageSnapshot |
     setErr(false);
     const load = async () => {
       const mine = ++seqRef.current;
-      let parsed: { ok?: boolean; value?: UsageSnapshot } = {};
+      let parsed: { ok?: boolean; value?: UsageSnapshot };
       // 记录本次失败原因：抛错取 message，业务拒绝取 code+message。
       let detail: string | null = null;
       try {

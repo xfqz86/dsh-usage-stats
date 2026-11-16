@@ -312,7 +312,7 @@ export function toLedgerEvent(sessionId: string, event: MeteredEvent): LedgerEve
     // 保证同一事件同日重放幂等，主键 upsert 收敛，且不同事件仍可区分，避免把客户端 'all' 日桶拉长。
     // 幂等边界：跨日重放理论上会另落一日产生重复——该分支仅防御畸形事件
     // ，真实事件均带 time，罕见可接受。
-    let hashStr = '';
+    let hashStr: string;
     try { hashStr = JSON.stringify((event as { data?: unknown }).data ?? ''); } catch { hashStr = String((event as { data?: unknown }).data); }
     let h = 0;
     for (let i = 0; i < hashStr.length; i += 1) h = ((h * 31) + hashStr.charCodeAt(i)) >>> 0;

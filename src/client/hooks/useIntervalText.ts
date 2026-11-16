@@ -14,14 +14,14 @@ export function useIntervalText(
   clamp: (v: number) => number,
   onCommit: (minutes: number) => void,
 ): {
-    field: {
-      ref: React.RefObject<HTMLInputElement>
-      value: string
-      onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-      onBlur: () => void
-      onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void
-    }
-  } {
+  field: {
+    ref: React.RefObject<HTMLInputElement>
+    value: string
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+    onBlur: () => void
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void
+  }
+} {
   const [text, setText] = useState(String(clamp(initial)));
   const inputRef = useRef<HTMLInputElement>(null);
   /** 上一次同步进文本态的服务端取值：内容没变不重复写，避免打断输入。 */
