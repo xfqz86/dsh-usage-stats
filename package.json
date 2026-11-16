@@ -26,7 +26,8 @@
     "docs/DETAIL.en.md"
   ],
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.1.7-alpha.1 <0.2.0-0 || >=0.2.0-0 <0.3.0-0"
   },
   "packageManager": "pnpm@11.7.0",
   "repository": {
@@ -72,14 +73,14 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/dsh-home-paths": "0.1.7-alpha.1 || 0.1.7-alpha.2 || 0.1.7-rc.1 || 0.1.7-rc.2 || >=0.2.0-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-home-paths": ">=0.1.7-alpha.1 <0.2.0-0 || >=0.2.0-0 <0.3.0-0",
     "@deepseek-ai/schemastery": "3.18.3",
     "yaml": "^2.9.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.3",
-    "@deepseek-ai/dsh-credentials": ">=0.1.7-alpha.1 <0.3.0",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.1.7-alpha.1 <0.3.0"
+    "@deepseek-ai/dsh-credentials": ">=0.1.7-alpha.1 <0.2.0-0 || >=0.2.0-0 <0.3.0-0",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.1.7-alpha.1 <0.2.0-0 || >=0.2.0-0 <0.3.0-0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.3",
