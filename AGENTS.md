@@ -9,7 +9,7 @@ harness 每个包已导出完整精确的类型（`Context`/`ClientContext`/`Ses
 依赖声明（`package.json` 三段，版本以它为准、文档不抄写；`import type` 打包时剥离）：
 - `dependencies`：随包安装的第三方运行时库（`@deepseek-ai/schemastery`、旧设置文档回收用的 `yaml`、基座路径解析用的 `dsh-home-paths`）。
 - `peerDependencies`：由 dsh 安装包提供的框架单例（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol`、`@deepseek-ai/dsh-credentials`），不随包安装，`devDependencies` 内镜像同 range（例外：`dsh-credentials` / `dsh-typert-protocol` 的 peer 承担跨版本兼容声明，dev 固定当前宿主版本）。
-- `devDependencies`：其余（构建/测试/纯类型）全进这里，直接安装、无 `paths` 映射。
+- `devDependencies`：其余（构建/测试/纯类型）全进这里，直接安装、无 `paths` 映射；例外是 `@deepseek-ai/schemastery` 在 `dependencies` 与这里同版本各列一次，这里那份只是版本镜像（pnpm 按 `dependencies` 解析同一份，不重复安装）。
 
 值导入（`tsdown` host 侧 `neverBundle` 不打包）运行时解析：`dependencies` 走随包安装的副本，`peerDependencies` 走安装包单例；服务端除声明过的依赖外只引 Node 内置与本地模块，浏览器端只 `require` 冻结表模块（`react` 系 + `cordis` + `slots/primitives/dockkit/store`）；Client 贡献内联的 `zod` 构建期来自 dev、随浏览器 bundle 打包。
 
@@ -24,10 +24,11 @@ export default class UsageStatsService extends TypertRemoteService {
 }
 // —— 浏览器端 ——
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'  // ctx.slots（PropsRuntime/PropsLocale/InjectFace）
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'  // ctx.slots（SlotRegistry）
+import type { PropsRuntime, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'  // 插槽组件 props 类型：`PropsRuntime`/`PropsLocale`/`InjectFace` 均由该包提供
 import type {} from '@deepseek-ai/dsh-api-gateway/client'         // ctx.remote
 export type Props = PropsRuntime<'sidebar.footer.action'> & PropsLocale<'dsh-usage-stats'>
-export const inject = ['slots', 'locale', 'remote', 'configForms']
+export const inject = ['slots', 'locale', 'remote', 'configForms', 'sessions']
 export async function apply(ctx: ClientContext): Promise<void> {
   const disposeMount = await mountUsageStatsRemote(ctx)
   ctx.effect(() => disposeMount, 'dsh-usage-stats: remote 挂载')
@@ -46,30 +47,30 @@ export async function apply(ctx: ClientContext): Promise<void> {
 
 ## 3. 代码规范
 - **不使用 `any`**；`ctx` 用 harness 类型，业务数据用明确接口；类型仅定义 harness 未提供的（如 `UsageSnapshot`）。
-- **风格与检查**：遵循 **Google TypeScript Style Guide**；`eslint.config.mjs`（flat config，`eslint 10 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic`，分 `host/client/scripts` 三类 overrides）为唯一事实来源；新增代码须 `npx eslint .` 零 `errors`。
+- **风格与检查**：遵循 **Google TypeScript Style Guide**；`eslint.config.mjs`（flat config，`eslint` + `typescript-eslint` + `eslint-plugin-import-x` + `@stylistic`，分 `host/client/scripts` 三类 overrides）为唯一事实来源；新增代码须 `npx eslint .` 零 `errors`。
 - 文件归属：纯逻辑置于无 React 模块（`src/utils.ts`/`src/host/agg.ts`/`src/client/stats.ts`）便于测试；**tsx 一组件一文件**；**协议类型集中 `src/types.ts`**（零运行时，host/client 各自 re-export），`src/utils.ts` 仅纯函数与共享常量；可复用通用组件归 `src/client/components`；可复用 hook 归 `src/client/hooks/use*.ts`；`src/client/views` 根只放插槽入口壳，Tab 级视图与其专属子视图按 Tab 分目录（`views/<tab>/`）。
-- **样式用 CSS Modules**（`*.module.css` + `import css`），与 `ui-sidebar/primitives` 一致；界面静态颜色优先 `var(--dsw-alias-*)`，固定语义的静态色/阴影用 `--dsw-static-*`/`--dsw-shadow-*`；不新增自定义属性兜底（见 `docs/STYLE.md` §8）；图表数据驱动调色板（`MODEL_PALETTE`/`DATE_TOKEN_META`/`HIT_RATE_COLOR`，集中定义于 `src/client/stats.ts`，`fill` 属性不解析 `var()`）是数据色豁免；禁止字符串 CSS（编译内联机制见 `docs/ARCHITECTURE.md` §6）。
+- **样式必须 CSS Modules + 主题变量**（`*.module.css` + `import css`），细则见 `docs/STYLE.md` §8；禁止字符串 CSS（编译内联机制见 `docs/ARCHITECTURE.md` §6）。
 - **注释中文**，标识符/类型/错误消息英文；文档中文。
 
 ## 4. 项目结构
 目录与职责见 `docs/STRUCTURE.md`（`pnpm tree` 生成，勿手改）。入口：`src/host/index.ts`（Host）、`src/client/index.ts`（Client）；共用 `src/types.ts`（类型）、`src/utils.ts`（纯函数与共享常量）。各文件职责以头部注释为准。
 
 ## 5. 架构与数据流
-- 不变量：**账本（Ledger）唯一事实来源，聚合（UsageStore）只读派生**；账本九表、数据流、折叠与去重、fork 继承前缀、清零墓碑的唯一权威是 `docs/ARCHITECTURE.md`——改 `ledger/store/agg/scan/rawlog` 相关代码前必读，本文件不复述。
+- **不许反向写聚合**：账本与聚合的关系、数据流、折叠与去重、fork 继承前缀、清零墓碑的唯一权威是 `docs/ARCHITECTURE.md`（总则见 §1）——改 `ledger/store/agg/scan/rawlog` 相关代码前必读，本文件不复述。
 
 ## 6. 统计口径
 - 精确口径唯一权威是 `docs/ARCHITECTURE.md` §5；统计口径变化必须递增账本 `user_version`（见该文件 §2），本文件不复述。
 
 ## 7. 构建
-- 产物形态与 CSS 内联机制见 `docs/ARCHITECTURE.md` §6；构建命令见 §9。样式必须双轨交付（`meta().stylesheets` + 旧版自注入），只留一条会在新版或旧版基座之一掉样式；旧版兜底必须按模块系统能力探测后执行，新版不得自插 DOM。
+- 产物形态与样式交付机制的唯一权威是 `docs/ARCHITECTURE.md` §6；构建命令见 §9。样式必须双轨交付、两条缺一不可；旧版兜底必须按模块系统能力探测后执行，新版不得自插 DOM。
 
 ## 8. 运行时与 Remote API
 - **注入**：`static inject=['sessionQuery', 'sessionPersistence']`（全必需）；`credentials` 可选不进 inject，调用处 `ctx.get` 判空，缺席时额度查询直接返回 `no-key`，不读 env 与文件；偏好设置靠条目自带 `static Config`，不需注入 `settings`。先挂实时监听再 `bootstrap`。
-- **接口**：`UsageStatsService`（`usageStats` 命名空间下全部一元 `@Remote` 方法）经网关 `POST /api/usageStats/<方法>` 调用，信任与认证由网关载体统一处理，不注册 HTTP 路由、不自建围栏。协议唯一权威是 `docs/API.md`，改签名必须同步实现体、手写贡献与该文件。Host 侧 SRC 分发（装饰器标记+实时绑定）；Client 侧自挂载 `src/remote/contribution.ts` 的手写严格贡献（独立仓库跑不了 harness 生成器管线）——只改实现体不动贡献。
-- **偏好分两类存储，不可混用**：配置类偏好（额度开关与间隔、展示开关、模型统计重定向）走 harness 用户设置体系——Host 以插件条目 Config 声明 `usage-stats` schema（`src/host/settings.ts`，字段须 `.volatile()`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `configForms` 按条目 id 绑定读写（`src/client/settings.ts`），字段语义与旧版迁移（含基座导入失败后的 settings.yaml.imported 回收）见 `docs/API.md` §5；纯浏览习惯（模型分组、时间范围、分组折叠）走浏览器存储，不得进配置文档或配置串，权威见 `docs/API.md` §5.2。
+- **接口**：`UsageStatsService`（`usageStats` 命名空间下全部一元 `@Remote` 方法）经网关 `POST /api/usageStats/<方法>` 调用，信任与认证由网关载体统一处理，不注册 HTTP 路由、不自建围栏。协议唯一权威是 `docs/API.md`，改签名必须同步实现体、手写贡献与该文件。Host 侧分发机制见 `docs/API.md` §1；Client 侧自挂载 `src/remote/contribution.ts` 的手写严格贡献（独立仓库跑不了 harness 生成器管线）——只改方法体时不动贡献。
+- **偏好分两类存储，不可混用**：配置类偏好（额度开关与间隔、展示开关、模型统计重定向）走 harness 用户设置体系——Host 以插件条目 Config 声明 `usage-stats` schema（`src/host/settings.ts`，默认值与 `USAGE_SETTINGS_DEFAULTS` 同源），Client 经 `configForms` 按条目 id 绑定读写（`src/client/settings.ts`），字段语义、schema 要求与旧版迁移见 `docs/API.md` §5；纯浏览习惯（模型分组、时间范围、分组折叠）走浏览器存储，不得进配置文档或配置串，权威见 `docs/API.md` §5.2。
 
 ## 9. 验证
-- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上跑类型检查、目录结构新鲜度、生产构建、样式契约与冒烟测试、`prepare` 与打包校验，交给 CI 兜底；纯文档/注释改动不必跑检查。
+- **日常提交（dev 等）不强求本地门禁**：`ci.yml` 在 push 与 PR 上跑类型检查、目录结构新鲜度、文档归属与一致性、生产构建、样式契约与冒烟测试、`prepare` 与打包校验，交给 CI 兜底；`eslint` 与 `test/pure.mjs` 不在 CI 内，只在本地发版门禁执行；纯文档/注释改动不必跑检查。
 - **发版前（打 tag 前）必须本地全量跑通**，这是发版硬门槛：
 ```bash
 npx tsc --noEmit
@@ -85,15 +86,15 @@ node test/plugin-page.mjs
 node test/client-bundle.mjs
 node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产构建 + 出 tarball + 包内容与 Remote 签名校验
 ```
-- **发布形态必须单独验**：开发态掩盖生产态才暴露的问题——服务端产物一旦被压缩，Remote 方法参数名会被改写，而网关按方法源码文本取线路字段名，带参调用会被全量拒收。该脚本出包后还须在真实 dsh 上装机实测它产出的 tarball（本机流程见 `AGENTS.local.md`），只在发版前做。各测试的覆盖范围与断言清单以 `test/*.mjs` 头注释为准，本文件不复述；样式契约背景见 `docs/STYLE.md` §8，测试直引源码的可擦除语法要求见 `docs/STYLE.md` §7。
+- **发布形态必须单独验**：开发态掩盖生产态的问题（服务端产物不得压缩，线路协议见 `docs/API.md` §1），只在发版前做；该脚本出包后还须在真实 dsh 上装机实测它产出的 tarball（本机流程见 `AGENTS.local.md`）。各测试的覆盖范围与断言清单以 `test/*.mjs` 头注释为准，本文件不复述；样式契约背景见 `docs/STYLE.md` §8，测试直引源码的可擦除语法要求见 `docs/STYLE.md` §7。
 
 ## 10. 文档与注释治理（一事一地）
 **每类信息只有一个权威位置，其余最多一行指针，禁止复述；治理在每次会话执行，而不是靠一次性清理。**
 - **先查后写**：新增任何文档/注释内容前，先查归属表并 grep 关键词，确认权威位置尚无该表述，然后只写权威位置；修改事实只改权威地，别处发现第二份完整表述即删、换指针；删除或迁移前确认权威地已含该信息（只迁移不丢失）。
 - **同批与修即清**：改动任何文件时，受影响的注释与权威文档同批更新；路过发现的失效、重复文档/注释顺手清理，不留「代码已改、文档待补」的中间态。
-- **注释的权威边界**：注释只对两件事是权威——文件职责（头部块注释首句，`docs/STRUCTURE.md` 的数据源）与代码自身说不出的局部约束；内容标准（只写 why、不复述代码、不复制文档、不写修复历史）见 `docs/STYLE.md` §6。
+- **注释的权威边界**：注释只对两件事是权威——文件职责（头部块注释首句，`docs/STRUCTURE.md` 的数据源）与代码自身说不出的局部约束；内容标准见 `docs/STYLE.md` §6。
 - **定期审查**：全仓文档与注释的一致性审查走 `doc-review` 技能（`.agents/skills/doc-review/SKILL.md`）——分工、维度、分级与豁免在那里，本文件不复述；中/大范围审查需已启用 Agent Teams，未启用时提示开启、不降级硬跑；机械项（归属登记与覆盖、版本同步、凭据名、链接与路径、职责声明）由 `check-docs.mjs` 兜底并进 CI，语义项（重复、口径、读者错位、过期示例）按技能流程审。
-- 每份文档开头一句职责声明；用户文档（README/CHANGELOG/releases）允许用户语言概述，但不承载实现细节。本文件为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它。
+- 每份技术文档开头一句职责声明；用户文档（README/CHANGELOG/releases）允许用户语言概述，但不承载实现细节。本文件为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它。
 - 发版同步：`package.json version` 变更必须同批追加 `CHANGELOG.md` 条目与 `docs/releases/v<版本>.md`（面向用户的更新说明，`release.yml` 强制存在），流程见 `.agents/skills/release/SKILL.md`（发版技能）；纯重构与文档整理在 CHANGELOG 简记一行；结构变化跑 `pnpm tree` 重生成 `docs/STRUCTURE.md`。
 - **README 只用标准 Markdown**（很多站点不渲染内联 HTML）：徽章写 `[![alt](图)](链接)`；界面截图用一行缩略图表格（GitHub 正文实测 838px，5 列 ×140px 刚好满行），展示用的缩略图与补白图一律链接到 `docs/screenshot/` 根目录原图；关于页、更新说明这类截图不进 README。
 - **截图资产**：原图放 `docs/screenshot/` 根目录，缩略图、补白居中图等派生图只放 `docs/screenshot/processed/`（由原图生成）；高清屏截图是 2 倍图，网页展示要按 1 倍折算（补透明画布居中），不要按原尺寸引用。

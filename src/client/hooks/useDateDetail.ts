@@ -3,7 +3,7 @@
  * usageStats/dateDetail；没有打开的日期时不发请求。
  *
  * 明细连同它的入参日一起存（key 取 String(day)），换一行或换范围时不会把上一天的
- * 数字错配到新日期下；响应按递增序号丢弃后发先至的旧请求（STYLE §9）。
+ * 数字错配到新日期下；响应按递增序号丢弃后发先至的旧请求（STYLE §10）。
  * 失败清空本次明细并留下错误信息，由界面给出重试，不把上一天的明细留成假数据。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';

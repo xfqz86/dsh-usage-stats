@@ -1,11 +1,9 @@
 /**
  * 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取，
- * 经 foldRecord 写入账本（events、session_meta 共 9 表，含 agg_* 预统计）并折叠聚合缓存；
- * harness 两路读取被拒或返回空事件时回退 rawlog 自读原始日志。路由与四路 worker 见 docs/ARCHITECTURE.md §3。
+ * 经 foldRecord 写入账本并折叠聚合缓存。
  *
- * 只在首启无事件或显式重建时运行，平时靠实时 session/event 监听。扫描报告 rawSessions
- * （raw 兜底命中）、harnessSessions（harness 命中）、failed（两路都报错且 raw 无记录）
- * 记录最近一次导入结果。
+ * 会话来源、两路读取与 raw 兜底、触发条件见 docs/ARCHITECTURE.md §3；扫描报告 rawSessions
+ * （raw 兜底命中）、harnessSessions（harness 命中）、failed（两路都报错且 raw 无记录）。
  */
 import { readFileSync } from 'node:fs';
 

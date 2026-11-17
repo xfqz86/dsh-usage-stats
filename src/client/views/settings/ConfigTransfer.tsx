@@ -1,5 +1,5 @@
 /**
- * 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图，一个组件一个文件。
+ * 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图。
  *
  * 偏好设置在服务端 profile 配置文档里，跨设备迁移只能靠一串文本，故本区把整份偏好
  * 编成配置串导出、或从配置串导回，编辑与写入实现见 ../../configTransfer.ts 与 ../../settings.ts。

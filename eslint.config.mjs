@@ -1,7 +1,7 @@
 /**
  * @fileoverview ESLint flat config — Google TypeScript Style Guide 落地
  * 覆盖 host（Node ESM）/ client（Browser CJS）/ scripts（Node ESM mjs）三类环境，
- * 基于 eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic。
+ * 基于 eslint 10 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic。
  */
 
 import eslint from '@eslint/js';

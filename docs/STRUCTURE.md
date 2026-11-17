@@ -68,14 +68,14 @@ dsh-usage-stats/
 │   ├── client/
 │   │   ├── components/
 │   │   │   ├── HintCard.module.css ← 状态提示卡：图标徽标 + 状态标题 + 说明 / 凭据名 / 操作，磁贴浅底与 tooltip 深底共用同一版式。
-│   │   │   ├── HintCard.tsx ← 状态提示卡：图标徽标 + 状态标题 + 可选说明、凭据名与操作，概览磁贴、侧边栏 tooltip 与各报错区共用，所有非正常态走同一版式，不再各处手写纯文本提示。
+│   │   │   ├── HintCard.tsx ← 状态提示卡：图标徽标 + 状态标题 + 可选说明、凭据名与操作，概览磁贴、侧边栏 tooltip 与各报错区共用，所有非正常态走同一版式。
 │   │   │   ├── ModelGroupBar.tsx ← 模型表分组切换条：不分组 / 按厂商 / 按模型三段 chips。
 │   │   │   ├── ModelPieChart.module.css ← 模型饼图（ModelPieChart）：占比饼图 + 图例，纯 SVG，无外部依赖。
 │   │   │   ├── ModelPieChart.tsx ← 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
 │   │   │   ├── ModelSpeedPill.module.css ← 输入区状态行的常驻读数，以及点击后弹出的详情卡。
 │   │   │   ├── ModelSpeedPill.tsx ← 输入区状态行上的模型速度读数：常驻显示当前会话的平均 TTFT / ATPS，点击弹出详情卡。
 │   │   │   ├── Pagination.module.css ← 通用分页（Pagination）：居中分页条
-│   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
+│   │   │   ├── Pagination.tsx ← 通用分页（Pagination）：上一页 / 页码信息 / 下一页，可被任意 Tab 复用。
 │   │   │   ├── SessionIdBadge.module.css ← 会话 ID 徽标（SessionIdBadge）：会话标题右侧工具区的等宽徽标与悬停复制按钮。
 │   │   │   ├── SessionIdBadge.tsx ← 会话 ID 徽标：会话标题右侧工具区的等宽 sessionId 展示与悬停复制。
 │   │   │   ├── SettingsSwitch.module.css ← 设置 Tab 的开关控件（SettingsSwitch，role="switch"）：off 用描边色填充， on 用成功绿，滑块用前景色（token 配色，深色模式随之翻转）。
@@ -91,17 +91,17 @@ dsh-usage-stats/
 │   │   │   └── UsageStatsCommon.module.css ← 用量统计模态窗内跨组件共用的样式基元：分区头、统计磁贴/单元格、空态、 表格、Tab 栏、通用提示等。
 │   │   ├── hooks/
 │   │   │   ├── useCollapsedGroups.ts ← 分组折叠状态 hook：读写某个模型表（scope + 分组模式）在浏览器本地视图偏好里的收起组。
-│   │   │   ├── useConfirmOp.ts ← 二次确认操作 hook（浏览器端）。
+│   │   │   ├── useConfirmOp.ts ← 账本重建 / 清零的二次确认流程（浏览器端）：确认弹窗显隐与「我已了解」复选一体管理， 执行体由调用方传入（如 `() => postLedgerApi('rebuild', onRefresh)`）。
 │   │   │   ├── useDateDetail.ts ← 单日明细的浏览器端取数：日期页点某行的「明细」链接时，按该行的本地日零点查一次 usageStats/dateDetail；没有打开的日期时不发请求。
-│   │   │   ├── useIntervalText.ts ← 抓取间隔输入 hook（浏览器端）。
+│   │   │   ├── useIntervalText.ts ← 三路额度抓取间隔的输入框状态（浏览器端）：本地文本态随打随改，失焦/回车时夹取提交并回写规范值， 避免每键回跳；input ref 收归内部，调用方只需展开 field。
 │   │   │   ├── useModelDetail.ts ← 模型明细的浏览器端取数：点某行的「明细」链接时按「目标 + 归并来源」各查一次 usageStats/modelDetail，用 mergeModelDetails 合成一行；没有打开的行时不发请求。
 │   │   │   ├── useQuota.ts ← 额度轮询 hooks（浏览器端）：共享轮询骨架 useQuota + Go/DeepSeek/Z.ai 三路薄包装。
 │   │   │   ├── useSessionDetail.ts ← 会话明细的浏览器端取数：会话页点主会话行的「明细」链接时，按该行的折叠会话集合 （主会话 + 展平的全部子代理）查一次 usageStats/sessionDetail；没有打开的行时不发请求。
 │   │   │   ├── useSnapshot.ts ← 用量统计浏览器端（Client）的快照轮询。
-│   │   │   ├── useSortTable.ts ← 表格排序分页三件套（浏览器端）。
+│   │   │   ├── useSortTable.ts ← 日期 / 会话 / 模型三表的排序与分页状态机（浏览器端）：默认降序、同列点击翻转、 换列回到降序、排序切换回第 1 页、页码夹取到有效范围。
 │   │   │   ├── useUpdateCheck.ts ← 「关于」页的更新检查 hook：面板打开时自动查一次，手动检查带 force 绕过服务端缓存。
 │   │   │   ├── useUpgrade.ts ← 「立即升级」hook：调用 usageStats/upgrade 把 profile 依赖装到指定版本， 并把结果归一为 idle / upgrading / success / error 四态。
-│   │   │   ├── useUsageSettings.ts ← 偏好设置的 React hook（浏览器端）。
+│   │   │   ├── useUsageSettings.ts ← 插件偏好设置的 React 绑定（浏览器端）：useSyncExternalStore 订阅设置表单快照， 取值来自服务端 profile 配置文档（经设置表单，见 settings.ts），写入走 updateUsageSettings 落配置文档，于是刷新页面、换浏览器、换机器都保持同一份偏好。
 │   │   │   └── useViewPrefs.ts ← 视图偏好的 React 绑定：用 useSyncExternalStore 订阅浏览器本地存储里的分组、时间范围与折叠状态。
 │   │   ├── views/
 │   │   │   ├── about/
@@ -112,15 +112,15 @@ dsh-usage-stats/
 │   │   │   ├── dates/
 │   │   │   │   ├── DateDetail.module.css ← 日期明细弹窗（DateDetail 与两个子视图）：日期页每行末尾的「明细」链接打开的二级弹窗。
 │   │   │   │   ├── DateDetail.tsx ← 日期明细弹窗（DateDetail）：日期页每行末尾的「明细」链接打开的二级弹窗， 含标题（日期 + 当天合计）、按会话 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落浏览器本地视图偏好、下次打开保持。
-│   │   │   │   ├── DateDetailModels.tsx ← 日期明细弹窗的「按模型」子视图：这一天有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择与组折叠状态落浏览器本地视图偏好、刷新保持。
-│   │   │   │   ├── DateDetailSessions.tsx ← 日期明细弹窗的「按会话」子视图：这一天有用量的会话表，与面板会话 Tab 同一套展示—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）、子代理折叠到主会话 并带 + 展开、默认按「总计」降序、可排序、每页 15 条；分组与排序比较走 stats.ts 的 共用实现（groupSessions / compareSessionGroup），与面板会话 Tab 同一份。
+│   │   │   │   ├── DateDetailModels.tsx ← 日期明细弹窗的「按模型」子视图：这一天有用量的模型表，列与模型页对齐。
+│   │   │   │   ├── DateDetailSessions.tsx ← 日期明细弹窗的「按会话」子视图：这一天有用量的会话表，列与排序 / 折叠交互同面板 会话 Tab（少「最近活跃」「明细」两列）。
 │   │   │   │   ├── DatesTab.module.css ← 日期 Tab DatesTab：堆叠柱状图 + 范围 chips + 数据表格，与模型 Tab 对齐。
 │   │   │   │   └── DatesTab.tsx ← 日期 Tab：堆叠柱状图、范围切换与数据表格，与模型、会话 Tab 对齐。
 │   │   │   ├── models/
 │   │   │   │   ├── ModelDetail.module.css ← 模型明细（ModelDetail 与两个子视图）：模型页每行末尾的「明细」链接打开的二级弹窗。
 │   │   │   │   ├── ModelDetail.tsx ← 模型明细弹窗（ModelDetail）：模型页每行末尾的「明细」链接打开的二级弹窗， 含标题、按日期 / 按会话两个子标签、加载 / 失败 / 空态与关闭按钮。
-│   │   │   │   ├── ModelDetailDates.tsx ← 模型明细弹窗的「按日期」子视图：该模型在范围内的每日用量——顶部每日趋势图、 下方用量表，构成与日期 Tab 一致（图由 StackedBar 补齐范围内每一天，表格只列 真正有量的日子）；列与日期 Tab 对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
-│   │   │   │   ├── ModelDetailSessions.tsx ← 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，表与会话 Tab 完全同款—— 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃）、 子代理折叠到主会话并带 + 展开、默认按「最近活跃」降序、可排序、每页 15 条； 分组与排序比较走 stats.ts 的共用实现（groupSessions / compareSessionGroup）。
+│   │   │   │   ├── ModelDetailDates.tsx ← 模型明细弹窗的「按日期」子视图：该模型在范围内的每日用量——顶部每日趋势图、 下方用量表，构成与日期 Tab 一致（图由 StackedBar 补齐范围内每一天，表格只列 真正有量的日子）。
+│   │   │   │   ├── ModelDetailSessions.tsx ← 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，列与排序 / 折叠交互 同面板会话 Tab（少「明细」列）。
 │   │   │   │   ├── ModelsTab.module.css ← 模型 Tab（ModelsTab）：与会话 Tab 对齐的表格容器（表格样式在共用基元里）。
 │   │   │   │   └── ModelsTab.tsx ← 模型 Tab：模型/Provider 拆分表 + 顶部饼图与堆叠柱 + 靠右的时间范围筛选（默认 1 年）。
 │   │   │   ├── overview/
@@ -129,17 +129,17 @@ dsh-usage-stats/
 │   │   │   │   ├── OverviewTab.module.css ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行），颜色全部使用设计 token。
 │   │   │   │   ├── OverviewTab.tsx ← 概览 Tab：Bento 磁贴网格（今日/总计左列、热力图右大区、额度卡片底行）， 布局用 grid-template-areas 分区；三张额度卡片受监控开关控制，未启用时隐藏且底行自动补位。
 │   │   │   │   ├── UsageHeatmap.module.css ← 概览 Tab 的 26 周热力图网格（UsageHeatmap）：Codex 风格列布局、4 档强度、 月份标签、今日外框高亮。
-│   │   │   │   └── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮。
+│   │   │   │   └── UsageHeatmap.tsx ← 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日， 含 4 档强度、月份标签与今日高亮，供 OverviewTab 复用。
 │   │   │   ├── sessions/
 │   │   │   │   ├── SessionDetail.module.css ← 会话明细弹窗（SessionDetail 与两个子视图）：会话页主会话行末尾的「明细」链接打开的 二级弹窗。
 │   │   │   │   ├── SessionDetail.tsx ← 会话明细弹窗（SessionDetail）：会话页主会话行末尾的「明细」链接打开的二级弹窗， 含标题（会话标题 + 合计）、按日期 / 按模型两个子标签、加载 / 失败 / 空态与关闭按钮， 按模型分组的选择落浏览器本地视图偏好、下次打开保持。
-│   │   │   │   ├── SessionDetailDates.tsx ← 会话明细弹窗的「按日期」子视图：该会话集合的每日用量——顶部每日趋势图、下方用量表， 与日期 Tab 同一套展示（图由 StackedBar 补齐每一天，表格只列真正有量的日子）； 列与日期 Tab / 模型明细的按日期表对齐（日期 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用）， 可排序、每页 15 条。
-│   │   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐—— 模型 / Provider | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 占比， 分组选择与组折叠状态落浏览器本地视图偏好、刷新保持。
+│   │   │   │   ├── SessionDetailDates.tsx ← 会话明细弹窗的「按日期」子视图：该会话集合的每日用量——顶部每日趋势图、下方用量表， 与日期 Tab 同一套展示（图由 StackedBar 补齐每一天，表格只列真正有量的日子）。
+│   │   │   │   ├── SessionDetailModels.tsx ← 会话明细弹窗的「按模型」子视图：该会话集合有用量的模型表，列与模型页对齐。
 │   │   │   │   ├── SessionsTab.module.css ← 会话 Tab SessionsTab：仅保留首列最小宽度。
 │   │   │   │   └── SessionsTab.tsx ← 会话 Tab：按会话表分页展示，每页 20 条，子代理折叠到主会话，带加号展开； 明细里模型表分组的选择落浏览器本地视图偏好、下次打开保持。
 │   │   │   ├── settings/
 │   │   │   │   ├── ConfigTransfer.module.css ← 配置迁移区 ConfigTransfer：导出与导入两个子块的标题、说明、文本域、 操作按钮、差异预览与内联反馈。
-│   │   │   │   ├── ConfigTransfer.tsx ← 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图，一个组件一个文件。
+│   │   │   │   ├── ConfigTransfer.tsx ← 配置迁移区（ConfigTransfer）：设置 Tab 的专属子视图。
 │   │   │   │   ├── ModelRedirectEditor.module.css ← 模型统计重定向规则编辑器 ModelRedirectEditor：规则行（来源 → 目标）、 删除按钮、添加按钮与提示文字。
 │   │   │   │   ├── ModelRedirectEditor.tsx ← 模型统计重定向规则编辑器：设置 Tab 的专属子视图。
 │   │   │   │   ├── QuotaMonitorTable.module.css ← 额度监控表格 QuotaMonitorTable：设置 Tab 的专属子视图样式， 一张四列表格承载三个额度来源的启用 / 侧边栏展示 / 抓取间隔。
@@ -148,7 +148,7 @@ dsh-usage-stats/
 │   │   │   │   └── SettingsTab.tsx ← 设置 Tab：偏好设置、配置迁移折叠区、账本操作折叠区与底部页脚。
 │   │   │   ├── ModelSpeedDock.tsx ← 输入区状态行读数条目的入口：按设置门控，并在挂载期间维护一个会话速度存储。
 │   │   │   ├── UsageStatsFooter.module.css ← 侧边栏底部动作层，支持宽列与 56px rail 两种形态，几何与 harness 的 CordisPanel 侧边栏底部动作一致；颜色全部使用设计 token。
-│   │   │   ├── UsageStatsFooter.tsx ← 用量统计的侧边栏底部动作：注册在 `sidebar.footer.action` 插槽的今日统计触发器。
+│   │   │   ├── UsageStatsFooter.tsx ← 注册在 `sidebar.footer.action` 插槽的侧边栏底部动作：今日用量触发件与 Z.ai / OpenCode Go / DeepSeek 三路额度行，宽列与 56px rail 两种形态， 均可整块点击打开模态窗详情（UsageStatsPanel）。
 │   │   │   ├── UsageStatsPanel.module.css ← 用量统计模态窗壳 UsageStatsPanel：headless Modal 卡片内的 chrome —— 头部、Tab 栏、可滚动内容区。
 │   │   │   └── UsageStatsPanel.tsx ← 用量统计的详情视图：侧边栏底部按钮打开的居中模态窗，头部 + Tab 栏 + 内容区。
 │   │   ├── api.ts ← usageStats 命名空间的浏览器端调用约定：调用前经 usageStatsRemote() 取命名空间服务。
@@ -172,7 +172,7 @@ dsh-usage-stats/
 │   │   ├── logs.ts ← 会话日志的目录发现与 NDJSON 解析。
 │   │   ├── quota.ts ← 额度查询共享基元（服务端）：浏览器 UA、key 回退解析、TTL 缓存单飞工厂。
 │   │   ├── rawlog.ts ← 会话原始日志的物理代次识别与多帧 zstd 解码：扫描拼接 zstd 帧边界后逐帧解压为 NDJSON 文本，供扫描链路在 harness 读取失败时兜底读取旧代次会话。
-│   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取， 经 foldRecord 写入账本（events、session_meta 共 9 表，含 agg_* 预统计）并折叠聚合缓存； harness 两路读取被拒或返回空事件时回退 rawlog 自读原始日志。
+│   │   ├── scan.ts ← 会话扫描编排，账本导入：把磁盘原始日志 ∪ harness 会话清单的会话 id 全集逐会话读取， 经 foldRecord 写入账本并折叠聚合缓存。
 │   │   ├── service.ts ← 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露 usageStats 命名空间的 12 个一元 Remote 方法。
 │   │   ├── settings.ts ← 服务端（Host）的插件偏好设置 schema：`usage-stats` 插件条目（cordis.patch.yml 插入的 Loader 条目，id 即 USAGE_SETTINGS_NAMESPACE）的 Config，被 harness 设置 服务（ctx.settings）投影成设置表单，偏好因此落在 profile 配置文档里、属于部署而不是某一个浏览器。
 │   │   ├── snapshot.ts ← 快照构建：把聚合缓存 UsageStore 与账本会话元数据整理成 usageStats/snapshot 的结果 value，不触碰传输层与 ctx。
@@ -198,7 +198,7 @@ dsh-usage-stats/
 ├── AGENTS.md ← 工程规范（注入的规则文件；仅规则变化时改，结构现状不进这里）
 ├── CHANGELOG.md ← 更新日志（每次发版同步记录功能更新与 Bug 修复）
 ├── cordis.patch.yml ← 组合包 patch（dsh.bundle.patch）：插入插件条目
-├── eslint.config.mjs ← @fileoverview ESLint flat config — Google TypeScript Style Guide 落地 覆盖 host（Node ESM）/ client（Browser CJS）/ scripts（Node ESM mjs）三类环境， 基于 eslint 9 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic。
+├── eslint.config.mjs ← @fileoverview ESLint flat config — Google TypeScript Style Guide 落地 覆盖 host（Node ESM）/ client（Browser CJS）/ scripts（Node ESM mjs）三类环境， 基于 eslint 10 + typescript-eslint 8 + eslint-plugin-import-x + @stylistic。
 ├── icon.svg ← 插件图标（package.json icon）：dsh 插件列表展示用
 ├── LICENSE
 ├── package.json ← 组合包元数据 / exports / 构建脚本

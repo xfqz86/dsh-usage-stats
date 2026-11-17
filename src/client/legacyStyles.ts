@@ -1,7 +1,7 @@
 /**
  * 旧版 shell 的样式兜底：新版 shell 在挂载期按 `meta().stylesheets` 安装模块样式表，旧版不会。
- * 这里在 apply 时按模块系统能力判断，只有旧版才把 bundle 注册表里的样式自注入，
- * 新版不再插一遍再撤，省掉一次重复的 CSS 解析与整轮 DOM 插入/移除。
+ * 这里在 apply 时按模块系统能力判断，只有旧版才把 bundle 注册表里的样式自注入；
+ * 新版 shell 自己安装，省掉一次重复的 CSS 解析与整轮 DOM 插入/移除。
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis';

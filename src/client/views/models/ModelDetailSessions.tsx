@@ -1,8 +1,6 @@
 /**
- * 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，表与会话 Tab 完全同款——
- * 列（会话 | 缓存 | 输入 | 输出 | 总计 | 命中率 | 调用 | 每次调用 | 最近活跃）、
- * 子代理折叠到主会话并带 + 展开、默认按「最近活跃」降序、可排序、每页 15 条；
- * 分组与排序比较走 stats.ts 的共用实现（groupSessions / compareSessionGroup）。
+ * 模型明细弹窗的「按会话」子视图：范围内用过该模型的会话表，列与排序 / 折叠交互
+ * 同面板会话 Tab（少「明细」列）。
  *
  * 明细数据只含用过该模型的会话：父会话若没用过该模型就不在表里，其子会话按
  * groupSessions 的既有规则回落顶层，不会因折叠而把用量藏起来。
@@ -75,7 +73,7 @@ export function ModelDetailSessions({
     <div className={shared.detailTableBlock}>
       {/* 首列不用共用基元 .firstCol：弹窗比面板窄 100px，会话列吃满会把「最近活跃」
           挤出可视区（面板 960 宽放得下，这里放不下）——保留共用 .cellText 的宽度上限，
-          九列一屏看全。列表头、排序、折叠与面板会话 Tab 完全同款。 */}
+          九列一屏看全。 */}
       <div className={`${shared.tableWrap} ${css.sessionsWrap}`}>
         <table className={shared.table}>
           <thead>

@@ -1,7 +1,6 @@
 /**
  * 概览 Tab 的 26 周热力图：Codex 风格网格，列为周、行为周一至周日，
- * 含 4 档强度、月份标签与今日高亮。
- * 独立成文件，一个组件一个文件，供 OverviewTab 复用。
+ * 含 4 档强度、月份标签与今日高亮，供 OverviewTab 复用。
  */
 
 import { useMemo } from 'react';

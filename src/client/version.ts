@@ -6,5 +6,5 @@
 
 declare const DSH_USAGE_STATS_VERSION: string;
 
-/** 当前安装的插件版本，形如 0.5.1（不带 v 前缀）。 */
+/** 当前安装的插件版本（不带 v 前缀）。 */
 export const PLUGIN_VERSION = DSH_USAGE_STATS_VERSION;

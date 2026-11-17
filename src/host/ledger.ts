@@ -1,14 +1,7 @@
 /**
  * 原始事件流账本 Ledger：用量事件的唯一事实来源 —— 自管理 SQLite。
  *
- * 不依赖 harness 的 storage 家族：直接用 node:sqlite 的同步 API DatabaseSync
- * （Node ≥22 内置，运行时只打印一条 experimental 警告），落在
- * `$DSH_HOME/storages/dsh-usage-stats/ledger.sqlite`（基座路径能力解析）。
- * 九表的列语义、幂等主键、查询索引与版本迁移见 docs/ARCHITECTURE.md §2。
- *
- * 所有读写同步：append / setMeta 即写即持久、自动提交，崩溃后重启从 sqlite
- * 恢复；预统计与事件表同库但独立提交，崩溃窗口的缺口由启动对账或 rebuild 修复。
- * 会话元数据在内存缓存一份供快照读取。
+ * 存储介质、九表 schema、同步读写与版本迁移见 docs/ARCHITECTURE.md §1–§2。
  */
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

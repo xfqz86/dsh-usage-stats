@@ -1,6 +1,5 @@
 /**
- * 通用分页（Pagination）：上一页 / 页码信息 / 下一页。
- * 独立成文件（一个组件一个文件），可被任意 Tab 复用。
+ * 通用分页（Pagination）：上一页 / 页码信息 / 下一页，可被任意 Tab 复用。
  */
 
 import css from './Pagination.module.css';

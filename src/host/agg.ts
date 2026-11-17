@@ -2,9 +2,7 @@
  * 聚合口径与纯函数：Agg、SessionInfo 结构，折叠原子操作 newAgg、ink，事件守卫 usable、
  * hasUsage 与 modelKeyOf。本地日划分 startOfDay、空计数与 token 合计在 utils.ts，host 与 client 共用。
  *
- * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测。只有 assistant/message 与
- * compaction/summary 两类计量事件可用（模型身份分别在 data.message.source 与
- * data.provider/model），数值归一在 ledger 层完成；口径见 docs/ARCHITECTURE.md §5。
+ * 本模块是纯逻辑：不依赖 ctx / store / I/O，便于单测；计量口径见 docs/ARCHITECTURE.md §5。
  */
 import { emptyUsage, joinModelKey, tokensTotal } from '../utils.ts';
 

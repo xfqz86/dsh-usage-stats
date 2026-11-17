@@ -130,7 +130,7 @@ export function SettingsTab({
             onToggle={() => onUpdateSettings({ showSessionId: !settings.showSessionId })}
           />
         </label>
-        {/* 输入区状态行的模型速度读数，默认开启；关闭后输入区不再渲染该读数（见 client/speed） */}
+        {/* 输入区状态行的模型速度读数，默认开启；关闭后输入区不再渲染该读数（见 src/client/modelSpeed.ts） */}
         <label className={css.settingRow}>
           <span className={css.settingText}>
             <span className={css.settingTitle}>{t('settings.modelSpeed')}</span>

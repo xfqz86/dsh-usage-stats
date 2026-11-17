@@ -8,7 +8,7 @@ import { usageStatsRemote } from './remote.ts';
 
 /** 快照轮询间隔：底部角标与模态窗共用同一份数据。 */
 export const SNAPSHOT_INTERVAL_MS = 4000;
-/** 快照会话明细请求上限：服务端默认 200、上限 1000，此值兼顾完整与序列化开销。 */
+/** 快照会话明细请求上限：兼顾完整与序列化开销；服务端分页范围与默认值见 docs/API.md §2。 */
 export const SNAPSHOT_LIMIT = 500;
 
 /**

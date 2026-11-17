@@ -3,7 +3,7 @@
  * usageStats/modelDetail，用 mergeModelDetails 合成一行；没有打开的行时不发请求。
  *
  * 依赖三处变化即重取——keys 签名、时间下界 since、手动 reload，并按递增序号
- * 丢弃后发先至的旧响应（STYLE §9）。失败清空本次明细并留下错误信息，
+ * 丢弃后发先至的旧响应（STYLE §10）。失败清空本次明细并留下错误信息，
  * 由界面给出重试，不把上一行的数据错配到当前行。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';

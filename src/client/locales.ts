@@ -299,7 +299,7 @@ export const zh = {
   'markdown.code': '代码',
   'markdown.wrap': '自动换行',
   'markdown.unwrap': '取消自动换行',
-  // 输入区状态行的模型速度读数与详情卡（src/client/speed）。
+  // 输入区状态行的模型速度读数与详情卡（src/client/modelSpeed.ts）。
   'speed.pill.aria': '模型速度：平均 TTFT {ttft}，平均 ATPS {atps}，点击查看详情',
   'speed.pill.ariaEmpty': '模型速度：本会话还没有完成的模型调用，点击查看详情',
   'speed.panel.title': '模型速度',
@@ -633,7 +633,7 @@ export const en = {
   'markdown.code': 'Code',
   'markdown.wrap': 'Wrap lines',
   'markdown.unwrap': 'Unwrap lines',
-  // Model speed readings in the composer status row and their detail card (src/client/speed).
+  // Model speed readings in the composer status row and their detail card (src/client/modelSpeed.ts).
   'speed.pill.aria': 'Model speed: average TTFT {ttft}, average ATPS {atps}. Open details.',
   'speed.pill.ariaEmpty': 'Model speed: no completed model calls in this session. Open details.',
   'speed.panel.title': 'Model speed',

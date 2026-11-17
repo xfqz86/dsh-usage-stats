@@ -21,8 +21,9 @@
   `idx_events_session(session_id, t)` 在 `open()` 版本判定后幂等补建，只是查询加速、不递增 `user_version`。
 - **session_meta**：`(session_id PK, title, cwd, created_at, last_active, parent_session,
   origin, delegation_depth)`，初始化抄录、运行时由 `session/title` 与实时事件 header 补齐，`metaCache` 供快照与明细读取。
-- **agg_\***：`agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily/agg_checkpoint`
-  七张预统计物化视图；批量扫描时 `aggSuspended` 挂起逐条物化，结束一次性 `persistAggregates` 并 `sealUntil(今日零点)`。
+- **agg_\***：`agg_total/agg_daily/agg_model/agg_model_daily/agg_session/agg_session_daily`
+  六张预统计物化视图；`agg_checkpoint` 是检查点表，记密封边界 `sealed_until` 与清零墓碑
+  `cleared_at`。启动恢复见 §3 的「重启恢复」，清零判定与批量物化时序见 §3 的「重建 / 清零 / 密封」。
 - **版本**：`PRAGMA user_version=LEDGER_VERSION=6`。只有旧库 `2`/`3` 增量升到 6（幂等建表 +
   `session_meta` 补 `parent_session`/`origin`/`delegation_depth` 三列，事件保留）；其余
   版本（`0` 有数据、`4`/`5` 等）清库重建，空表下次启动全量重扫。**统计口径变化也必须
@@ -37,18 +38,24 @@
    （`sessionQuery.readSession` → `persistence.open+read`），失败或空事件时用 `rawlog.ts`
    自读原始日志兜底（多帧 zstd 解码，覆盖 harness 迁移拒绝的旧格式）；两路都按 fork
    继承前缀过滤（`store.ts` 的 `liveEventsOf`），经 `foldRecord` 共用路径；`running` 防重入。
+   扫描报告按本轮计：`harnessSessions`/`rawSessions` 分别计 harness 读取与 raw 兜底实际
+   折入事件的会话，`failed` 计两路 harness 读取都报错且 raw 也拿不到记录的会话（空会话
+   不算失败，单会话异常同计）；`scanning` 仅首启与重建的全量扫描期间为真。
 3. **实时增量**：`ctx.on('session/event')` → 补齐 `parentSession/origin/delegationDepth/
    cwd/createdAt` → `foldRecord` → `foldLedgerEvent` + `incrementAgg`；经 seq 水位、
    seq=-1 主键、`append` 返回值三层去重。
-4. **重启恢复**（`bootstrap()`）：优先 `hasAggregates → rebuildWithDelta`（加载 `agg_*` +
-   补 `sealedUntil` 之后的增量），其次 `hasEvents → rebuildFromEvents`，否则全量扫描；
-   日志删除后仍可从介质恢复。空库且 `agg_checkpoint` 有 `cleared_at` 清零墓碑时跳过首启
-   扫描（否则空库被当首启、历史统计复活，违背 clear 承诺）。
+4. **重启恢复**（`bootstrap()`）：优先 `hasAggregates → rebuildWithDelta`（加载 `agg_*`
+   后无条件重放 `sealedUntil` 之后的增量：`seq>=0` 按会话 `maxSeq` 水位、`seq<0` 按
+   `lastActive` 判定缺事件，补齐后边界单调推进到今日零点），其次
+   `hasEvents → rebuildFromEvents`，否则全量扫描；日志删除后仍可从介质恢复。空库且
+   `agg_checkpoint` 有 `cleared_at` 清零墓碑时跳过首启扫描（否则空库被当首启、历史统计
+   复活，违背 clear 承诺）。
 5. **重建 / 清零 / 密封**：`rebuild` → `ledger.clear()` + `resetStore` + 全量 `scanOnce`；
    `clear` 清库后**不重扫**、统计归零，随后 `markCleared` 落墓碑（`agg_checkpoint.cleared_at`，
    必须在 clear 之后写——clear 会清空 checkpoint），`rebuild` 清墓碑重扫即恢复出口；
-   `seal` 手动物化 `persistAggregates` + `sealUntil(今日零点)`；批量扫描结束会自动做同样一次，
-   实时事件只逐条 `incrementAgg` 增量写预统计、不推进密封边界。
+   `seal` 手动物化 `persistAggregates` + `sealUntil(今日零点)`；批量扫描与重建期间
+   `aggSuspended` 挂起逐条物化（只写 `events` 表），结束一次性 `persistAggregates` 并
+   `sealUntil(今日零点)`，实时事件只逐条 `incrementAgg` 增量写预统计、不推进密封边界。
 6. **明细读取**（`detail.ts`，按需查询，不参与折叠与物化，都不新增表、不改 `user_version`）：
    - `modelDetail`：按日取内存 `modelDaily`（`startOfDay` 分桶、`since` 过滤）；按会话读
      `events` 过滤 `provider`/`model` 后 `GROUP BY session_id`（`ledger.modelSessions`，走 `idx_events_model`）；
@@ -74,7 +81,8 @@
 ## 5. 统计口径（精确）
 
 - 数据源：带 `data.usage` 的计量事件——对话调用 `assistant/message` 与压缩调用
-  `compaction/summary`；`toLedgerEvent` 归一非有限/负数→0 并向下取整，零用量不入账本。
+  `compaction/summary`；`toLedgerEvent` 归一非有限/负数→0 并向下取整，零用量不入账本
+  （四项合计与 `reasoning` 任一 >0 才算有量）。
 - **跨会话不重复**：fork 继承前缀属于父会话，子会话只统计 `inheritedEventCount` 之后的自有
   事件（见 §4）；同一会话按最高代次文件只折一次。
 - `total=input+output+cacheRead+cacheWrite`，`reasoning` 单列不计入。
@@ -104,7 +112,7 @@
 ## 6. 构建与产物形态
 
 - `lib/index.js`（Host，Node ESM）：仅 Node 内置 + 本地代码 + `dependencies` + `peerDependencies`
-  （cordis / typert-protocol / credentials，框架单例由 dsh 安装包提供）；**任何构建都不压缩**
+  （cordis / typert-protocol / credentials，框架单例由 dsh 安装包提供）；**Host 产物任何构建都不压缩**
   （含生产发布）——SRC 线路字段名取自方法源码文本，压缩重命名参数会让网关拒收带参请求（协议见 `docs/API.md` §1，回归见 `test/smoke.mjs`）。
 - `lib/client.js`（浏览器 CJS 闭包 `window.__ModuleLoader__.load({id,factory})`）：`externals`
   复刻 shell 冻结表（react 系与 `@deepseek-ai/*` 的 cordis/store/slots/primitives/dockkit），
@@ -123,7 +131,8 @@
      `meta()` 会顺手撤掉历史版本留下的自注入标签。
   只交付一条轨会在旧版或新版 shell 之一掉样式。
 - 品牌图：`scripts/svg-raw.mjs` 把 `icon.svg?raw` 编译成导出 SVG 文本的模块，「关于」页在构建期
-  内联包根 `icon.svg`，与插件列表共用同一文件；改图标后重建客户端即可同步（列表侧由 Host 实时读文件）。
+  内联包根 `icon.svg`，与插件列表共用同一文件；改图标后重建客户端即可同步
+  （列表侧由基座运行时读 `package.json` 的 `icon`）。
 
 ## 7. 模型速度读数（浏览器端，不进账本）
 

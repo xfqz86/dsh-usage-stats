@@ -1,11 +1,9 @@
 /**
- * 偏好设置的 React hook（浏览器端）。
+ * 插件偏好设置的 React 绑定（浏览器端）：useSyncExternalStore 订阅设置表单快照，
+ * 取值来自服务端 profile 配置文档（经设置表单，见 settings.ts），写入走
+ * updateUsageSettings 落配置文档，于是刷新页面、换浏览器、换机器都保持同一份偏好。
  *
- * 取值来自服务端 profile 配置文档（经设置表单，见 settings.ts），
- * 用 useSyncExternalStore 订阅表单快照：表单未就绪时先渲染默认值，
- * 服务端取值到达后自动刷新；写入走 updateUsageSettings 落配置文档，
- * 于是刷新页面、换浏览器、换机器都保持同一份偏好。
- *
+ * 表单未就绪时先渲染默认值，服务端取值到达后自动刷新。
  * 返回 [settings, update]：update 接受 Partial 局部合并并做夹取后写回。
  * 设置页另用 useUsageSettingsView 读存储状态，只在配置不可读/不可写时提示一行。
  */

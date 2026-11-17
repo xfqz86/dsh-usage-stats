@@ -23,6 +23,9 @@
 
 ## 2. usageStats/snapshot
 
+- `modelDetail`/`dateDetail`/`sessionDetail`（§2.1–§2.3）按需查询、不进快照：三类交叉数据随快照下发会让
+  4 秒一次的轮询体积随维度组合膨胀；三者均为纯读——不判 `usageStats/busy`、不写账本，扫描或重建进行中
+  返回当前已有数据、可能偏少。
 - request `{ sessionId: string | null, limit?: number }`：带 `sessionId` 时返回该会话的 `current` 与
   `series.current`（未知 id 给零值）；`limit` 为会话明细分页上限，`1..1000`（超出截断），默认 `200`，
   浏览器端 `useSnapshot` 以 `500` 请求。
@@ -30,7 +33,9 @@
   开销；`series.current` 不截断；`all` 与 `models[].usage` 等聚合总量不受截断影响。
 - 响应 `value` 为 `UsageSnapshot`（`src/types.ts`）：
   - 扫描报告：`scanning`/`scans`/`failed`/`rawSessions`/`harnessSessions`/`foldedEvents`/
-    `dedupSkipped`/`lastError`/`scanError`/`lastScanAt`/`time`；
+    `dedupSkipped`/`lastError`/`scanError`/`lastScanAt`/`time`；`failed` 为本轮读取失败的会话数
+    （两路读取都失败且 raw 兜底无记录，空会话不计），`scanError` 为会话清单读取失败的错误
+    （整轮无失败即清除）；判定与自愈见 `docs/ARCHITECTURE.md` §3 的「scanOnce」。
   - `sessions` 为有量会话数，`current` 为指定会话聚合或 `null`，`all` 为全量 `{ calls, usage }`，
     `series.all`/`series.current` 为 `SeriesPoint[]`；
   - `models[]`：`provider`、`model`、`calls`、`usage`、`series?`（模型按日序列，可缺省）；
@@ -39,48 +44,43 @@
 
 ## 2.1 usageStats/modelDetail
 
-- 单个模型的明细（模型页点开一行）。按需查询、不进快照：「模型 × 会话」交叉表随快照下发会让每
-  4 秒一次的轮询体积随「模型数 × 会话数」膨胀。
+- 单个模型的明细（模型页点开一行）。
 - request `{ provider: string, model: string, since?: number }`：`provider`/`model` 为账本原始
   「供应商 + 模型」（快照 `models[]` 拆出的两列，非归并后行）；`since` 是浏览器端算好的本地日零点
   （模型页时间范围 → `modelRangeCutoff`），服务端只做 `t >= since` 过滤，缺省或非正数即全部历史。
   模型统计重定向由浏览器端按来源各查一次再合并。
 - 响应 `value` 为 `ModelDetail`：`provider`、`model`、范围内合计 `calls`/`usage`、按本地日升序的
   `daily`（只含有量的日子）、按总计降序的 `sessions`（`SessionStat[]`，与快照同形）。`since` 缺省
-  的「全部」**不做 366 天截断**：那是快照序列化的取舍，按需查询要与所点行的合计对齐。
-- 取数路径与合计口径见 `docs/ARCHITECTURE.md` §3 末条与 §5。纯读：不判 `usageStats/busy`、不写
-  账本；扫描或重建进行中返回当前账本数据，可能偏少。
+  的「全部」**不做 366 天截断**。
+- 取数路径与合计口径（含「全部」不截断的取舍）见 `docs/ARCHITECTURE.md` §3 末条与 §5。
 
 ## 2.2 usageStats/dateDetail
 
-- 某一个本地日的明细（日期页点开一行）。按需查询、不进快照：「日 × 会话」交叉数据随快照下发会让
-  轮询体积随「有量天数 × 会话数」膨胀。
+- 某一个本地日的明细（日期页点开一行）。
 - request `{ day: number }`：`day` 是浏览器端日期行的本地日零点（`SeriesPoint.t` 原样传来），服务端
   按同一套 `startOfDay`（`src/utils.ts`）归一——有限且大于 0 的取值向下取整后归一，其余一律返回空
   明细（`day` 为 `0`、合计为零、两个维度为空数组），**不抛错**。
 - 响应 `value` 为 `DateDetail`：归一后的 `day`、当天合计 `calls`/`usage`、当天有量的
   `models: ModelStat[]`（单日不重复下发 `series`）与 `sessions: SessionStat[]`（均只含当天有量的行）。
   两个维度都按总计降序：模型同值按「供应商 + 模型」升序、会话同值按 `id` 升序。
-- 取数路径与三者互校的口径见 `docs/ARCHITECTURE.md` §3 末条与 §5。纯读：不判
-  `usageStats/busy`、不写账本；扫描或重建进行中返回当前聚合数据，可能偏少。
+- 取数路径与三者互校的口径见 `docs/ARCHITECTURE.md` §3 末条与 §5。
 
 ## 2.3 usageStats/sessionDetail
 
 - 一条会话的明细（会话页点主会话行的「明细」）：所点行的折叠分组（主会话 + `groupSessions` 展平的全部
-  子代理）。按需查询、不进快照——交叉数据会让 4 秒轮询体积随会话数 × 模型数膨胀。
+  子代理）。
 - request `{ sessionIds: string[] }`：**集合由客户端界定**——`groupSessions` 展平后的 `main.id + children[].id`
   （`stats.sessionGroupIds` 单点构造，点击那刻取一次并随弹窗冻结），服务端只聚合给定集合，**不按
-  `session_meta` 自走子树**：行数字 = 该集合在聚合缓存里逐会话求和，自走子树会与行数字不同源（快照
-  `sessionsList` 有截断、父会话可能没有用量，多级展平与防环也要复刻）。归一：只收非空字符串、精确去重，
+  `session_meta` 自走子树**（为什么不能自走见 `docs/ARCHITECTURE.md` §3 末条）。归一：只收非空字符串、精确去重，
   非数组视为空集合，一律**不抛错**、不设条数上限（截断会破坏合计不变量）；id 是不透明键（不 trim、不清洗 NUL、区分大小写）。
 - 响应 `value` 为 `SessionDetail`：集合合计 `calls`/`usage`、按本地日升序的 `daily`（只含有量的
   日子、全历史不截断）、按总计降序的 `models`（账本原始键、不归并、省略 `series`）。空集合/全未知
   id 返回字段齐全的空明细（`calls: 0`、零值 `usage`、空数组），不抛错。
-- 核心不变量（同一数据代次内逐位精确）：`calls`/`usage` = 所点行折叠后的合计 = `Σdaily` =
-  `Σmodels`；明细打开期间新增的用量不并入本次响应（重开或重试对齐）。取数路径见
-  `docs/ARCHITECTURE.md` §3 末条。纯读：不判 `usageStats/busy`、不写账本。
+- 核心不变量（同一数据代次内）：`calls`/`usage` = 所点行折叠后的合计 = `Σdaily` =
+  `Σmodels`；明细打开期间新增的用量不并入本次响应（重开或重试对齐）。口径与断言见
+  `docs/ARCHITECTURE.md` §5，取数路径见 §3 末条。
 
-## 3. 额度查询通用约定（goQuota / deepseekBalance / zaiQuota 共用）
+## 3. 额度 / 余额查询通用约定（goQuota / deepseekBalance / zaiQuota 共用）
 
 - body `{ intervalMinutes?: number, force?: boolean }`：`intervalMinutes` 是客户端抓取间隔（分钟，来自偏好
   设置），服务端据此调整 TTL；`force: true` 对应概览磁贴的立即刷新，**完全绕过 TTL 与下限**立即重抓（并发
@@ -110,13 +110,16 @@
 - key：`DEEPSEEK_API_KEY` → `DEEPSEEK_APIKEY` → `DEEPSEEK_API_TOKEN` → `DEEPSEEK_TOKEN`；端点
   `GET https://api.deepseek.com/user/balance`，`Authorization: Bearer <key>`。
 - 响应 `value` 为 `DeepSeekBalance`：`{ status, fetchedAt, isAvailable, balances, todayAmount,
-  todayCurrency }`；`DeepSeekBalanceInfo` 为 `{ currency, totalBalance, grantedBalance, toppedUpBalance }`，
+  todayCurrency }`，`status` 取 `'ok'|'no-key'|'error'` 三值（**没有 `no-plan`**：余额不可用是
+  `ok` + `isAvailable: false`，「未订阅」按 §3 通则归 `no-key`；`no-plan` 只用于 Go 与 Z.ai 的订阅判断，
+  见 §3.1、§3.3）；
+  `DeepSeekBalanceInfo` 为 `{ currency, totalBalance, grantedBalance, toppedUpBalance }`，
   金额保持字符串（避免浮点丢失）。
 - 归一化：`balance_infos` 逐条经 `normalizeBalanceInfo`——`currency` 非空字符串才保留，金额 `string|number`
   统一为字符串、缺失回退 `"0.00"`，非法条目丢弃不使整批失败；`isAvailable` 仅当 `is_available === true` 时
   为 `true`。
 - 特例：`is_available === false` → `ok` + `isAvailable: false`（由 Client 文案区分，不归为 `error`）；
-  `balances` 为空数组仍为 `ok`，Client 展示「暂无余额明细」并用本地今日 tokens/calls 降级展示。
+  `balances` 为空数组仍为 `ok`，Client 展示「暂无余额明细」提示卡。
 
 ## 3.3 usageStats/zaiQuota
 
@@ -151,40 +154,44 @@
 ## 4.2 usageStats/seal
 
 - 手动物化预统计：物化当前内存聚合至 `agg_*`、把密封边界推进至今日零点；响应
-  `{ sealed: true, sealedUntil, foldedEvents }`。批量扫描结束会自动物化并推进密封边界；实时事件只增量写
-  预统计，通常无需手动调用。**写操作并发**：
+  `{ sealed: true, sealedUntil, foldedEvents }`。物化时机（批量扫描结束与实时事件）见
+  `docs/ARCHITECTURE.md` §3 的「重建 / 清零 / 密封」，通常无需手动调用。**写操作并发**：
   `rebuild`/`clear`/`seal` 在扫描或重建进行中一律 `usageStats/busy` 拒绝（`details.operation` 为方法名）。
 
 ## 5. 偏好设置（`usage-stats` 条目与浏览器端视图）
 
 配置类偏好的命名空间就是本插件的 profile 条目 id（`cordis.patch.yml` 的 `usage-stats` 行），也是浏览器端取设置表单的键。
 
-- **事实来源**：该条目的 Config 在服务端 profile 配置文档里的片段——配置类偏好属部署而非某个浏览器；文档只存显式改过的字段，其余按 schema 默认值解析。模型分组、时间范围与分组折叠是纯浏览习惯，另存浏览器存储（§5.2），不进这里。偏好不落账本（账本只记用量）。
+- **事实来源**：该条目的 Config 在服务端 profile 配置文档里的片段——配置类偏好属部署而非某个浏览器；文档只存显式改过的字段，其余按 schema 默认值解析。模型分组、时间范围与分组折叠是视图偏好，另存浏览器存储（§5.2），不进这里。偏好不落账本（账本只记用量）。
 - **服务端**：`src/host/settings.ts` 的 `UsageSettingsSchema` 由 `UsageStatsService.Config` 声明，harness
   设置服务（`ctx.settings`）据此投影成设置表单。**每个字段必须标 `.volatile()`**：volatile 字段才被投影、
   才接受写入；条目没声明 schema 时该命名空间不出现，浏览器端只显示默认值、写入被丢弃（设置页提示改动不会保存）。
+  schema 只声明类型与默认值、不设数值下限，间隔的下限由浏览器端写入时夹取（见下条）。
 - **浏览器端**：`ctx.configForms.get('usage-stats')` 取表单（`configForms` 由
   `@deepseek-ai/dsh-client-ui-settings` 提供，已列进 client 的 `inject` 保证加载序），`src/client/settings.ts`
-  提供订阅/读写：写入走路径操作、只落显式改过的字段，间隔字段写前夹到下限 3；单字段写入一律是显式 `set`
-  ——改回默认值也照样落在文档里，让条目整段消失的只有配置导入的整份替换（`unset`，见 §5.1）。
+  提供订阅/读写：写入走路径操作、只落显式改过的字段，间隔字段写前夹到下限 3；是乐观更新——先按本地
+  猜测渲染，失败只回滚本次字段、界面退回服务端值。单字段写入一律是显式 `set`——改回默认值也照样落在
+  文档里，让条目用户片段整段消失的只有配置导入的整份替换（`unset`，见 §5.1）。
 - **字段**（`UsageSettings` 定义在 `src/types.ts`）：
 
   | 字段 | 默认 | 语义 |
   |---|---|---|
-  | `goEnabled` / `deepseekEnabled` / `zaiEnabled` | `true` | 关闭即**不再轮询**对应额度/余额，侧边栏与模态窗均不显示；该行的侧边栏展示与抓取间隔不可改 |
+  | `goEnabled` / `deepseekEnabled` / `zaiEnabled` | `true` | 关闭即**不再轮询**对应额度 / 余额，侧边栏与模态窗均不显示；该行的侧边栏展示与抓取间隔不可改 |
   | `showGoInSidebar` / `showDeepSeekInSidebar` / `showZaiInSidebar` | `true` | 只门控侧边栏底部芯片（含宽列与 rail），模态窗内详情仍可见 |
-  | `goFetchMinutes` / `deepseekFetchMinutes` / `zaiFetchMinutes` | `5`（下限 3） | 抓取间隔，作为对应请求的 `intervalMinutes`，服务端据此调整 TTL |
-  | `showSessionId` | `true` | 会话标题右侧 session-id 徽标开关：关闭后 `conversation.session.header.utilities` 的徽标 entry 渲染空 |
+  | `goFetchMinutes` / `deepseekFetchMinutes` / `zaiFetchMinutes` | `5` | 抓取间隔，作为对应请求的 `intervalMinutes`，服务端据此调整 TTL |
+  | `showSessionId` | `true` | 会话标题右侧 session-id 徽标开关：关闭后 `conversation.session.header.utilities` 的徽标 entry 不渲染 |
   | `modelSpeedEnabled` | `true` | 输入区状态行的模型速度读数开关，门控与口径见 `docs/ARCHITECTURE.md` §7 |
   | `modelRedirects` | `[]` | 模型统计重定向规则表，见下 |
 
 - **模型统计重定向**（浏览器端归并，服务端快照与各明细保持原始行）：模型页、日期明细与会话明细的「按模型」
-  三处共用 `src/client/stats.ts` 的 `redirectModels`。匹配按 `provider + model` 精确比较（trim 后、区分
-  大小写），同一来源只有列表最上面一条生效，四项没填齐的不生效（界面保留待填）；链式规则解析到终点，
-  环形规则折到环内最靠前规则的目标上；归并求和用量与调用次数、日序列按本地日逐日求和，目标行不存在时按
-  规则名新建，无规则或无命中时原样返回，规则数上限 `MODEL_REDIRECT_MAX_RULES`（50）。规则表整表写入
-  （`{op:'set', path:['modelRedirects'], value:[...]}`），`normalizeModelRedirects` 去首尾空白、丢空行、
-  截断到上限；自动完成候选由快照 `models` 经 `modelCatalog` 建表，来源侧排除其他行已配过的组合（`unusedRedirectSources`）。
+  三处共用 `src/client/stats.ts` 的 `redirectModels`。每条规则四项：`fromProvider`（来源供应商）、
+  `fromModel`（来源模型）、`toProvider`（目标供应商）、`toModel`（目标模型），均为字符串、缺省空串；
+  匹配按 `provider + model` 精确比较（trim 后、区分大小写），同一来源只有列表最上面一条生效，
+  四项没填齐的不生效（界面保留待填）；链式规则解析到终点，环形规则折到环内最靠前规则的目标上；
+  归并求和用量与调用次数、日序列按本地日逐日求和，目标行不存在时按规则名新建，无规则或无命中时原样返回，
+  规则数上限 `MODEL_REDIRECT_MAX_RULES`（50）。规则表整表写入
+  （`{op:'set', path:['modelRedirects'], value:[...]}`），`normalizeModelRedirects` 去首尾空白、丢空行、截断到上限；
+  自动完成候选由快照 `models` 经 `modelCatalog` 建表，来源侧排除其他行已配过的组合（`unusedRedirectSources`）。
 
 - **读取路径**：表单快照 → `normalizeUsageSettings` 字段级校验（布尔只收布尔、间隔只收有限数并夹取、规则表
   按 `normalizeModelRedirects` 清洗）→ 缺字段回退默认值；表单未就绪同样回退默认值。读不到或写不了配置文档
@@ -222,7 +229,7 @@
 
 ### 5.2 浏览器端视图偏好（localStorage）
 
-- **范围与共用**：模型表分组模式、时间范围与分组折叠状态是纯浏览习惯——只影响当前浏览器、不同步设备，刷新后
+- **范围与共用**：模型表分组模式、时间范围与分组折叠状态是视图偏好——只影响当前浏览器、不同步设备，刷新后
   保持；分组模式由三处模型表共用同一选择，时间范围由模型页与日期页共用同一选择。不进 profile 配置文档，也不进
   §5.1 配置串。
 - **键与结构**：`dsh-usage-stats.view`，值为 JSON：
@@ -254,7 +261,7 @@
 
 ## 6. usageStats/checkUpdate
 
-- 「关于」页的版本更新检查。浏览器端在面板打开时自动查一次（命中服务端缓存则直接返回），用户也可点「检查更新」手动触发；结果只驱动关于页提示，不写账本、不影响用量统计。
+- 「关于」页的版本更新检查。浏览器端在面板首次打开时自动查一次（命中服务端缓存则直接返回），失败不自动重试，复查与重试由用户点「检查更新」手动触发；结果只驱动关于页提示，不写账本、不影响用量统计。
 - request `{ force?: boolean }`：`force: true` 是手动检查，**绕过 6 小时内存缓存**并在成功后刷新；自动检查不传，命中缓存。
 - 服务端 `GET https://registry.npmjs.org/@xfqz86%2Fdsh-usage-stats/latest`，8s 超时；只读响应体的 `version`。不读凭据、不携带用户数据（npm 侧只看到一次版本查询）、不写账本。
 - 说明来源：再查 `GET https://api.github.com/repos/xfqz86/dsh-usage-stats/releases/tags/v<latest>`（8s 超时、只读 `body`/`published_at`/`html_url`）。说明查询失败不影响更新检查：`notes`/`publishedAt` 置 `null`，`url` 回退 release tag。

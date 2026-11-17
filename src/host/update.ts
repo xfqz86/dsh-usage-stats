@@ -2,14 +2,7 @@
  * 更新检查：查询 npm registry 上本插件的最新版本号，再取对应 GitHub Release 的更新说明，
  * 供「关于」页与更新说明弹窗提示升级。
  *
- * 版本端点固定为 `GET https://registry.npmjs.org/@xfqz86%2Fdsh-usage-stats/latest`，
- * 只读取响应体的 `version` 字段并校验版本形状；Release 端点固定为
- * `GET https://api.github.com/repos/xfqz86/dsh-usage-stats/releases/tags/v<版本>`，
- * 读取 body/published_at/html_url。Release 查询失败不算整体失败：notes 与 publishedAt
- * 置 null，url 回退到 tag 页。6 小时内存缓存只存放成功结果（含安装方式，安装方式变化
- * 即绕过），force=true 为用户手动检查，绕过缓存并将新的成功结果写回。两个请求各自
- * 8 秒超时；超时、网络、非 2xx、JSON 或版本号非法一律返回 error，不抛错。不新增依赖、
- * 不写账本，纯只读查询，协议见 src/types.ts 的 UpdateCheckResult。
+ * 端点、缓存与超时、失败归一化见 docs/API.md §6；结果类型见 src/types.ts 的 UpdateCheckResult。
  */
 import type { UpdateCheckResult, UpdateInstallKind } from '../types.ts';
 

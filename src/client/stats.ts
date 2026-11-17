@@ -330,7 +330,7 @@ export function heatGridOf(series: SeriesPoint[], weeks = 26): HeatGrid {
 
 /**
  * 最近活跃文案：0 表未知；自然日为今天显示「今天 HH:MM」、昨天显示「昨天 HH:MM」，
- * 更早显示完整日期。会话 Tab 与模型明细的会话表共用一份（STYLE §11）。
+ * 更早显示完整日期。会话 Tab 与模型明细的会话表共用一份（STYLE §12）。
  */
 export function formatLastActive(lastActive: number, t: LocaleFn): string {
   if (!lastActive) return '--';

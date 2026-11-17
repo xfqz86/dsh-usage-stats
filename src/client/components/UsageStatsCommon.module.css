@@ -412,7 +412,7 @@
 }
 
 /* ---- 二级明细弹窗 chrome 与明细入口链接：模型明细（ModelDetail）、日期明细（DateDetail）
-   与模型页 / 日期页两处「明细」列共用，见 docs/STYLE.md §11 ---- */
+   与模型页 / 日期页两处「明细」列共用，见 docs/STYLE.md §12 ---- */
 
 /* 尺寸比详情面板（960x640）小一档，视觉上明确「叠在面板之上」；窄视口按 92vw/vh 收缩。
    gap 必须显式归零：基座 Modal 的 dialog 自带 20px flex gap，headless 模式下会插在

@@ -1,27 +1,28 @@
 ---
 name: release
-description: dsh-usage-stats 的发版流程——改三处版本信息（package.json / CHANGELOG.md / docs/releases/v<版本>.md）、过验证门禁、dev 提交、PR 合 main、打 v* 标签交付 npm 与 GitHub Release；含交付形态、发布门禁与 npm 认证。凡涉及发版、发布新版本、升/改版本号、打 tag、写更新说明或 CHANGELOG 条目、生成 tarball、release 分支、npm 发布认证，或询问插件的安装/交付形态时使用。
+description: dsh-usage-stats 的发版流程——改三处版本信息（package.json / CHANGELOG.md / docs/releases/v<版本>.md）、过验证门禁、dev 提交、PR 合 main、打 v* 标签交付 npm 与 GitHub Release；含交付形态、发版门禁与 npm 认证。凡涉及发版、发布新版本、升/改版本号、打 tag、写更新说明或 CHANGELOG 条目、生成 tarball、release 分支、npm 发布认证，或询问插件的安装/交付形态时使用。
 ---
 
 # 发版（dsh-usage-stats）
 
-本技能是「发布与交付」的唯一权威，打包机制背景见 harness 文档[打包与安装插件](https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish)。发版不可逆——tag 一推就发 npm、建 GitHub Release，出错只能删 tag 重来，所以逐节走、每步看到结果再往下。
+本技能是「发布与交付」的唯一权威，打包机制背景见 harness 文档[打包与安装插件](https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish)。发版不可逆：tag 一推就发布 npm、建 GitHub Release，而 `npm publish` 成功后同一版本号不能再发。推 tag 后、`npm publish` 成功前的失败可删本地与远端 tag、修好重推；已经 `npm publish` 成功的只能升版本重发，所以逐节走、每步看到结果再往下。
 
 ## 交付形态
 
 发一次版要保证四种安装方式同时可用（`dsh plugin` 必须带 `--profile`，下表以 `web` 为例）：
 
-| 形态 | 产物 | 安装 |
+| 形态 | 交付物 | 安装 |
 |------|------|------|
 | GitHub 源码 | 仓库源码，安装时 `prepare: tsdown` 自构建（pnpm ≥10 首次安装会拒绝执行，需按提示把该包加进 profile 的 `pnpm-workspace.yaml` allowBuilds） | `dsh plugin --profile web add github:xfqz86/dsh-usage-stats` |
-| GitHub 预构建 | `release` 分支（只含交付物） | `dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release` |
+| GitHub 预构建 | `release` 分支（只含交付物，见「分支」节） | `dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release` |
 | npm | `@xfqz86/dsh-usage-stats` | `dsh plugin --profile web add @xfqz86/dsh-usage-stats` |
 | tarball | 固定文件名 `xfqz86-dsh-usage-stats.tgz`（每个 Release 都叫这个；带版本号的那份不发 Release，只作 workflow artifact 与 npm 发布源） | `dsh plugin --profile web add <下载地址>`，固定地址 `/releases/latest/download/xfqz86-dsh-usage-stats.tgz` |
 
 ## 分支
 
 - `dev`：开发分支，**不发布**；发版提交从这里起步。
-- `main`：生产分支；发版提交经 PR 合入，`main` 的 CI 成功后自动把交付物同步到 `release` 分支（`release-branch.yml`）。`release`：机器维护，只有交付物，不手改、不手动 push。
+- `main`：生产分支；发版提交经 PR 合入。
+- `release`：机器维护的预构建分支，由 `release-branch.yml` 在 `main` 的 CI 成功后自动同步（`workflow_dispatch` 可应急重推），只放交付物，不手改、不手动 push。顶层 7 项：`lib/`、剪枝后的 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`，不含 `locale/`、`docs/`。它与 npm 包的 12 文件白名单不是一份清单：npm 包（及 GitHub Release tarball）另含 `locale/{en,zh}.json` 与 `docs/DETAIL{,.en}.md`，清单由 `.github/actions/verify-pack/verify.mjs` 校验；`release` 分支的 7 项与校验写在 `release-branch.yml` 里，两处互不替代。
 
 ## 发版步骤
 
@@ -30,7 +31,7 @@ description: dsh-usage-stats 的发版流程——改三处版本信息（packag
 node .agents/skills/release/scripts/release-preflight.mjs <版本号>
 ```
 
-只读校验三处（`package.json` 版本、`CHANGELOG.md` 条目、`docs/releases/v<版本>.md`）是否同批就位、`[Unreleased]` 是否清空、`docs/STRUCTURE.md` 是否与目录结构一致；省略版本号取 `package.json` 当前版本。有 FAIL 先补完再往下。
+只读校验三处（`package.json` 版本、`CHANGELOG.md` 条目、`docs/releases/v<版本>.md`）是否同批就位、`[Unreleased]` 是否清空、`docs/STRUCTURE.md` 是否与目录结构一致；版本号须是语义化版本（允许 `0.5.0-rc.1` 一类后缀），更新说明去掉标题行后的正文须 ≥20 字，不足即 FAIL。省略版本号取 `package.json` 当前版本。有 FAIL 先补完再往下。
 
 ### 2. 三处同批改（同一个提交）
 
@@ -41,14 +42,13 @@ node .agents/skills/release/scripts/release-preflight.mjs <版本号>
 | `docs/releases/v<版本>.md` | 面向用户的更新说明，**文件名即 tag**；缺失时 `release.yml` 直接失败，不会发布 |
 
 ### 3. 过验证门禁
-先跑 `AGENTS.md` §9 的全部命令（`tsc` / `eslint` / `pnpm tree:check` / `pnpm build` / `test/pure.mjs`、`test/speed.mjs`、`test/smoke.mjs`、`test/styles.mjs`、`test/plugin-page.mjs`、`test/client-bundle.mjs` / 发布形态验证），再补装机实测——CI 与发布都走生产态，开发态看不出压缩与剪枝问题：
+按 `AGENTS.md` §9 全量跑（发版硬门槛，含 `check-docs.mjs` 与发布形态验证），再补装机实测：
 
 ```bash
-node .agents/skills/release/scripts/verify-release.mjs   # 生产构建 → 出真 tarball → 包内容 / Remote 方法签名校验 → 还原开发态 lib/
-node .local/verify-release-e2e.mjs                       # 装机实测该 tarball：干净 profile 起真实 dsh + 浏览器看每个 usageStats 调用
+node .local/verify-release-e2e.mjs   # 装机实测：干净 profile 起真实 dsh + 浏览器看每个 usageStats 调用（仅本机、不入库）
 ```
 
-`verify-release.mjs` 不碰工作区 `package.json`（临时目录 + 剪枝 manifest 打包，也避免 `prepare: tsdown` 把开发态构建覆盖进包），产出可安装的 tarball 到固定目录，并断言包内服务端 Remote 方法的参数名与源码一致——生产构建一旦改写参数名，网关按源码文本取字段名会全量拒收带参调用，只有这一层拦得住。装机实测依赖本机 profile 与浏览器，见 `AGENTS.local.md`；CI 侧的对应防线是 `ci.yml` 的生产态构建 + `test/smoke.mjs` 的 SRC 线路字段自检。
+`verify-release.mjs` 依次走生产构建 → Remote 参数名校验 → 出包 → 包校验 → 还原开发态，不碰工作区 `package.json`（临时目录 + 剪枝 manifest 打包，也避免 `prepare: tsdown` 把开发态构建覆盖进包），产出可安装的 tarball 到固定目录，并断言包内服务端 Remote 方法的参数名与源码一致，防参数名漂移导致网关拒收（机制见 `docs/ARCHITECTURE.md` §6 / `docs/API.md` §1）。装机实测消费这份 tarball，依赖本机 profile 与浏览器，见 `AGENTS.local.md`；CI 侧的对应防线是 `ci.yml` 的生产态构建 + `test/smoke.mjs` 的 SRC 线路字段自检。
 
 ### 4. 提交并推 dev
 ```bash
@@ -72,14 +72,14 @@ git tag v<版本> && git push origin v<版本>
 
 - 一条讲一件事，1–2 句写完；不罗列界面构成（列名、按钮位置、每页条数、排序默认值属于功能说明，进 `README.md`），不写内部实现（接口改名、类型、状态码、构建、依赖、测试、文件与组件名都不进条目），纯重构与文档整理在 CHANGELOG 简记一行。
 - **「修复」只写已发布版本上的问题**：功能还在 `[Unreleased]` 时，对它自身的调整与返工并入该功能条目，不单列修复。
-- 保留用户需要的事实：配置路径（如 `$DSH_HOME/settings.yaml`）、凭据环境变量、升级需重启 dsh 这类提醒；实现细节的归属是规则进 `AGENTS.md`、机制进 `docs/*`、代码约束进注释。
+- 保留用户需要的事实：配置路径（如 `$DSH_HOME/profiles/<profile>/cordis.patch.yml` 的 `usage-stats` 条目）、凭据环境变量、升级需重启 dsh 这类提醒；实现细节的归属是规则进 `AGENTS.md`、机制进 `docs/*`、代码约束进注释。
 
-## 发布门禁（改 workflow 前先读）
+## 发版门禁（改 workflow 前先读）
 
-- `release.yml`（tag 推送）先过三道校验：tag 与 `package.json` 版本一致、`docs/releases/v<tag>.md` 存在、该提交的 CI `verify` job 成功（`.github/actions/gate`）。任一不过即失败，npm 与 Release 都不产出；手动 `workflow_dispatch` 只构建不发布。
-- `ci.yml`（推 dev/main、PR）：`tsc` → `pnpm tree:check` → 生产态构建 → styles → smoke → client-bundle → 校验 `prepare` 为 `tsdown` → 剪枝 → `pack` → `verify-pack`。
-- 交付物 12 文件：`lib/` 内 2 个、剪枝后 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`，以及插件页资源 `locale/{en,zh}.json`、`docs/DETAIL{,.en}.md`（详情文档为纯文字，不带截图）；字段白名单见 `.github/actions/prune-package/action.yml` 的 `allow`，改它要同步 `.github/actions/verify-pack`。
-- 构建形态：`NODE_ENV=production pnpm build` 只压缩浏览器端 bundle 并去掉 sourcemap（CI 与发布用）；服务端 `lib/index.js` 恒不压缩以保 Remote 参数名。本地 `pnpm build` 是开发态（可读 + `*.map`）。
+- `release.yml`（tag 推送）先过三道校验：tag 与 `package.json` 版本一致、`docs/releases/v<tag>.md` 存在、该提交的 CI `verify` job 成功（`.github/actions/gate`）。任一不过即失败，npm 与 Release 都不发布；手动 `workflow_dispatch` 只构建不发布。版本号形态与更新说明正文门槛不在 workflow 里，由第 1 步的 `release-preflight.mjs` 提前拦住，不拖到推 tag 才发现。
+- `ci.yml`（推 dev/main、PR）：`tsc` → `pnpm tree:check` → `check-docs` → 生产态构建 → styles / speed / plugin-page → smoke / client-bundle → 校验 `prepare` 为 `tsdown` → 剪枝 → `pack` → `verify-pack`。
+- npm 包与 GitHub Release tarball 的 12 文件白名单：`lib/` 内 2 个、剪枝后 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`，以及插件页资源 `locale/{en,zh}.json`、`docs/DETAIL{,.en}.md`（详情文档为纯文字，不带截图）；字段白名单见 `.github/actions/prune-package/action.yml` 的 `allow`，改它要同步 `.github/actions/verify-pack`。`release` 分支不是这份清单，见「分支」节。
+- 构建形态与两端压缩规则见 `docs/ARCHITECTURE.md` §6；CI 与发布用 `NODE_ENV=production pnpm build`，本地 `pnpm build` 出开发态。
 
 ## 一次性配置
 
@@ -87,4 +87,4 @@ git tag v<版本> && git push origin v<版本>
 - **OIDC（推荐）**：npm 包的 Settings → Trusted Publishers 添加 `xfqz86/dsh-usage-stats` + `release.yml` + environment `npm`，workflow 自动 `npm publish --provenance`。
 - **NPM_TOKEN**：npm 生成 Granular Token → 仓库 Settings → Secrets 里存 `NPM_TOKEN`（存在时 workflow 改用它发布）。
 
-**Fork 后要改**：`package.json` 的 `repository.url`、`README.md` 里的 `xfqz86/dsh-usage-stats`、`release.yml` 的 `environment.url`；npm 认证按 OIDC 重新指向自己的仓库。
+**Fork 后要改**：`package.json` 的 `name`（含 scope）与 `repository.url`、`cordis.patch.yml` 插入条目的 `name`（模块名）、`tsdown.config.ts`（`PLUGIN_ID` 等构建配置）、代码里写死的仓库与包名常量（`src/host/update.ts` 的 `REGISTRY_LATEST_URL`/`RELEASES_URL`/`RELEASE_TAG_URL`/`RELEASE_API_URL`、`src/client/views/about/AboutTab.tsx` 的 `REPOSITORY_URL`/`PACKAGE_NAME`）、`README.md` 里的 `xfqz86/dsh-usage-stats`、`release.yml` 的 `environment.url`；npm 认证按 OIDC 重新指向自己的仓库。

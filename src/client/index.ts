@@ -1,18 +1,7 @@
 /**
  * 用量统计的浏览器端入口：侧边栏底部动作（今日统计角标 + 模态窗详情）、会话标题旁的 session-id 徽标与输入区状态行的模型速度读数。
  *
- * - 注册 `sidebar.footer.action`（cell id `dsh-usage-stats`，order 1）、
- *   `conversation.session.header.utilities`（entry id `dsh-usage-stats-session-id`，order -20）与
- *   `conversation.composer.dock`（entry id `dsh-usage-stats-speed`，order -10，输入区模型速度读数）。
- * - 底部角标宽列显示今日 tokens、调用数与三色比例条，56px rail 收窄为额度与今日迷你芯片，
- *   点击打开模态窗详情；数据经 usageStatsRemote() 取命名空间服务调用 usageStats/snapshot。
- * - 样式：新版 shell 按 meta().stylesheets 在挂载期安装，旧版 shell 在 apply 时探测模块系统能力后
- *   由 src/client/legacyStyles.ts 自注入同一份样式（新版不再插一遍再撤）。
- * - 配置类偏好（三额度开关/展示/间隔、会话徽标、模型速度读数、模型重定向规则）来自服务端
- *   profile 配置文档：表单取自 ctx.configForms 的 `usage-stats` 条目（schema 在 src/host/settings.ts），
- *   组件经 useUsageSettings 读写；旧版本 localStorage 偏好由 migrateLegacySettings 一次性迁移。
- * - 浏览习惯（模型表分组、时间范围、分组折叠）存浏览器 localStorage（见 src/client/viewPrefs.ts），
- *   组件经 useViewPrefs 订阅，刷新页面保持；旧配置残留的两项由 adoptLegacyViewPrefs 种入。
+ * 样式双轨交付见 docs/ARCHITECTURE.md §6，两类偏好存储见 AGENTS.md §8。
  */
 
 import { createElement } from 'react';

@@ -1,6 +1,7 @@
 /**
- * 用量统计的侧边栏底部动作：注册在 `sidebar.footer.action` 插槽的今日统计触发器。
- * 宽列与 56px rail 各有一个整块可点的按钮，点击打开模态窗详情（UsageStatsPanel）。
+ * 注册在 `sidebar.footer.action` 插槽的侧边栏底部动作：今日用量触发件与
+ * Z.ai / OpenCode Go / DeepSeek 三路额度行，宽列与 56px rail 两种形态，
+ * 均可整块点击打开模态窗详情（UsageStatsPanel）。
  *
  * 纵向顺序自上而下为 Z.ai 额度、OpenCode Go 额度、DeepSeek 余额、今日用量：
  * 宽列给出标签与数值行，rail 收窄为迷你芯片；明细与非正常态（未配置、未订阅、

@@ -44,7 +44,7 @@ function truncateSeries(series: SeriesPoint[]): SeriesPoint[] {
   return series.length > SERIES_MAX_DAYS ? series.slice(series.length - SERIES_MAX_DAYS) : series;
 }
 
-/** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。会话明细默认 200、上限 1000；all 与 models 序列截断至 366 天，current 序列不截断；sessions 为有量会话数。 */
+/** 构建快照 value：汇总 + 模型拆分 + 会话明细 + 按日序列；sessionId 可选过滤当前会话。分页与序列截断等协议数值见 docs/API.md §2。 */
 export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | null, opts?: { limit?: number }): UsageSnapshot {
   let sessionsWithUsage = 0;
   const sessionsList: SessionStat[] = [];
@@ -65,7 +65,7 @@ export function snapshot(store: UsageStore, ledger: Ledger, sessionId: string | 
     });
   }
   sessionsList.sort((a, b) => b.lastActive - a.lastActive);
-  // 分页截断：避免上千会话时每 4 秒全量序列化开销；默认 200，可由客户端 limit 显式覆盖
+  // 分页截断：避免上千会话时每 4 秒全量序列化开销（默认值与上限见 docs/API.md §2）
   const rawLimit = opts?.limit;
   const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? clamp(Math.floor(rawLimit), 1, 1000) : 200;
   const truncatedList = sessionsList.length > limit ? sessionsList.slice(0, limit) : sessionsList;

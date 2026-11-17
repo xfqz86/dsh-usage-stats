@@ -3,15 +3,8 @@
  * 插入的 Loader 条目，id 即 USAGE_SETTINGS_NAMESPACE）的 Config，被 harness 设置
  * 服务（ctx.settings）投影成设置表单，偏好因此落在 profile 配置文档里、属于部署而不是某一个浏览器。
  *
- * 每字段必须标 `.volatile()`（否则不投影成表单、也不接受写入）；字段名与默认值必须
- * 与 USAGE_SETTINGS_DEFAULTS 对齐，`test/pure.mjs` 直接断言。schema 只约束类型、不设
- * 间隔下限——越界值夹取由浏览器端归一化负责（见 docs/API.md §5）。
- *
- * 旧设置文档（`$DSH_HOME/settings.yaml.imported`）里本插件那段的回收见
- * {@link recoverLegacyUsageSettings}。
- *
- * 模型表分组、时间范围与分组折叠这类浏览习惯存浏览器端（src/client/viewPrefs.ts），
- * 不进本 schema，也不进 profile 配置文档。
+ * 设置协议、字段语义与旧设置文档回收见 docs/API.md §5；字段名与默认值须与
+ * USAGE_SETTINGS_DEFAULTS 对齐（test/pure.mjs 直接断言）。
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

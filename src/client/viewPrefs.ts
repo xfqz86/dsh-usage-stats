@@ -1,17 +1,10 @@
 /**
  * 浏览器端视图偏好：模型表分组、时间范围与分组折叠状态的 localStorage 读写、归一化与订阅。
  *
- * 这些只是「看表习惯」，不属于部署配置：同一份部署在不同浏览器可各看各的，所以不进
- * profile 配置文档、也不进配置串（见 src/client/settings.ts 与 src/client/configTransfer.ts）。
- * 纯逻辑、无 React，可被 node --experimental-strip-types 直接引用；React 绑定在
- * hooks/useViewPrefs.ts。
+ * 存储协议（键、结构、归一化与存储不可用时的静默回退）见 docs/API.md §5.2。纯逻辑、
+ * 无 React，可被 node --experimental-strip-types 直接引用；React 绑定在 hooks/useViewPrefs.ts。
  *
- * 存储协议（键 dsh-usage-stats.view）：{ version, modelGroupMode, timeRange, collapsed }，
- * 读取对一切坏形状逐字段归一化（详见 docs/API.md §5.2）。存储不可用（隐私模式、无 window、
- * 配额满）时不抛错——读回落默认值、写静默丢弃，内存快照照常更新，本次会话内仍然生效。
- *
- * 模块持有唯一内存快照（viewPrefsSnapshot 引用稳定），setter 先改内存再尽力写盘并通知，
- * 界面用 useSyncExternalStore 订阅即可；旧配置残留里的两项由 adoptLegacyViewPrefs 一次性种入。
+ * 模块持有唯一内存快照（viewPrefsSnapshot 引用稳定），setter 先改内存再尽力写盘并通知。
  */
 
 import type { ModelGroupMode, TimeRange } from '../types.ts';

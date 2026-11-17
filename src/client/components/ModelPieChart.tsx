@@ -1,7 +1,7 @@
 /**
  * 模型饼图 ModelPieChart：按模型占比的饼图，纯 SVG。
- * 输入为过滤后模型切片，内部计算占比与扇区路径，悬停显示明细。
- * 独立成文件，一个组件一个文件，样式见 ModelPieChart.module.css。
+ * 输入为过滤后模型切片，内部计算占比与扇区路径，悬停显示明细，
+ * 样式见 ModelPieChart.module.css。
  */
 
 import { useEffect, useRef, useState } from 'react';

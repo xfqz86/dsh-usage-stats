@@ -169,11 +169,10 @@ export interface DateDetail {
 
 /**
  * usageStats/sessionDetail 请求：按会话集合取一条会话明细。
- * 集合由客户端界定——会话页所点行的折叠分组（主会话 + `groupSessions` 展平的全部子代理），
- * 与服务端各自按父子关系重建子树相比，只有这样才能与「行数字」同源（见 docs/API.md §2.3）。
+ * 集合由客户端界定（所点行的折叠分组），协议见 docs/API.md §2.3。
  */
 export interface SessionDetailRequest {
-  /** 该行折叠集合的会话 id（主会话 + 展平的全部子代理）；顺序无关、重复无效、未知 id 按 0 计。 */
+  /** 该行折叠集合的会话 id（主会话 + 展平的全部子代理）。 */
   sessionIds: string[]
 }
 

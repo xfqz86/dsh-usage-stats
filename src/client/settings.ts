@@ -1,21 +1,8 @@
 /**
  * 浏览器端插件偏好存储：配置类偏好绑定服务端 `usage-stats` 插件条目（profile 配置文档里的 Loader 条目）的设置表单。
  *
- * 配置类偏好的事实来源是 profile 配置文档，浏览器端只是它的一个视图：`apply` 时经
- * `ctx.configForms.get` 取到本条目的表单（attachUsageSettings），组件经
- * subscribeUsageSettings 订阅、经 updateUsageSettings 路径写入显式改过的字段
- * （未改的字段继续跟随 schema 默认值）；取值经 normalizeUsageSettings 归一化并夹取，
- * 表单未就绪（加载中、条目未挂载或部署不支持写入）时回退 USAGE_SETTINGS_DEFAULTS。
- * 点下去先按本地猜测渲染（乐观更新），不等服务端一整圈往返，落盘后对账消掉。
- * 规则表整表写入，不做数组下标级增删，避免并发写时错位。
- *
- * 配置串导入走整份覆盖（replaceUsageSettings）：与默认值相等的字段 unset，其余逐字段 set。
- *
- * 旧版本把偏好存在 localStorage，本模块保留一次性迁移：旧键里的模型分组与时间范围先种进
- * 浏览器本地视图偏好（adoptLegacyViewPrefs，见 viewPrefs.ts），其余与默认值不同的旧字段
- * 在表单就绪、可写、用户片段不存在时写进配置文档并删除旧键；没有可靠落点时保留旧键。
- *
- * 纯逻辑模块，无 React，可单测；React 绑定在 useUsageSettings.ts。
+ * 读写协议、归一化、配置串导入与旧版迁移见 docs/API.md §5；纯逻辑、无 React，可单测，
+ * React 绑定在 hooks/useUsageSettings.ts。
  */
 
 import {

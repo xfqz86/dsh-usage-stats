@@ -2,13 +2,7 @@
  * 用量统计的服务端 Host 服务：账本模式装配，自管理 sqlite 介质，对外暴露
  * usageStats 命名空间的 12 个一元 Remote 方法。
  *
- * 数据流（账本为唯一事实来源、聚合为派生缓存）：openLedger → 先挂 session/event 实时
- * 监听 → bootstrap（预统计加载、事件重放、首启全量扫描三档回退）。信任与认证由网关
- * 载体统一处理，本服务只做业务：快照、重建、清零、密封、三路额度、更新检查与升级。
- *
- * 方法签名遵守严格 Remote 约定：公开非静态实例方法、非泛型、
- * 参数为具名必填简单标识符（无 lookup、无 signal），请求与结果均为
- * Client-safe 纯 JSON 类型（见 src/types.ts）。
+ * 数据流见 docs/ARCHITECTURE.md §3；Remote 方法签名约定见 docs/API.md §1。
  */
 
 import { Service } from '@deepseek-ai/cordis';

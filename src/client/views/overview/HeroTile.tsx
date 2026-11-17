@@ -1,8 +1,8 @@
 /**
  * 英雄磁贴 HeroTile，今日与总 tokens 共用的合并磁贴。
  * 展示大数 + 命中率 + 调用次数 + 底部三色比例条，含缓存、输入与输出，
- * tooltip 明细与侧边栏同款口径。独立成文件，一个组件一个文件，
- * 由 OverviewTab 复用两次，避免 TodayTile 与 TotalTile 重复。
+ * tooltip 明细与侧边栏同款口径，由 OverviewTab 复用两次，
+ * 避免 TodayTile 与 TotalTile 重复。
  */
 
 import { cacheTotal } from '../../../utils.ts';
