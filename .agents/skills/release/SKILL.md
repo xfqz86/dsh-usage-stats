@@ -14,7 +14,7 @@ description: dsh-usage-stats 的发版流程——改三处版本信息（packag
 | 形态 | 交付物 | 安装 |
 |------|------|------|
 | GitHub 源码 | 仓库源码，安装时 `prepare: tsdown` 自构建（pnpm ≥10 首次安装会拒绝执行，需按提示把该包加进 profile 的 `pnpm-workspace.yaml` allowBuilds） | `dsh plugin --profile web add github:xfqz86/dsh-usage-stats` |
-| GitHub 预构建 | `release` 分支（只含交付物，见「分支」节） | `dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release` |
+| GitHub 预构建 | `release` 分支（跟随 main，与 npm 包同一份交付物，见「分支」节） | `dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release` |
 | npm | `@xfqz86/dsh-usage-stats` | `dsh plugin --profile web add @xfqz86/dsh-usage-stats` |
 | tarball | 固定文件名 `xfqz86-dsh-usage-stats.tgz`（每个 Release 都叫这个；带版本号的那份不发 Release，只作 workflow artifact 与 npm 发布源） | `dsh plugin --profile web add <下载地址>`，固定地址 `/releases/latest/download/xfqz86-dsh-usage-stats.tgz` |
 
@@ -22,7 +22,7 @@ description: dsh-usage-stats 的发版流程——改三处版本信息（packag
 
 - `dev`：开发分支，**不发布**；发版提交从这里起步。
 - `main`：生产分支；发版提交经 PR 合入。
-- `release`：机器维护的预构建分支，由 `release-branch.yml` 在 `main` 的 CI 成功后自动同步（`workflow_dispatch` 可应急重推），只放交付物，不手改、不手动 push。顶层 7 项：`lib/`、剪枝后的 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`，不含 `locale/`、`docs/`。它与 npm 包的 12 文件白名单不是一份清单：npm 包（及 GitHub Release tarball）另含 `locale/{en,zh}.json` 与 `docs/DETAIL{,.en}.md`，清单由 `.github/actions/verify-pack/verify.mjs` 校验；`release` 分支的 7 项与校验写在 `release-branch.yml` 里，两处互不替代。
+- `release`：机器维护的预构建分支，由 `release-branch.yml` 在 `main` 的 CI 成功后自动同步（`workflow_dispatch` 可应急重推），只放交付物，不手改、不手动 push；跟随 `main` 最新提交。内容与 npm 包（同一 commit 打 tag 时发布）是同一份 12 文件清单：两边都走「剪枝 `package.json` + `npm pack`」这一条流程，分支把打包结果原样铺开并逐项比对；逐字节一致靠可复现构建（同一 commit 两次生产构建相同，`ci.yml` 有二次构建比对门禁）。
 
 ## 发版步骤
 
@@ -77,8 +77,8 @@ git tag v<版本> && git push origin v<版本>
 ## 发版门禁（改 workflow 前先读）
 
 - `release.yml`（tag 推送）先过三道校验：tag 与 `package.json` 版本一致、`docs/releases/v<tag>.md` 存在、该提交的 CI `verify` job 成功（`.github/actions/gate`）。任一不过即失败，npm 与 Release 都不发布；手动 `workflow_dispatch` 只构建不发布。版本号形态与更新说明正文门槛不在 workflow 里，由第 1 步的 `release-preflight.mjs` 提前拦住，不拖到推 tag 才发现。
-- `ci.yml`（推 dev/main、PR）：`tsc` → `pnpm tree:check` → `check-docs` → 生产态构建 → styles / speed / plugin-page → smoke / client-bundle → 校验 `prepare` 为 `tsdown` → 剪枝 → `pack` → `verify-pack`。
-- npm 包与 GitHub Release tarball 的 12 文件白名单：`lib/` 内 2 个、剪枝后 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`，以及插件页资源 `locale/{en,zh}.json`、`docs/DETAIL{,.en}.md`（详情文档为纯文字，不带截图）；字段白名单见 `.github/actions/prune-package/action.yml` 的 `allow`，改它要同步 `.github/actions/verify-pack`。`release` 分支不是这份清单，见「分支」节。
+- `ci.yml`（推 dev/main、PR）：`tsc` → `pnpm tree:check` → `check-docs` → 生产态构建 → 构建可复现（二次构建逐字节比对）→ styles / speed / plugin-page → smoke / client-bundle → 校验 `prepare` 为 `tsdown` → 剪枝 → `pack` → `verify-pack`。
+- npm 包、GitHub Release tarball 与 `release` 分支是同一份 12 文件清单：`lib/` 内 2 个、剪枝后 `package.json`、`cordis.patch.yml`、`icon.svg`、`README.md`、`CHANGELOG.md`、`LICENSE`，以及插件页资源 `locale/{en,zh}.json`、`docs/DETAIL{,.en}.md`（详情文档为纯文字，不带截图）；字段白名单见 `.github/actions/prune-package/action.yml` 的 `allow`，改它要同步 `.github/actions/verify-pack`。三种交付形态共用这一份清单，`release` 分支铺的就是这份打包结果（见「分支」节）。
 - 构建形态与两端压缩规则见 `docs/ARCHITECTURE.md` §6；CI 与发布用 `NODE_ENV=production pnpm build`，本地 `pnpm build` 出开发态。
 
 ## 一次性配置

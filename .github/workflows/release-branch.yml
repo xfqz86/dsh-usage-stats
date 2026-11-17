@@ -1,14 +1,13 @@
-# 同步 release 分支（GitHub 安装路径 — 仅最终交付物）
-# 目标：release 分支仅包含最终交付物（lib/ + package.json(已剪枝) + cordis.patch.yml + icon.svg + README.md + CHANGELOG.md + LICENSE），
-#   不含任何源码（src/、tsconfig、scripts、test、.github 等），满足：
-#     dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release
-#   dev 分支的源码安装仍通过 prepare 自构建（github:xfqz86/dsh-usage-stats），release 分支则为预构建的最小形态。
-#
+# 同步 release 分支（GitHub 预构建安装路径 — 仅最终交付物）
+# 目标：release 分支跟随 main 最新提交，内容是该提交的生产构建交付物。
+#   与 npm 包（同一 commit 打 tag 时发布）及 GitHub Release tarball 是同一份 12 文件清单：
+#   三者都走「剪枝 package.json + npm pack」这一条流程，本分支逐项比对打包结果；
+#   加上构建可复现（同一 commit 两次生产构建逐字节一致，CI 有二次构建比对门禁），
+#   所以同一个 commit 的 release 分支与 npm 包逐字节相同。
 # 触发：
-#   - CI 在 main 分支成功后自动同步（workflow_run 监听 CI 的 completed 事件，仅 success 才执行）
+#   - main 的 CI 成功后自动同步（workflow_run 监听 CI completed，仅 success 执行）
 #   - 手动 workflow_dispatch（不受 CI 限制，用于应急重推）
-#
-# 实现：构建 lib（压缩，无 map）→ 剪枝 package.json → 组装 payload（7 项）→ 以 orphan/clean 方式覆盖 release 分支
+# 实现：构建 lib（压缩，无 map）→ 剪枝 package.json → npm pack → verify-pack 校验 → 解包铺到分支
 name: sync-release-branch
 on:
   workflow_run:
@@ -61,97 +60,87 @@ jobs:
 
       - uses: ./.github/actions/prune-package
 
-      - name: Assemble payload (only deliverables)
+      - name: Pack deliverables (same shape as npm)
+        shell: bash
         run: |
-          rm -rf /tmp/payload && mkdir -p /tmp/payload/lib /tmp/payload/locale /tmp/payload/docs
-          cp -r lib/* /tmp/payload/lib/
-          cp package.json /tmp/payload/package.json
-          cp cordis.patch.yml /tmp/payload/cordis.patch.yml
-          cp icon.svg /tmp/payload/icon.svg
-          cp README.md /tmp/payload/README.md
-          cp CHANGELOG.md /tmp/payload/CHANGELOG.md
-          cp LICENSE /tmp/payload/LICENSE
-          cp locale/*.json /tmp/payload/locale/
-          cp docs/DETAIL.md docs/DETAIL.en.md /tmp/payload/docs/
+          mkdir -p /tmp/pkg
+          NPM_CONFIG_CACHE="$RUNNER_TEMP/npm-cache" npm pack --pack-destination /tmp/pkg
+          ls -lh /tmp/pkg
 
-      - name: Verify payload (12 files, pruned package.json)
+      - name: Verify tarball (12 files, pruned package.json)
         uses: ./.github/actions/verify-pack
         with:
-          path: /tmp/payload
+          path: /tmp/pkg/*.tgz
 
-      - name: Sync to release branch (minimal, no source)
+      - name: Sync to release branch (same tarball as npm)
         shell: bash
         run: |
           set -euo pipefail
           SOURCE_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
-          COMMIT_MSG="chore(release): deliver $(node -p "require('/tmp/payload/package.json').version") for ${SOURCE_SHA}"
+          COMMIT_MSG="chore(release): deliver $(node -p "require('./package.json').version") for ${SOURCE_SHA}"
+
+          tgz=$(ls /tmp/pkg/*.tgz | head -n1)
+          rm -rf /tmp/payload && mkdir -p /tmp/payload
+          tar -xzf "$tgz" -C /tmp/payload --strip-components=1
+          echo "=== packed payload ==="
+          find /tmp/payload -type f | sort
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # 清理 prune 产生的脏工作区（payload 已备份至 /tmp），避免 checkout 失败
-          # prune 步骤改写了 package.json 并生成 package.json.full / lib（未跟踪），直接 checkout 会因本地变更被拒
           git reset --hard HEAD
           git clean -fd
 
           # 备份本地 Action 供 post 恢复（checkout release 会移除 .github）
           if [ -d .github ]; then cp -r .github /tmp/.github.bak; fi
 
-          # 准备 release 分支：若远端存在则检出，否则创建 orphan
-          if git show-ref --verify --quiet refs/remotes/origin/release; then
+          # 准备 release 分支：若远端存在则检出，否则创建 orphan（问远端，不用可能过期的本地跟踪引用）
+          if git ls-remote --exit-code --heads origin release >/dev/null 2>&1; then
             echo "release branch exists — fetching"
-            git fetch origin release:release
-            git checkout -f release
+            git fetch origin "+refs/heads/release:refs/remotes/origin/release"
+            git checkout -f -B release origin/release
           else
             echo "creating orphan release branch"
             git checkout --orphan release
           fi
 
-          # 恢复 .github 供后续 post 使用（不入提交，仅保留空目录）
+          # 恢复 .github 供后续 post 使用（不入提交，仅保留目录）
           if [ -d /tmp/.github.bak ]; then mkdir -p .github; cp -r /tmp/.github.bak/* .github/ 2>/dev/null || true; fi
 
-          # 清空 release 分支所有内容（保留 .git/.github 以避免本地 Action 的 post 失败；.github 仅保留空目录不入提交）
-          # git rm 仅删除非 .github 的已跟踪文件， payload 在 /tmp 不受影响
-          if git ls-files -z | grep -zv "^\.github/" | grep -q .; then
-            git ls-files -z | grep -zv "^\.github/" | xargs -0 -r git rm -rf -- 2>/dev/null || true
-          fi
-          # 兜底：物理删除残留的顶层文件/目录（除 .git/.github）
+          # 清空分支内容：索引整份清掉（orphan 首次创建时，索引里还留着 main 的文件，含 .github），
+          # 工作树只保留 .git/.github（.github 供本地 Action 收尾，不入提交）
+          git rm -r --cached --quiet . >/dev/null 2>&1 || true
           find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' -exec rm -rf {} + 2>/dev/null || true
           echo "cleaned release branch, now empty except .git"
-          ls -la
 
-          # 写入 payload（仅 7 项）
-          cp -r /tmp/payload/lib ./
-          cp /tmp/payload/package.json ./
-          cp /tmp/payload/cordis.patch.yml ./
-          cp /tmp/payload/icon.svg ./
-          cp /tmp/payload/README.md ./
-          cp /tmp/payload/CHANGELOG.md ./
-          cp /tmp/payload/LICENSE ./
-
+          # 原样铺入打包内容：与 npm 包同一份文件、同一份字节
+          cp -a /tmp/payload/. ./
           echo "=== release branch content ==="
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' | sort
-          find . -type f | sort
-          ls -lh lib/ package.json cordis.patch.yml icon.svg README.md CHANGELOG.md LICENSE
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' | sort
+          find . -type f ! -path './.git/*' ! -path './.github/*' | sort
 
-          # 校验 release 分支内容：仅允许的 7 顶层 + lib 内 2 文件（无 map，已压缩）
-          if [ ! -f lib/index.js ] || [ ! -f lib/client.js ] || [ ! -f package.json ] || [ ! -f cordis.patch.yml ] || [ ! -f icon.svg ] || [ ! -f README.md ] || [ ! -f CHANGELOG.md ] || [ ! -f LICENSE ]; then
-            echo "::error::release payload missing required files"
+          # 与打包清单逐项比对：少一个、多一个都算失败
+          expected=$(cd /tmp/payload && find . -type f | sed 's|^\./||' | sort)
+          actual=$(find . -type f ! -path './.git/*' ! -path './.github/*' | sed 's|^\./||' | sort)
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::release branch content differs from the packed payload"
+            diff <(echo "$expected") <(echo "$actual") || true
             exit 1
           fi
-          if [ -f lib/client.js.map ]; then echo "::error::release contains client.js.map"; exit 1; fi
-          if find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' ! -name 'lib' ! -name 'package.json' ! -name 'cordis.patch.yml' ! -name 'icon.svg' ! -name 'README.md' ! -name 'CHANGELOG.md' ! -name 'LICENSE' | grep -q .; then
-            echo "::error::release branch contains unexpected top-level files"
-            find . -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.github' | sort
+          if find . -type f ! -path './.git/*' ! -path './.github/*' -name '*.ts' | grep -q .; then
+            echo "::error::release branch contains TypeScript sources"
             exit 1
           fi
-          if find . -name "*.ts" -o -name "tsconfig.json" -o -name "pnpm-workspace.yaml" | grep -q .; then
-            echo "::error::release branch contains source files"
-            exit 1
-          fi
+          if find . -name 'client.js.map' | grep -q .; then echo "::error::release branch contains client.js.map"; exit 1; fi
 
-          # 提交（即使 lib 已预构建，.gitignore 在 dev 中忽略 lib，但 release 分支已清空无 .gitignore，直接 add）
-          git add lib package.json cordis.patch.yml icon.svg README.md CHANGELOG.md LICENSE
+          # 提交：只 add 打包清单里的顶层项（.github 是本地 Action 的备份，不入提交；
+          # 旧内容的删除已由上面的 git rm 暂存）
+          git add -A -- lib package.json cordis.patch.yml icon.svg README.md CHANGELOG.md LICENSE locale docs
+          if git ls-files | grep -q '^\.github/'; then
+            echo "::error::release branch would commit .github"
+            exit 1
+          fi
           if git diff --cached --quiet; then
             echo "No changes to release branch — already up to date"
             exit 0
@@ -162,7 +151,7 @@ jobs:
 
       - name: Summary
         run: |
-          echo "release branch synced — minimal deliverables only:"
-          echo "  lib/ package.json cordis.patch.yml icon.svg README.md CHANGELOG.md LICENSE"
+          echo "release branch synced — same 12-file payload as the npm package:"
+          echo "  lib/ package.json cordis.patch.yml icon.svg README.md CHANGELOG.md LICENSE locale/ docs/"
           echo "users can now install via:"
-          echo "  dsh plugin --profile demo add github:xfqz86/dsh-usage-stats#release"
+          echo "  dsh plugin --profile web add github:xfqz86/dsh-usage-stats#release"

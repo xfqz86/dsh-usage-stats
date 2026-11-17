@@ -32,7 +32,7 @@ dsh-usage-stats/
 │   │       └── verify.mjs ← 校验交付物仅含白名单文件（lib、locale 与详情文档）且 package.json 已剪枝（仅供 GitHub Action 使用） 支持 tarball (.tgz) 与 payload 目录两种形态，path/allow 均由 action.yml 传入。
 │   └── workflows/
 │       ├── ci.yml ← CI：类型检查 / 目录结构新鲜度 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）
-│       ├── release-branch.yml ← 同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）
+│       ├── release-branch.yml ← 同步 release 分支：main CI 通过后把与 npm 包同一份的预构建交付物铺到该分支（GitHub 安装路径）
 │       └── release.yml ← 发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）
 ├── docs/
 │   ├── releases/ ← 各版本更新说明（按版本累积，不逐文件列出）

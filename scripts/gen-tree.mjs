@@ -42,7 +42,7 @@ const NOTES = {
   '.github/actions/setup/action.yml': '统一 JS 环境复合动作：pnpm + Node（缓存 pnpm）+ 依赖安装',
   '.github/actions/verify-pack/action.yml': '校验复合动作：交付物仅含白名单文件且 package.json 已剪枝',
   '.github/workflows/ci.yml': 'CI：类型检查 / 目录结构新鲜度 / 生产态构建 / 样式与冒烟测试 / 打包校验（每次 PR、推送 dev/main 与手动触发执行）',
-  '.github/workflows/release-branch.yml': '同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）',
+  '.github/workflows/release-branch.yml': '同步 release 分支：main CI 通过后把与 npm 包同一份的预构建交付物铺到该分支（GitHub 安装路径）',
   '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）',
   '.agents/skills/release/SKILL.md': '发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）',
   '.agents/skills/doc-review/SKILL.md': '文档审查技能：审查全仓文档与注释的 SOP（边界 / 分工 / 维度 / 分级 / 工单）',

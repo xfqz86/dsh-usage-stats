@@ -38,6 +38,21 @@ jobs:
       - name: Build (production, minified, no map)
         run: NODE_ENV=production pnpm build
 
+      - name: Build determinism (same source, same bytes)
+        shell: bash
+        run: |
+          # 同一份源码两次构建必须逐字节一致：发版产物在 release 分支与 npm 是两处交付，
+          # 构建一旦漂移就会对不上（历史上 CSS 类名映射顺序随机导致过这种差异）。
+          before="$(sha256sum lib/index.js lib/client.js)"
+          NODE_ENV=production pnpm build
+          after="$(sha256sum lib/index.js lib/client.js)"
+          if [[ "$before" != "$after" ]]; then
+            echo "::error::生产构建不可复现：同一份源码两次构建字节不同"
+            diff <(echo "$before") <(echo "$after") || true
+            exit 1
+          fi
+          echo "构建可复现：lib/index.js、lib/client.js 两次构建字节一致"
+
       - name: Styles — theme token contract (no harness checkout needed)
         run: node test/styles.mjs
 

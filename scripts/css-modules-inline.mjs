@@ -21,6 +21,8 @@
  *     三处占位符缺失或重复都直接让构建失败：静默产出没有样式的 bundle 只会在页面上才暴露。
  *   - 插件钩子可能在不同 rolldown 实例上下文中执行，模块级 Map 不可靠：虚拟 id → 真实路径
  *     的映射与编译文本都挂在 globalThis，load 只按 id 查表，不依赖调用顺序。
+ *   - 产物可复现：类名映射按键排序输出，同一份源码任意两次生产构建逐字节一致；release
+ *     分支与 npm 包是两次独立构建，靠这一点对齐（CI 有二次构建比对，见 AGENTS §9）。
  *
  * 用 .mjs 实现：tsdown 在 Node 22 上加载含运行时 import 的 TS 配置会触发已知 bug
  * （需要 --config-loader tsx），原生 ESM 无此问题。
@@ -151,9 +153,11 @@ export function cssModulesInline({ pluginId } = {}) {
         cssModules: true,
         minify: true,
       })
-      // lightningcss 的 exports 形状：{ 原类名: { name: 'scoped 类名', ... } }
+      // lightningcss 的 exports 形状：{ 原类名: { name: 'scoped 类名', ... } }。
+      // 它的迭代顺序随进程变化（Rust 哈希表随机种子），直接序列化会让同一份源码两次构建出
+      // 不同字节的 client.js——release 分支与 npm 包因此对不上；按原类名排序固定输出。
       const locals = {}
-      for (const [key, value] of Object.entries(result.exports ?? {})) {
+      for (const [key, value] of Object.entries(result.exports ?? {}).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))) {
         if (value && typeof value === 'object' && typeof value.name === 'string') {
           locals[key] = value.name
         }
