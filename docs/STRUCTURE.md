@@ -8,6 +8,10 @@
 dsh-usage-stats/
 ├── .agents/
 │   └── skills/
+│       ├── doc-review/
+│       │   ├── scripts/
+│       │   │   └── check-docs.mjs ← 文档审查机械校验：归属登记与覆盖、登记项存在、版本同步、凭据名一致、相对链接与仓库路径可打开、职责声明。
+│       │   └── SKILL.md ← 文档审查技能：审查全仓文档与注释的 SOP（边界 / 分工 / 维度 / 分级 / 工单）
 │       └── release/
 │           ├── scripts/
 │           │   ├── release-preflight.mjs ← 发版前置检查：只读校验发版三处（package.json 版本、CHANGELOG 条目、更新说明文件）是否同批就位、docs/STRUCTURE.md 是否与目录结构一致。

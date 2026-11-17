@@ -45,6 +45,7 @@ const NOTES = {
   '.github/workflows/release-branch.yml': '同步 release 分支：仅含预构建交付物的最小形态（GitHub 安装路径）',
   '.github/workflows/release.yml': '发布到 npm 与交付 tarball（GitHub Release 附件只附固定别名；版本化产物走 workflow artifact）',
   '.agents/skills/release/SKILL.md': '发版技能：发布与交付的唯一权威（交付形态 / 发版步骤 / 门禁 / npm 认证）',
+  '.agents/skills/doc-review/SKILL.md': '文档审查技能：审查全仓文档与注释的 SOP（边界 / 分工 / 维度 / 分级 / 工单）',
   'docs/API.md': 'Remote 协议与偏好设置约定（随接口演进维护）',
   'docs/DETAIL.md': '插件页中文详细介绍（locale/zh.json 的 meta.detail 指向）',
   'docs/DETAIL.en.md': '插件页英文详细介绍（locale/en.json 的 meta.detail 指向）',

@@ -75,6 +75,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
 npx tsc --noEmit
 npx eslint .              # 0 errors 为门禁
 pnpm tree:check           # docs/STRUCTURE.md 与真实结构一致（CI 同款门禁）
+node .agents/skills/doc-review/scripts/check-docs.mjs   # 文档归属与一致性（CI 同款门禁，见 §10）
 pnpm build
 node --experimental-strip-types test/pure.mjs
 node --experimental-strip-types test/speed.mjs
@@ -91,6 +92,7 @@ node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产
 - **先查后写**：新增任何文档/注释内容前，先查归属表并 grep 关键词，确认权威位置尚无该表述，然后只写权威位置；修改事实只改权威地，别处发现第二份完整表述即删、换指针；删除或迁移前确认权威地已含该信息（只迁移不丢失）。
 - **同批与修即清**：改动任何文件时，受影响的注释与权威文档同批更新；路过发现的失效、重复文档/注释顺手清理，不留「代码已改、文档待补」的中间态。
 - **注释的权威边界**：注释只对两件事是权威——文件职责（头部块注释首句，`docs/STRUCTURE.md` 的数据源）与代码自身说不出的局部约束；内容标准（只写 why、不复述代码、不复制文档、不写修复历史）见 `docs/STYLE.md` §6。
+- **定期审查**：全仓文档与注释的一致性审查走 `doc-review` 技能（`.agents/skills/doc-review/SKILL.md`）——分工、维度、分级与豁免在那里，本文件不复述；中/大范围审查需已启用 Agent Teams，未启用时提示开启、不降级硬跑；机械项（归属登记与覆盖、版本同步、凭据名、链接与路径、职责声明）由 `check-docs.mjs` 兜底并进 CI，语义项（重复、口径、读者错位、过期示例）按技能流程审。
 - 每份文档开头一句职责声明；用户文档（README/CHANGELOG/releases）允许用户语言概述，但不承载实现细节。本文件为注入稳定前缀，仅规则/不变量变化时改；纯代码改动不碰它。
 - 发版同步：`package.json version` 变更必须同批追加 `CHANGELOG.md` 条目与 `docs/releases/v<版本>.md`（面向用户的更新说明，`release.yml` 强制存在），流程见 `.agents/skills/release/SKILL.md`（发版技能）；纯重构与文档整理在 CHANGELOG 简记一行；结构变化跑 `pnpm tree` 重生成 `docs/STRUCTURE.md`。
 - **README 只用标准 Markdown**（很多站点不渲染内联 HTML）：徽章写 `[![alt](图)](链接)`；界面截图用一行缩略图表格（GitHub 正文实测 838px，5 列 ×140px 刚好满行），展示用的缩略图与补白图一律链接到 `docs/screenshot/` 根目录原图；关于页、更新说明这类截图不进 README。
@@ -103,8 +105,10 @@ node .agents/skills/release/scripts/verify-release.mjs   # 发布形态：生产
 | Remote 线路协议、偏好设置协议 | `docs/API.md` |
 | 风格与统一写法 | `docs/STYLE.md` |
 | 发布与交付 | `.agents/skills/release/SKILL.md`（技能） |
+| 文档审查流程与判定标准 | `.agents/skills/doc-review/SKILL.md`（技能） |
 | 目录结构与文件职责 | `docs/STRUCTURE.md`（生成） |
 | 用户视角：功能、安装、设置 | `README.md` |
+| 插件页介绍（中 / 英） | `docs/DETAIL.md` + `docs/DETAIL.en.md` |
 | 版本历史 | `CHANGELOG.md` + `docs/releases/` |
 
 ## 11. 提交（Conventional Commits）
